@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -51,7 +52,46 @@ def test_added_footage_is_hashed_by_work(cli: Cli, tmp_path):
     assert "added #1 tape.mp4" in cli("add", str(tape)).stdout
     assert "(hashing)" in cli("sources").stdout
     assert "hash       queued" in cli("jobs").stdout
-    assert "hash       done" in cli("work").stdout
+    assert "hash       done" in cli("work").stdout  # and the proxy and thumbnails it queued (no sound, no peaks)
     assert "(nothing queued)" in cli("work").stdout
     assert hashlib.sha256(tape.read_bytes()).hexdigest()[:12] in cli("sources").stdout
-    assert len(json.loads(cli("jobs", "--json").stdout)["items"]) == 1
+    assert len(json.loads(cli("jobs", "--json").stdout)["items"]) == 3
+
+
+def test_work_makes_the_proxy_thumbnails_and_peaks_from_the_raw_tape(cli: Cli, tmp_path):
+    """Ingest end to end with the real ffmpeg: a PAL-shaped interlaced clip that does not say it is interlaced (as the
+    digitised VHS does not), with sound, becomes a browser proxy, thumbnails and peaks, each stored as a result."""
+    import subprocess
+
+    from app import db, derived, results
+    from app.models import Source
+
+    tape = tmp_path / "tape.mkv"
+    subprocess.run(
+        [
+            *("ffmpeg", "-nostdin", "-v", "error", "-y"),
+            *("-f", "lavfi", "-i", "testsrc2=size=720x576:rate=50:duration=12"),
+            *("-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=12"),
+            *("-vf", "tinterlace=mode=interleave_top,setfield=prog,setsar=16/15"),
+            *("-c:v", "libx264", "-crf", "35", "-c:a", "pcm_s16le", str(tape)),
+        ],
+        check=True,
+    )
+    cli("add", str(tape))
+    out = cli("work").stdout
+    for kind in ("hash", "proxy", "thumbnails", "peaks"):
+        assert f"{kind:10} done" in out
+    with db.session() as s:
+        source = s.get(Source, 1)
+        assert source is not None
+        proxy, thumbs, peaks = (results.current(s, source, k) for k in derived.KINDS)
+        assert proxy[0].payload["interlace"] == "tff"
+        assert (proxy[0].payload["width"], proxy[0].payload["height"]) == (720, 540)
+        assert os.path.getsize(derived.path_of(proxy[0])) == proxy[0].payload["bytes"]
+        assert [t["time"] for t in thumbs[0].payload["thumbnails"]] == ["0", "10"]  # the last 2 s have theirs
+        assert sorted(os.listdir(derived.path_of(thumbs[0]))) == ["000000.jpg", "000001.jpg"]
+        assert peaks[0].payload["slices"] == 600
+        with open(derived.path_of(peaks[0])) as f:
+            assert max(json.load(f)["max"]) > 0.1
+        assert all(r[0].inputs == [source.sha256] for r in (proxy, thumbs, peaks))
+    assert "(nothing queued)" in cli("work").stdout

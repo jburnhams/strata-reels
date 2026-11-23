@@ -46,8 +46,10 @@ def test_a_new_source_is_hashed_once_by_a_queued_job(engine: Engine, tmp_path):
     jid = jobs.hash_later(q, source)
     assert jid is not None
     assert jobs.hash_later(q, source) == jid  # asked again while queued: the same job
-    (done,) = jobs.work(q)
+    done, *derived = jobs.work(q)
     assert (done.id, done.state, done.domain) == (jid, "done", f"source:{source.id}")
+    # the hash queues the derived assets, which run next (the tape has sound, so peaks too)
+    assert [(j.kind, j.state) for j in derived] == [("proxy", "done"), ("thumbnails", "done"), ("peaks", "done")]
     digest = hashlib.sha256(content).hexdigest()
     assert done.result == {"sha256": digest}
     assert sha256_of(engine, source.id) == digest
@@ -99,10 +101,16 @@ def test_the_server_queues_the_hash_and_runs_it_while_it_is_up(db_env: str, tmp_
     with TestClient(create_app(run_jobs="threads")) as client:  # the server's Runner, on threads
         assert client.post("/api/sources", json={"path": str(f)}).status_code == 200
         deadline = time.monotonic() + 20
-        while q.page().items[0].state != "done" and time.monotonic() < deadline:
+        while (
+            len(q.page().items) < 3 or any(t.state != "done" for t in q.page().items)
+        ) and time.monotonic() < deadline:
             time.sleep(0.05)
-    (job,) = q.page().items
-    assert (job.kind, job.state) == ("hash", "done")
+    # newest first: the hash, then the assets it queued (no audio stream, so no peaks)
+    assert [(t.kind, t.state) for t in reversed(q.page().items)] == [
+        ("hash", "done"),
+        ("proxy", "done"),
+        ("thumbnails", "done"),
+    ]
     assert sha256_of(engine, 1) == hashlib.sha256(content).hexdigest()
 
 

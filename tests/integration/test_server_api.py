@@ -71,7 +71,7 @@ def test_a_tape_added_over_http_is_listed_by_the_cli(server: str, cli: Cli, tmp_
     assert "known #1 tape.mp4" in cli("add", str(tape)).stdout
 
 
-def test_the_server_hashes_a_new_tape_in_a_job_process(server: str, cli: Cli, tmp_path):
+def test_the_server_hashes_a_new_tape_and_derives_its_assets_in_job_processes(server: str, cli: Cli, tmp_path):
     import hashlib
     import subprocess
     import time
@@ -90,5 +90,12 @@ def test_the_server_hashes_a_new_tape_in_a_job_process(server: str, cli: Cli, tm
     while digest[:12] not in cli("sources").stdout and time.monotonic() < deadline:
         time.sleep(0.2)
     assert digest[:12] in cli("sources").stdout
-    (job,) = json.loads(cli("jobs", "--json").stdout)["items"]
-    assert (job["kind"], job["state"], job["domain"]) == ("hash", "done", "source:1")
+
+    def states() -> list[tuple[str, str]]:
+        return [(j["kind"], j["state"]) for j in reversed(json.loads(cli("jobs", "--json").stdout)["items"])]
+
+    # then the derived assets the hash queued, in job processes too (the clip has no sound: no peaks)
+    while any(state != "done" for _, state in states()) and time.monotonic() < deadline:
+        time.sleep(0.2)
+    assert states() == [("hash", "done"), ("proxy", "done"), ("thumbnails", "done")]
+    assert json.loads(cli("jobs", "--json").stdout)["items"][-1]["domain"] == "source:1"

@@ -87,7 +87,8 @@ class Result(Base):
     # finds this row instead of running.
     cache_key: Mapped[str] = mapped_column(String(64), index=True)
     payload: Mapped[Any] = mapped_column(JSON, nullable=True)  # the answer, or None when it is a file
-    # A heavy payload (frame-wise signals) is a file named by its content hash in the app's data folder.
+    # A heavy payload (a proxy, thumbnails, peaks, frame-wise signals) is a file or folder in the app's home, named here
+    # relative to it: `derived/<cache key>/...` (`derived`).
     file: Mapped[str | None] = mapped_column(String(200), default=None)
     confidence: Mapped[float | None] = mapped_column(Float, default=None)  # where the producer gives one, 0 to 1
     flags: Mapped[list[str]] = mapped_column(JSON, default_factory=list)  # quality flags: "low-light", "partial"
