@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-11-23: the plan
+
+- Asked for: discuss Jonathan's spec (stored as [spec.md](spec.md)) as the basis for this app: an AI-guided video editing pipeline with manual options, reusable UI built in strata-react, strata-vid as a source of components.
+- Read: the spec; this repo (fresh from python-app-template); strata-vid; strata-react's components; strata-python's modules; strata-360's design brief (`docs/overview/`, sections 3, 5, 6, 15 to 18) and module layout; strata-models' README, roles (`models.toml`), eval method and VHS findings.
+- Found: strata-360 already implements the spec's core for one kind of footage (proposal as a pure function of analysis, overrides and seed; layered corrections; cached resumable stages; options before decisions), so its lessons shape the design. strata-360 still loads several models itself (wav2vec2 alignment, AST sound events, ECAPA speaker embeddings, OPUS-MT translation, its own vision-language model); in this project those belong in strata-models.
+- Decided with Jonathan: strata-360 was research, so its ideas carry over but no code is ported; face detection and recognition move fully into strata-models; this repo stays small and well structured rather than doing everything. All model calls go through strata-models, which owns the evals and the choice of model per role; strata-reels replaces strata-360 in the longer term; the two first uses are family VHS tapes and race videos, and the first milestone (R1) is built on the tapes.
+- strata-models' VHS work (2026-11-12) gives the facts R1 starts from: the tapes are PAL 720x576, 25 fps, interlaced top field first (forced, as the file does not say), with an active picture of 692x568 at (14, 0); `video-enhance` is served by the lanczos baseline until its eval decides.
+
 ## 2026-11-09: web app rebuilt on strata-react
 
 - Asked for: make the template use strata-react fully, as an example and starter for new apps, with Storybook and visual testing.
