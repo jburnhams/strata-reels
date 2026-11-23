@@ -28,11 +28,11 @@ Vitest 5, Testing Library, user-event, MSW, and strata-react's test helpers (`st
 
 ## Coverage status
 
-| File                                           | % Lines | Status | Notes                                                    |
-| ---------------------------------------------- | ------- | ------ | -------------------------------------------------------- |
-| `src/api.ts`                                   | 100     | done   | unit/logic.test.ts and every integration test            |
-| `src/routes.tsx`                               | 100     | done   | integration/App.test.tsx                                 |
-| `src/screens/Layout.tsx`, `NotFoundScreen.tsx` | 100     | done   | integration/App.test.tsx                                 |
-| `src/screens/SourcesScreen.tsx`                | 100     | done   | integration/SourcesScreen.test.tsx, unit/logic.test.ts   |
-| `src/screens/SystemScreen.tsx`                 | 100     | done   | integration/SystemScreen.test.tsx, unit/logic.test.ts    |
-| `src/screens/SettingsScreen.tsx`               | 100     | done   | integration/SettingsScreen.test.tsx                      |
+| File                                           | % Lines | Status | Notes                                                  |
+| ---------------------------------------------- | ------- | ------ | ------------------------------------------------------ |
+| `src/api.ts`                                   | 100     | done   | unit/logic.test.ts and every integration test          |
+| `src/routes.tsx`                               | 100     | done   | integration/App.test.tsx                               |
+| `src/screens/Layout.tsx`, `NotFoundScreen.tsx` | 100     | done   | integration/App.test.tsx                               |
+| `src/screens/SourcesScreen.tsx`                | 100     | done   | integration/SourcesScreen.test.tsx, unit/logic.test.ts |
+| `src/screens/SystemScreen.tsx`                 | 100     | done   | integration/SystemScreen.test.tsx, unit/logic.test.ts  |
+| `src/screens/SettingsScreen.tsx`               | 100     | done   | integration/SettingsScreen.test.tsx                    |
