@@ -7,7 +7,7 @@ proposal names the results it used, so a row must mean the same thing for ever. 
   ran (`Provenance.of(...)` takes the client's `run_with_provenance` answer as it comes), plus the SHA-256 of every file
   read. A threshold changed in strata-models' `models.toml` under the same model key changes the settings hash, so old
   results stop looking current.
-- **Cache key**: hash(inputs + role + model + settings hash + parameters) (spec §6). `record` with a key that a current
+- **Cache key**: hash(inputs + role + model + settings hash + parameters) (spec §6), with the kind and span asked about. `record` with a key that a current
   result already has returns that result and writes nothing, so a job that runs twice stores one answer.
 - **Superseded, not overwritten**: a result for the same source, kind and span from a different request (another model,
   other settings, other parameters) is written as a new row and the old one gets `superseded_by`, in one transaction.
@@ -52,11 +52,20 @@ class Provenance:
         )
 
 
-def cache_key(inputs: Sequence[str], provenance: Provenance, parameters: Mapping[str, Any]) -> str:
+def cache_key(
+    kind: str,
+    inputs: Sequence[str],
+    provenance: Provenance,
+    parameters: Mapping[str, Any],
+    span: mediatime.Span | None = None,
+) -> str:
     """hash(inputs + role + model + settings hash + parameters): the same request about the same bytes, the same key.
-    Inputs are sorted (the order files were named in is not part of the question); parameters are canonical JSON."""
+    The kind and the span asked about are part of the question too (a description of 0-12 s is not one of 50-60 s,
+    nor of the whole tape). Inputs are sorted (the order files were named in is not part of it); parameters are
+    canonical JSON; the span is exact text."""
     p = provenance
-    body = [sorted(inputs), p.role, p.model, p.settings_hash, dict(parameters)]
+    where = None if span is None else span.to_json()
+    body = [kind, sorted(inputs), p.role, p.model, p.settings_hash, dict(parameters), where]
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -86,7 +95,7 @@ def record(
     if confidence is not None and not 0 <= confidence <= 1:
         raise ValueError(f"confidence is between 0 and 1, not {confidence}")
     params = dict(parameters or {})
-    key = cache_key(inputs, provenance, params)
+    key = cache_key(kind, inputs, provenance, params, span)
     start, end = (None, None) if span is None else (mediatime.text(span.start), mediatime.text(span.end))
     same_slot = [r for r in current(db, source, kind) if (r.span_start, r.span_end) == (start, end)]
     for r in same_slot:

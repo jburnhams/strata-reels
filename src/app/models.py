@@ -83,7 +83,7 @@ class Result(Base):
     inputs: Mapped[list[str]] = mapped_column(JSON)
     # The app's own parameters for the request (a sample rate, a span), which are part of the cache key.
     parameters: Mapped[dict[str, Any]] = mapped_column(JSON)
-    # hash(inputs + role + model + settings hash + parameters) (`results.cache_key`, spec §6): the same request again
+    # hash(kind, span, inputs + role + model + settings hash + parameters) (`results.cache_key`, spec §6): the same request again
     # finds this row instead of running.
     cache_key: Mapped[str] = mapped_column(String(64), index=True)
     payload: Mapped[Any] = mapped_column(JSON, nullable=True)  # the answer, or None when it is a file

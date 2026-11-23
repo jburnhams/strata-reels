@@ -32,14 +32,15 @@ def test_provenance_from_strata_models_answer_and_the_cache_key():
         41,
     )
     assert results.Provenance.of("x", {}).model_job is None
-    key = results.cache_key([TAPE_HASH, RESTORED_HASH], p, {"step": 2})
+    key = results.cache_key("shots", [TAPE_HASH, RESTORED_HASH], p, {"step": 2})
     assert len(key) == 64
     # the order inputs are named in is not part of the question, and the strata-models job id is not either
     again = results.Provenance.of("shot-boundaries", {**SERVED, "job_id": 99})
-    assert results.cache_key([RESTORED_HASH, TAPE_HASH], again, {"step": 2}) == key
+    assert results.cache_key("shots", [RESTORED_HASH, TAPE_HASH], again, {"step": 2}) == key
     # everything else is: a changed setting under the same model key, another model, other parameters, other bytes
     assert (
         results.cache_key(
+            "shots",
             [TAPE_HASH, RESTORED_HASH],
             results.Provenance.of("shot-boundaries", {**SERVED, "settings_hash": "000000000000"}),
             {"step": 2},
@@ -48,14 +49,22 @@ def test_provenance_from_strata_models_answer_and_the_cache_key():
     )
     assert (
         results.cache_key(
+            "shots",
             [TAPE_HASH, RESTORED_HASH],
             results.Provenance.of("shot-boundaries", {**SERVED, "model": "transnet"}),
             {"step": 2},
         )
         != key
     )
-    assert results.cache_key([TAPE_HASH, RESTORED_HASH], p, {"step": 3}) != key
-    assert results.cache_key([TAPE_HASH], p, {"step": 2}) != key
+    assert results.cache_key("shots", [TAPE_HASH, RESTORED_HASH], p, {"step": 3}) != key
+    assert results.cache_key("shots", [TAPE_HASH], p, {"step": 2}) != key
+    # and what was asked about: another kind, or a span of the tape rather than the whole of it
+    assert results.cache_key("faces", [TAPE_HASH, RESTORED_HASH], p, {"step": 2}) != key
+    span = mediatime.Span.of(0, "12.04")
+    assert results.cache_key("shots", [TAPE_HASH, RESTORED_HASH], p, {"step": 2}, span) != key
+    assert results.cache_key("shots", [TAPE_HASH, RESTORED_HASH], p, {"step": 2}, mediatime.Span.of(0, "301/25")) == (
+        results.cache_key("shots", [TAPE_HASH, RESTORED_HASH], p, {"step": 2}, span)
+    )
 
 
 def test_a_result_keeps_its_provenance_and_the_same_request_is_stored_once(db_session: Session, tape: Source):
@@ -87,7 +96,7 @@ def test_a_result_keeps_its_provenance_and_the_same_request_is_stored_once(db_se
         0.8,
         ["low-light"],
     )
-    assert r.cache_key == results.cache_key([TAPE_HASH], p, {"min_s": 1})
+    assert r.cache_key == results.cache_key("shots", [TAPE_HASH], p, {"min_s": 1})
     assert results.span(r) is None
     same, new = results.record(
         db_session, tape, "shots", p, inputs=[TAPE_HASH], payload={"cuts": []}, parameters={"min_s": 1}
@@ -144,6 +153,9 @@ def test_results_for_different_spans_live_side_by_side_in_time_order(db_session:
     assert (a.span_start, a.span_end, b.span_end) == ("1001/25", "50", "301/25")  # exact: 12.04 s is 301/25
     assert results.span(a) == late
     assert results.current(db_session, tape, "description") == [whole, b, a]
+    # each is found by its own key: a cached answer about one stretch is never the answer about another
+    assert len({a.cache_key, b.cache_key, whole.cache_key}) == 3
+    assert [results.find(db_session, r.cache_key) for r in (a, b, whole)] == [a, b, whole]
     # another kind about the same source is not a rival: a measured result needs no model
     probe, _ = results.record(
         db_session, tape, "loudness", results.Provenance("ffmpeg-ebur128"), inputs=[TAPE_HASH], file="ab/abcdef.npy"
