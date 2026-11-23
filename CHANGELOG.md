@@ -4,6 +4,17 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-23
 
+**Footage in: sources in the database (branch `claude/project-thread-1p0er6`)**
+The first code of milestone R1 step 1: add a tape as a source, known by its content, probed once, kept in the database. Restored copies and proxies come next, once strata-python's time model is released.
+- `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.6,<0.3` from PyPI, as strata-python's README now says apps depend on it, replacing the git source that tracked main (the lock was at a commit from before `media` and `db`); the `[db]` extra brings SQLAlchemy, Alembic and psycopg. `[tool.strata-db]` (app `reels`). Project name `strata-reels`.
+- `src/app/settings.py`: settings named `reels` (home `~/.reels`, variables `REELS_*`) instead of the template's `app`, which every unrenamed template app on a machine would share; `strata_env_prefix` and the tests, `deploy/app.service`, `docs/deploying.md` and `tests/README.md` follow. The Python package is still `app`.
+- `src/app/models.py`: **new**; `Source` (fingerprint, path, name, size as a big integer, ffprobe's whole answer). `migrations/20261123_92e993263160_sources.py`: **new**, generated and reviewed.
+- `src/app/sources.py`: **new**; `add` (refuses a missing file, one ffprobe cannot read, or one with no video; the same content added again or after a move is the same source), `all_sources`, `as_json` (with the exact frame rate text and field order).
+- `src/app/server/app.py`: `GET /api/sources`, `POST /api/sources {path}` (201 new, 200 known, 400 refused), on `strata_python.db.web.add_database` (the shared Postgres when configured, else `reels.db` in the settings folder). `src/app/cli.py`: `add PATH...` and `sources`.
+- Tests: `tests/unit/test_sources.py`, `tests/unit/test_database.py` (strata-python's migration checks), `tests/integration/test_sources_ffprobe.py` **new**; API and CLI cases in `test_server.py`, `test_cli.py` and `test_server_api.py`. `.github/workflows/integration.yml` installs ffmpeg and sets `REELS_TEST_FFMPEG=1`.
+- `src/app/__init__.py`, `server/landing.html`, `server/app.py`: the package name is `strata-reels`. The web app still says python-app-template: it changes when the sample screens are replaced, with the visual baselines.
+
+
 **Plan the AI video editor (branch `claude/project-thread-1p0er6`)**
 Jonathan asked to discuss his AI video editing spec as the basis for this app. After reading the spec, strata-360, strata-models, strata-python, strata-react and strata-vid, the plan was agreed in discussion: models (faces and recognition included) in strata-models, strata-360's lessons but none of its code, a small clean repo, family VHS tapes first. Docs only; no code changed.
 

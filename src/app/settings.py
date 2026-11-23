@@ -1,9 +1,9 @@
-"""User settings: one JSON file, `~/.app/settings.json` (the folder can be moved with the APP_HOME environment variable).
+"""User settings: one JSON file, `~/.reels/settings.json` (the folder can be moved with the REELS_HOME environment variable).
 
   data_dir   where application data files live. Default: `data/` in this repository (gitignored) until configured. Must be an absolute path.
   greeting   default greeting word used by `greet.py` (default: 'Hello').
 
-The environment variables APP_DATA and APP_GREETING override the file (handy for tests and one-off runs). The file handling, precedence and validation are
+The environment variables REELS_DATA and REELS_GREETING override the file (handy for tests and one-off runs). The file handling, precedence and validation are
 [strata_python.settings](https://github.com/jburnhams/strata-python); this module only declares the app's settings."""
 
 import os
@@ -17,9 +17,9 @@ DEFAULT_DATA_DIR = os.path.join(REPO, "data")
 DEFAULT_GREETING = "Hello"
 
 SETTINGS = Settings(
-    "app",
+    "reels",  # not the template's "app": its home and APP_* variables would be shared with every other app made from the template
     [
-        Setting("data_dir", default=DEFAULT_DATA_DIR, normalise=absolute_path, env="APP_DATA"),
+        Setting("data_dir", default=DEFAULT_DATA_DIR, normalise=absolute_path, env="REELS_DATA"),
         Setting("greeting", default=DEFAULT_GREETING, normalise=non_empty),
     ],
 )

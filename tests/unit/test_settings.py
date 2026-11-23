@@ -6,17 +6,17 @@ from app import settings
 
 
 def test_defaults_and_env_overrides(tmp_path, monkeypatch):
-    monkeypatch.delenv("APP_DATA", raising=False)
-    monkeypatch.delenv("APP_HOME", raising=False)
-    assert settings.home() == os.path.join(os.path.expanduser("~"), ".app")
+    monkeypatch.delenv("REELS_DATA", raising=False)
+    monkeypatch.delenv("REELS_HOME", raising=False)
+    assert settings.home() == os.path.join(os.path.expanduser("~"), ".reels")
     assert settings.greeting() == "Hello"
     assert settings.data_dir() == settings.DEFAULT_DATA_DIR
 
     custom_home = tmp_path / "custom_home"
     custom_data = tmp_path / "custom_data"
-    monkeypatch.setenv("APP_HOME", str(custom_home))
-    monkeypatch.setenv("APP_DATA", str(custom_data))
-    monkeypatch.setenv("APP_GREETING", "  Hi  ")
+    monkeypatch.setenv("REELS_HOME", str(custom_home))
+    monkeypatch.setenv("REELS_DATA", str(custom_data))
+    monkeypatch.setenv("REELS_GREETING", "  Hi  ")
     assert settings.home() == str(custom_home)
     assert settings.data_dir() == str(custom_data)
     assert custom_data.is_dir()

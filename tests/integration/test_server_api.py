@@ -47,3 +47,33 @@ def test_a_reload_on_any_screen_gets_the_app(client):
     r = client.get("/settings", params={"tab": "appearance"})
     assert r.status_code == 200
     assert '<base href="./">' in r.text
+
+
+def test_a_tape_added_over_http_is_listed_by_the_cli(client, cli, tmp_path):
+    import shutil
+    import subprocess
+
+    assert shutil.which("ffmpeg"), "ffmpeg is needed (integration.yml installs it)"
+    tape = tmp_path / "tape.mp4"
+    cmd = [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=d=1:s=64x48:r=25",
+        "-pix_fmt",
+        "yuv420p",
+        str(tape),
+    ]
+    subprocess.run(cmd, check=True)
+    r = client.post("/api/sources", json={"path": str(tape)})
+    assert r.status_code == 201
+    assert r.json()["video"]["rate"] == "25/1"
+    assert client.post("/api/sources", json={"path": str(tape)}).status_code == 200  # already a source
+    assert [s["name"] for s in client.get("/api/sources").json()] == ["tape.mp4"]
+    assert "tape.mp4" in cli("sources").stdout
+    assert "known #1 tape.mp4" in cli("add", str(tape)).stdout

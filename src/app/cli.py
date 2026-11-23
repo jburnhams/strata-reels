@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from strata_python import cli as shared
 
-from app import __version__, greet, settings
+from app import __version__, greet, settings, sources
 
 
 def run_server(host: str, port: int) -> None:
@@ -29,6 +29,43 @@ def cmd_hello(args: argparse.Namespace) -> int:
         print(json.dumps(rec))
         return 0
     print(rec["message"])
+    return 0
+
+
+def _open_db():
+    from sqlalchemy.orm import Session
+    from strata_python.db import Project, local_url
+
+    engine = Project.load(__file__).open(default=local_url(settings.SETTINGS))
+    return Session(engine)
+
+
+def cmd_add(args: argparse.Namespace) -> int:
+    with _open_db() as db:
+        for path in args.paths:
+            try:
+                source, new = sources.add(db, path)
+            except sources.SourceError as e:
+                print(f"  refused: {e}", file=sys.stderr)
+                return 1
+            print(
+                json.dumps(sources.as_json(source))
+                if args.json
+                else f"  {'added' if new else 'known'} #{source.id} {source.name}"
+            )
+    return 0
+
+
+def cmd_sources(args: argparse.Namespace) -> int:
+    with _open_db() as db:
+        items = [sources.as_json(s) for s in sources.all_sources(db)]
+    if args.json:
+        print(json.dumps(items, indent=1))
+        return 0
+    if not items:
+        print("  (no sources yet: ./app add /path/to/tape.mkv)")
+    for s in items:
+        print(f"  #{s['id']:<4} {s['name']:40} {s['duration'] or 0:9.1f} s  {s['path']}")
     return 0
 
 
@@ -59,6 +96,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     h.add_argument("--save", action="store_true", help="record the greeting in the message log")
     h.add_argument("--json", action="store_true")
     h.set_defaults(fn=cmd_hello)
+    ad = sub.add_parser("add", help="add footage as sources (a file is read, never changed)")
+    ad.add_argument("paths", nargs="+")
+    ad.add_argument("--json", action="store_true")
+    ad.set_defaults(fn=cmd_add)
+    so = sub.add_parser("sources", help="list the sources")
+    so.add_argument("--json", action="store_true")
+    so.set_defaults(fn=cmd_sources)
     m = sub.add_parser("messages", help="list or clear recorded greetings")
     m.add_argument("--clear", action="store_true")
     m.add_argument("--json", action="store_true")

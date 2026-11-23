@@ -23,7 +23,7 @@ def test_hello_and_message_log_from_the_command_line(cli):
 
 
 def test_settings_are_viewed_and_updated_from_the_command_line(cli, tmp_path, monkeypatch):
-    monkeypatch.delenv("APP_DATA", raising=False)
+    monkeypatch.delenv("REELS_DATA", raising=False)
     elsewhere = tmp_path / "elsewhere"
     assert str(elsewhere) in cli("set", "data_dir", elsewhere).stdout
     assert settings.data_dir() == str(elsewhere.resolve())
