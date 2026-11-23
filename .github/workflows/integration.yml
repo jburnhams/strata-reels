@@ -38,8 +38,6 @@ jobs:
           esac
       - run: uv sync --locked
       - name: Integration tests (CLI and HTTP API end-to-end)
-        env:
-          REELS_TEST_FFMPEG: '1'   # a missing ffmpeg fails the tests here instead of skipping them
         run: uv run pytest tests/integration -n auto --durations=10
 
   audit:

@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from strata_python import files, media
 
@@ -49,8 +50,11 @@ def add(db: Session, path: str, probe: Callable[[str], media.Probe] = media.prob
     path = os.path.abspath(os.path.expanduser(path))
     if not os.path.isfile(path):
         raise SourceError(f"there is no file {path}")
-    fingerprint = files.quick_fingerprint(path)
-    found = db.scalars(select(Source).where(Source.fingerprint == fingerprint)).first()
+    try:
+        fingerprint = files.quick_fingerprint(path)
+    except OSError as e:  # there, but not ours to read (permissions, a drive gone mid-read): a refusal, not a crash
+        raise SourceError(f"{os.path.basename(path)} cannot be read: {e.strerror or e}") from e
+    found = _by_fingerprint(db, fingerprint)
     if found is not None:
         if found.path != path:
             found.path, found.name = path, os.path.basename(path)
@@ -71,8 +75,20 @@ def add(db: Session, path: str, probe: Callable[[str], media.Probe] = media.prob
         probe=info.raw,
     )
     db.add(source)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # the same tape added twice at once: both looked, found nothing and probed (seconds), and the other stored it first
+        db.rollback()
+        other = _by_fingerprint(db, fingerprint)
+        if other is None:
+            raise
+        return other, False
     return source, True
+
+
+def _by_fingerprint(db: Session, fingerprint: str) -> Source | None:
+    return db.scalars(select(Source).where(Source.fingerprint == fingerprint)).first()
 
 
 def all_sources(db: Session) -> list[Source]:

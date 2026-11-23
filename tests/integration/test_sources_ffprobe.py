@@ -1,6 +1,6 @@
 """Adding footage as sources (app/sources.py) on the real ffprobe and a real database (the strata-python plugin's db_session: SQLite
-migrated from migrations/, or Postgres with --pg). ffmpeg is installed in CI for this (integration.yml), which sets REELS_TEST_FFMPEG=1 so a
-missing one fails there instead of skipping."""
+migrated from migrations/, or Postgres with --pg). ffmpeg is installed in CI for this (integration.yml); a machine without it fails these tests,
+never skips them (AGENTS.md: install what the tests need)."""
 
 import os
 import shutil
@@ -11,11 +11,6 @@ from sqlalchemy.orm import Session
 
 from app import sources
 
-needs_ffmpeg = pytest.mark.skipif(
-    shutil.which("ffmpeg") is None and not os.environ.get("REELS_TEST_FFMPEG"),
-    reason="ffmpeg is not installed (CI sets REELS_TEST_FFMPEG=1 so it fails there instead)",
-)
-
 
 def make(path, *inputs):
     cmd = ["ffmpeg", "-nostdin", "-v", "error", "-y"]
@@ -25,7 +20,6 @@ def make(path, *inputs):
     return str(path)
 
 
-@needs_ffmpeg
 def test_a_file_is_added_once_and_found_again_after_a_move(db_session: Session, tmp_path):
     clip = make(tmp_path / "tape.mp4", "testsrc=d=2:s=96x72:r=25", "sine=d=2")
     source, new = sources.add(db_session, clip)
@@ -44,7 +38,6 @@ def test_a_file_is_added_once_and_found_again_after_a_move(db_session: Session, 
     assert [s.id for s in sources.all_sources(db_session)] == [source.id]
 
 
-@needs_ffmpeg
 def test_sound_only_and_unreadable_files_are_refused(db_session: Session, tmp_path):
     with pytest.raises(sources.SourceError, match="no video stream"):
         sources.add(db_session, make(tmp_path / "sound.m4a", "sine=d=1"))

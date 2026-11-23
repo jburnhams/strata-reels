@@ -70,3 +70,33 @@ def test_files_that_cannot_be_sources_are_refused_before_anything_is_stored(db_s
         sources.as_json(sources.Source(fingerprint="f", path="p", name="n", size=1, duration=None, probe={}))["video"]
         is None
     )
+
+
+def test_the_same_tape_added_twice_at_once_is_one_source(db_session: Session, tmp_path):
+    """The other request stores the tape while this one is probing; this one's insert then hits the unique fingerprint."""
+    tape = tmp_path / "tape04.mkv"
+    tape.write_bytes(b"\1" * 4096)
+
+    def probe_while_another_adds(path):
+        other, new = sources.add(db_session, path, probe=answer(TAPE))
+        assert new
+        seen.append(other.id)
+        return media.Probe.from_json(path, TAPE)
+
+    seen: list[int] = []
+    source, new = sources.add(db_session, str(tape), probe=probe_while_another_adds)
+    assert (source.id, new) == (seen[0], False)
+    assert [s.id for s in sources.all_sources(db_session)] == seen
+
+
+def test_a_file_that_cannot_be_read_is_refused(db_session: Session, tmp_path, monkeypatch):
+    tape = tmp_path / "locked.mkv"
+    tape.write_bytes(b"x")
+
+    def denied(path):
+        raise PermissionError(13, "Permission denied", path)
+
+    monkeypatch.setattr(sources.files, "quick_fingerprint", denied)
+    with pytest.raises(sources.SourceError, match=r"locked\.mkv cannot be read: Permission denied"):
+        sources.add(db_session, str(tape), probe=answer(TAPE))
+    assert sources.all_sources(db_session) == []
