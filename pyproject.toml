@@ -26,10 +26,10 @@ dev = [
     "diff-cover>=9",
 ]
 
-# Until strata-python 0.2.9 (strata_python.derive, strata-python#56) is on PyPI: its PR's commit. Removed, and the floor
-# above raised to 0.2.9, before this merges.
+# Until strata-python 0.2.10 (strata_python.derive, strata-python#56) is on PyPI: its PR's commit. Removed, and the floor
+# above raised to 0.2.10, before this merges.
 [tool.uv.sources]
-strata-python = { git = "https://github.com/jburnhams/strata-python", rev = "5274efe243d879042708427a7e1a8e85b4cabd65" }
+strata-python = { git = "https://github.com/jburnhams/strata-python", rev = "8f2b189722575874f56b9d4cc1923a9c1399509d" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/app"]

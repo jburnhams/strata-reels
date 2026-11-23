@@ -3,7 +3,7 @@
 ## 2026-11-23: ingest from the raw footage (R1 step 1)
 
 - Asked for: finish step 1 with browser proxies, thumbnails and audio peaks, made by general helpers in strata-python and run as jobs here, stored with the provenance tables of step 1b. Jonathan then set that ingest starts from the raw footage and restoration comes later in the pipeline; it is now part of step 7 (restore, render, export), for the spans the reel uses.
-- strata-python 0.2.9 (#56) has `derive`: `proxy`, `thumbnails`, `peaks`, `interlacing` and a version per recipe. Here, `derived.py` keeps each as a `Result` with a file under `derived/<cache key>/`, rather than a table of its own: the cache key and supersession rules are the same, and the overview's "derived asset" needed nothing a result lacks.
+- strata-python 0.2.10 (#56) has `derive`: `proxy`, `thumbnails`, `peaks`, `interlacing` and a version per recipe. Here, `derived.py` keeps each as a `Result` with a file under `derived/<cache key>/`, rather than a table of its own: the cache key and supersession rules are the same, and the overview's "derived asset" needed nothing a result lacks.
 - The tapes are interlaced but their streams do not say so (or say progressive), so a stated "progressive" is checked with ffmpeg's `idet` before the proxy is made; the field order found is in the proxy's payload. Checked on generated PAL-shaped clips, not yet on a real tape: run `./app add` on one on the GPU machine and look at the proxy.
 - Thumbnails take the first frame at or after each 10 s step; ffmpeg's `fps` filter dropped the last stretch of a file, found by this repo's integration test.
 - Not built: an API or screen for the assets (with step 4's chapters screen, which is their first reader) and the jobs' progress on the System page.
