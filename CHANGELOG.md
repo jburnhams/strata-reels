@@ -4,6 +4,12 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-23
 
+**Plan: checked against the spec, data model written down (branch `claude/project-thread-1xqj2q`)**
+Jonathan asked whether the work is on track against the spec. It is; the gaps found are the spec's provenance and record-keeping invariants, which are cheapest to build in before R1 step 2 stores its first result, so he agreed to put them in the plan.
+- `docs/overview.md`: new section 6, the data model (source with a full SHA-256, derived asset, result with provenance and supersession, override, revision and proposal with compare-and-swap, render manifest, job), and the decision that the edit model is ours with OpenTimelineIO as an export (spec §10 decision 1). Sections 6 and 7 renumbered to 7 and 8.
+- `docs/implementation-plan.md`: step 1 adds the background full hash (the fingerprint samples only the ends, as its docstring says, which the plan's "hash" did not); new step 1b, the records and job runner, needing strata-models to report each job's settings; step 2 runs `shots-spliced` on real footage and adds a check on tape faults; R2 adds opt-in, deletion and consent for face recognition.
+- `docs/progress.md`: the check and what it found.
+
 **Update from python-app-template, without its sample (branch `claude/project-thread-1p0er6`, PR #7)**
 Jonathan asked for reels to be brought up to the latest template, then for nothing that is not reels to come with it. Reels was made from template commit `d0793de`; this applies the template's changes since then (`d0793de..3863362`: strata-python 0.2.6, typed routes and generated API types, the system page, CI's strata-db, public and Postgres checks, the web on strata-react 1.3.3 with Biome and oxlint) and keeps reels' own work on top. The template's sample (greetings in a database, a paged log, a greeting word and style as settings, and their screens, tests, stories and baselines) is left out, along with what reels had kept of it (`greet.py`, `hello`, `messages`).
 - Taken from the template: the CI workflows (the weekly strata-python upgrade workflow is gone: dependabot groups uv), `AGENTS.md` (which now describes `strata_python.db`, so the overview's note that it named the old database client is removed), `src/app/{db,system}.py`, the test fixtures, and the web app's frame (`Layout`, `SystemScreen`, `NotFoundScreen`, mocks, stories, visual config). `README.md`, `AGENTS.md`, the test READMEs and `docs/overview.md` describe reels' screens and commands instead of the sample's.
