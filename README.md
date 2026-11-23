@@ -1,6 +1,8 @@
-# python-app-template
+# strata-reels
 
-A full-stack Python + React project template extracted from [strata-360](https://github.com/jburnhams/strata-360) and [strata-stills](https://github.com/jburnhams/strata-stills). Includes a FastAPI backend and CLI (`src/app/`), a React 19 + TypeScript frontend (`web/`) built on [strata-react](https://github.com/jburnhams/strata-react) that builds directly into the Python package, hermetic unit and integration test suites (uv run pytest + hypothesis on Python, Vitest + Testing Library + MSW on web), Storybook, screenshot tests in Chromium (`strata-visual`), ratcheting coverage gates, and multi-OS GitHub Actions CI.
+An AI-guided video editor: it works out what is in your footage and proposes an editable cut that you correct. First for digitised family VHS tapes, then race videos. The plan is in [docs/overview.md](docs/overview.md) and [docs/implementation-plan.md](docs/implementation-plan.md); the original spec in [docs/spec.md](docs/spec.md).
+
+It was made from python-app-template: a full-stack Python + React project template, extracted from [strata-360](https://github.com/jburnhams/strata-360) and [strata-stills](https://github.com/jburnhams/strata-stills). Includes a FastAPI backend and CLI (`src/app/`), a React 19 + TypeScript frontend (`web/`) built on [strata-react](https://github.com/jburnhams/strata-react) that builds directly into the Python package, hermetic unit and integration test suites (uv run pytest + hypothesis on Python, Vitest + Testing Library + MSW on web), Storybook, screenshot tests in Chromium (`strata-visual`), ratcheting coverage gates, and multi-OS GitHub Actions CI.
 
 The web app is meant to be read as well as run: each screen in `web/src/screens/` opens with the question it answers and the strata-react patterns it shows (loading, empty and error states; undoable removal; bulk selection; a cursor-paged log; a polled status page; settings with tabs in the URL; light and dark).
 

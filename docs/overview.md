@@ -2,26 +2,56 @@
 
 ## 1. Goal
 
-Provide a clean, minimal starting point for full-stack local-first Python + React applications with the exact build, test, coverage-gate and multi-OS CI setup proven in `strata-360` and `strata-stills`.
+An AI-guided video editor: it ingests footage, works out what is in it, and proposes a complete, editable cut, which a person (or an agent) then corrects. Manual editing is always possible, but the normal path is "the system proposes, you override". The source of the design is the [original specification](spec.md); this brief records how it is being built and where it departs from the spec.
 
-## 2. Architecture
+Two uses come first (Jonathan, 2026-11-23):
 
-- **Python CLI and HTTP server (`src/app/`)**:
-  - `cli.py`: command-line interface (`doctor`, `hello`, `messages`, `set`, `serve`), invoked as `uv run app` (the `app` console script from `pyproject.toml`; `./app` and `app.cmd` wrap it).
-  - `server/app.py`: FastAPI application serving JSON endpoints under `/api/*` and the built React single-page app at `/` (falling back to `server/landing.html` when `web/` has not been built yet).
-  - `settings.py`: persistent user configuration in `~/.app/settings.json` (`APP_HOME` override) with atomic file writes.
-  - `oslib.py`: cross-platform primitives (file locks, process liveness, process tree termination, priority, CLI command builder) isolating POSIX vs Windows differences in one place.
-  - `greet.py`: minimal "Hello, world!" domain module with pure formatting functions and a file-locked JSON message log in the configured data directory (ids never reused, cursor paging, removal of one).
-  - `system.py`: the snapshot the System screen shows (versions, data folder size, disk usage).
-- **React frontend (`web/`)**, built on [strata-react](https://github.com/jburnhams/strata-react) (components, UX patterns, the token contract and the testing and screenshot tooling):
-  - React 19, TypeScript, Vite 8, Tailwind CSS v4 with Strata's token contract (Tailwind's stock colours, sizes and radii do not compile), a palette generated from the subject (`web/src/styles/`), bundled faces.
-  - React Router with real paths (`web/src/routes.tsx`, one tree shared by the app, the tests and the stories); URL state for sort and tabs. The server answers every page path with the app and a relative `<base>`, so one build works at `/` or behind a reverse proxy at `/<subpath>/` (`with_base` in `server/app.py`, `BASE`/`withBase()` in `web/src/api.ts`).
-  - Server data through TanStack Query (`useLoad`, `useInfiniteLoad`, `fetchJson`), shown through `DataView`/`InfiniteList` so loading, empty and error states cannot be left out.
-  - MSW handlers for every endpoint (`web/src/mocks/`) serve the jsdom tests, Storybook and the visual suite.
-  - `npm run build` outputs directly to `src/app/server/static/`.
+1. **Family videos**: digitised VHS tapes. Hours of flat, interlaced PAL footage per tape, little planned speech, many short scenes, unknown dates. The first milestone is built on these.
+2. **Race videos**: 360° clips shot during ultramarathons, today handled by [strata-360](https://github.com/jburnhams/strata-360). Longer term strata-reels replaces strata-360; 360 footage returns as a second kind of source once the core works on flat video. strata-360 was research: its lessons carry over, its code does not (section 3).
 
-## 3. Principles
+Not a full nonlinear editor (spec §1): no grading, compositing, motion graphics or real-time collaboration.
 
-- **Hermetic tests by default**: every test run gets an isolated home and data directory outside `tmp_path`, stripped environment overrides, and a socket guard that blocks outbound network calls.
-- **Two-tier test suites**: fast unit tests (`tests/unit/`, `web/tests/unit/`) and end-to-end integration tests (`tests/integration/`, `web/tests/integration/`), with clear file ownership so parallel agent branches never conflict.
-- **Ratcheting coverage floors**: Python unit coverage (`fail_under` in `pyproject.toml`) and web combined coverage (`web/coverage-floor.json`) only ratchet up.
+## 2. Where each part lives
+
+| Repository | What it owns here |
+|---|---|
+| [strata-models](https://github.com/jburnhams/strata-models) | **Every model call**, including face detection and recognition in full (who a face is, across tapes and apps) and restoration. strata-reels asks for a role (`transcribe`, `faces`, `vision-language`, `video-enhance`, ...) and never loads a model or keeps its own face identities. strata-models runs the evals and wires the best model to each role, so a better model is one change there. Roles strata-reels needs that it does not serve yet (shot boundaries first; then speaker diarization, word alignment, sound events, speaker embeddings, translation) are added there, each with an eval and a simple baseline. |
+| [strata-python](https://github.com/jburnhams/strata-python) | Shared server code: `media.probe`/`ffmpeg`, the durable job queue (`tasks.queue`), the shared Postgres with migrations (`db`), and the strata-models client (`clients.models`). Generic pieces this project needs are added there rather than here: an exact time model (integer ticks over a declared timebase, ranges, source-to-timeline maps), proxies, thumbnail strips and audio peaks beside `probe`, and a cached, resumable stage runner if strata-360's generalises cleanly. |
+| [strata-react](https://github.com/jburnhams/strata-react) | Every reusable UI part, built as generic components. Most already exist (`Timeline`, `SequenceTimeline`, `TranscriptView`, `MarkableText`, `MediaPlayer` with spans, `Waveform`, `PairVote`, `CompareVideo`, `RegionEditor`, `BoxOverlay`, `Inspector`, `Workspace`, `useHistory`, `JobStatus`). Gaps are raised there as issues, not hand-built here (section 5). |
+| strata-reels (this repo) | Only the editing domain, kept small and clean from the start rather than one project that does everything: sources and derived assets, analysis results with their provenance, scenes and candidates, the proposal and the person's overrides, the planner, the ffmpeg render, OpenTimelineIO export, and later the MCP server. Anything a second app needs moves to strata-python. |
+| [strata-vid](https://github.com/jburnhams/strata-vid) | A browser editor (WebCodecs) already ported onto strata-react. A source of ideas and of components to generalise into strata-react (its compositor is the starting point for the edit-list player), not a dependency. Its float-seconds time model and its store are not reused. |
+
+## 3. What is learnt from strata-360
+
+strata-360 tried the spec's core ideas on one kind of footage. It was research-oriented, so **no code is copied or ported from it** (Jonathan, 2026-11-23): strata-reels is written fresh, well structured from the start. These are the ideas that proved themselves there (its `docs/overview/` sections 3, 5, 6, 15, 16 and 18) and are designed in here:
+
+- **The language model never edits video.** It reads text and stills and returns structured JSON; everything else is deterministic code (strata-360 §3, spec §5).
+- **Options, not decisions, early.** Analysis records what is possible (candidate windows with handles and safe cut points), and choices are made as late as the information allows.
+- **The edit is a diff on the proposal.** The project holds the automatic proposal and the person's overrides separately: locks, pins, bans, forced choices, trims, preferences. The proposal is a pure function of (analysis, overrides, seed), so re-planning never loses a manual choice and an override whose window has gone is reported, not dropped (strata-360 §18.3 and §18.4n; spec §1 invariants, §6).
+- **Corrections are layered.** A model's output is never changed in place: corrections sit above it with their source (strata-360's `transcript_edits.json`; spec §3 "observations ... user corrections ... stored separately").
+- **Everything is cached by content hash plus parameters**, and stages are resumable and retried with backoff (strata-360 §3, `pipeline/retry.py`; spec §6).
+- **Time is exact.** Source, project and render time are distinct, with explicit transforms (strata-360 §6, spec §3 "Time correctness").
+
+## 4. Departures from the spec, and why
+
+- **Storage**: Postgres through strata-python's `db` (one shared database, a schema for this app), as the spec recommends, plus files on disk for media and heavy artifacts. No vector index or columnar files until a stage needs them.
+- **Models**: the spec's per-stage model research (S1 to S7) happens in strata-models' eval framework, not here. strata-reels records which role and model produced each result, so a model change can be traced and re-run.
+- **First milestone**: the spec's M0 is foundations only. Here the first milestone is a thin end-to-end slice on real footage (a tape in, a highlight reel out) that builds only the foundations that slice needs, because the spec's own risk register warns against building infrastructure before showing that automatic selection makes good edits.
+- **Order of analysis**: for home video, scenes and "what is happening" come before speech; the spec's transcript-first baseline still exists, as one signal among several.
+
+## 5. Gaps expected in strata-react
+
+1. **An edit-list player**: plays a list of source ranges from several files, gapless, without rendering. `MediaPlayer` plays whole files in turn.
+2. **Proposal review**: the difference between two revisions, each change accepted or rejected, with its reason and evidence.
+3. **A crop path with keyframes over time**: `RegionEditor` has a start and an end only. Needed for reframing (later milestones).
+
+Each is raised as a strata-react issue when the milestone that needs it starts.
+
+## 6. The app skeleton
+
+The repository was made from [python-app-template](https://github.com/jburnhams/python-app-template): a FastAPI server and CLI in `src/app/` on strata-python, and a React app in `web/` on strata-react that builds into `src/app/server/static/`. The sample screens (greetings, log, system, settings) stay until the first real screens replace them. Conventions are in [AGENTS.md](../AGENTS.md).
+
+## 7. Principles kept from the template
+
+- **Hermetic tests by default**: every test run gets an isolated home and data directory, stripped environment overrides and a socket guard against outbound network calls. strata-models is reached through the plugin's `fake_models` in unit tests and a real service only where a test is marked for it.
+- **Two-tier test suites** (unit and integration, Python and web) with ratcheting coverage floors.
