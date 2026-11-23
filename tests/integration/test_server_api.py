@@ -2,6 +2,7 @@
 over the settings file and the SQLite fallback database in the test's home folder, which the CLI shares."""
 
 import json
+import os
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterator
@@ -33,11 +34,12 @@ def call(base: str, method: str, path: str, body: object = None) -> tuple[int, A
         return e.code, json.loads(e.read())
 
 
-def test_health_and_errors_answer_over_http(server: str):
+def test_health_and_errors_answer_over_http(server: str, tmp_path):
     status, health = call(server, "GET", "/api/health")
     assert (status, health["ok"], health["version"]) == (200, True, "0.1.0")
-    status, body = call(server, "POST", "/api/sources", {"path": "/no/such/tape.mkv"})
-    assert (status, body["detail"]) == (400, "there is no file /no/such/tape.mkv")
+    missing = tmp_path / "tape.mkv"  # a real absolute path on every OS; the server names it absolute
+    status, body = call(server, "POST", "/api/sources", {"path": str(missing)})
+    assert (status, body["detail"]) == (400, f"there is no file {os.path.abspath(missing)}")
     assert call(server, "PUT", "/api/settings", {"greeting": "Hi"})[0] == 400  # no such setting
     assert call(server, "GET", "/api/system")[1]["sources"] == 0
 
