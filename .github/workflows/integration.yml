@@ -28,6 +28,14 @@ jobs:
         with:
           python-version: '3.13'
           enable-cache: true
+      - name: Install ffmpeg (sources are probed with the real ffprobe in the tests)
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux) sudo apt-get update -q && sudo apt-get install -y -q ffmpeg ;;
+            macOS) brew install ffmpeg ;;
+            Windows) choco install ffmpeg -y --no-progress ;;
+          esac
       - run: uv sync --locked
       - name: Integration tests (CLI and HTTP API end-to-end)
         run: uv run pytest tests/integration -n auto --durations=10

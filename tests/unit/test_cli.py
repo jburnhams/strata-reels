@@ -69,3 +69,29 @@ def test_set_and_serve_commands(capsys, monkeypatch):
     monkeypatch.setattr(server_app, "main", lambda argv: called.append(argv))
     assert cli.main(["serve", "--host", "0.0.0.0", "--port", "9000"]) == 0
     assert called == [["--host", "0.0.0.0", "--port", "9000"]]
+
+
+def test_add_and_sources_commands(capsys, tmp_path):
+    from strata_python import media
+
+    from app import sources
+
+    assert cli.main(["sources"]) == 0
+    assert "no sources yet" in capsys.readouterr().out
+    assert cli.main(["add", str(tmp_path / "missing.mkv")]) == 1
+    assert "refused: there is no file" in capsys.readouterr().err
+    tape = tmp_path / "tape.mkv"
+    tape.write_bytes(b"\0" * 100)
+    raw = {"format": {"duration": "12.5"}, "streams": [{"codec_type": "video", "r_frame_rate": "25/1"}]}
+    with (
+        cli._open_db() as db
+    ):  # the CLI's own database (in the test's settings folder), given a source as ffprobe would describe it
+        sources.add(db, str(tape), probe=lambda p: media.Probe.from_json(p, raw))
+    assert cli.main(["add", str(tape)]) == 0  # known by its content: ffprobe is not run
+    assert "known #1 tape.mkv" in capsys.readouterr().out
+    assert cli.main(["add", "--json", str(tape)]) == 0
+    assert json.loads(capsys.readouterr().out)["video"]["rate"] == "25/1"
+    assert cli.main(["sources"]) == 0
+    assert "tape.mkv" in capsys.readouterr().out
+    assert cli.main(["sources", "--json"]) == 0
+    assert [s["name"] for s in json.loads(capsys.readouterr().out)] == ["tape.mkv"]

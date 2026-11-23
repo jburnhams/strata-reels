@@ -14,7 +14,7 @@ def client():
 def test_landing_page_and_built_static_index(tmp_path, monkeypatch):
     monkeypatch.setattr(server_app, "STATIC", str(tmp_path / "no_static"))
     c = TestClient(create_app())
-    assert "python-app-template" in c.get("/").text
+    assert "strata-reels" in c.get("/").text
     assert "Say hello" in c.get("/").text
     assert c.get("/api/health").json()["ok"] is True
 
@@ -87,7 +87,7 @@ def test_hello_and_messages_lifecycle(client):
 def test_settings_roundtrip_and_server_main(client, tmp_path, monkeypatch):
     assert client.put("/api/settings", json={"data_dir": "relative/path"}).status_code == 400
     new_dir = str(tmp_path / "custom_data")
-    monkeypatch.delenv("APP_DATA", raising=False)
+    monkeypatch.delenv("REELS_DATA", raising=False)
     res = client.put("/api/settings", json={"data_dir": new_dir, "greeting": "Hey"}).json()
     assert res == {"data_dir": new_dir, "greeting": "Hey"}
     assert client.get("/api/settings").json() == {"data_dir": new_dir, "greeting": "Hey"}
@@ -99,8 +99,15 @@ def test_settings_roundtrip_and_server_main(client, tmp_path, monkeypatch):
 
 
 def test_settings_put_with_one_field_or_none_changes_only_what_was_sent(client, tmp_path, monkeypatch):
-    monkeypatch.delenv("APP_DATA", raising=False)
+    monkeypatch.delenv("REELS_DATA", raising=False)
     new_dir = str(tmp_path / "data")
     assert client.put("/api/settings", json={"data_dir": new_dir}).json()["data_dir"] == new_dir
     assert client.put("/api/settings", json={"greeting": "Hey"}).json() == {"data_dir": new_dir, "greeting": "Hey"}
     assert client.put("/api/settings", json={}).json() == {"data_dir": new_dir, "greeting": "Hey"}
+
+
+def test_sources_api_lists_and_refuses(client):
+    assert client.get("/api/sources").json() == []  # the database is made and migrated on this first request
+    r = client.post("/api/sources", json={"path": "/no/such/tape.mkv"})
+    assert r.status_code == 400
+    assert "there is no file" in r.json()["detail"]

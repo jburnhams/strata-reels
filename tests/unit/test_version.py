@@ -5,7 +5,7 @@ import app
 
 
 def test_version_comes_from_the_installed_package_metadata():
-    assert app.__version__ == importlib.metadata.version("python-app-template")
+    assert app.__version__ == importlib.metadata.version("strata-reels")
 
 
 def test_version_falls_back_when_the_package_was_never_installed(monkeypatch):
