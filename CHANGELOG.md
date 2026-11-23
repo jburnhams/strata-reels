@@ -4,7 +4,7 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-23
 
-**The records: results, overrides, jobs and the content hash (branch `claude/project-thread-ui8f4c`)**
+**The records: results, overrides, jobs and the content hash (branch `claude/project-thread-ui8f4c`, PR #9)**
 R1 step 1b, which Jonathan agreed: the tables every later step writes into (overview §6) and the job runner, before step 2 stores its first result. strata-models #103 (each job's model and settings hash, returned by the client) is done in strata-models PR #104, so this side only takes its answer.
 - `src/app/models.py`: `Source.sha256` (the full content hash, None until the `hash` job has read the file); `JOBS`, strata-python's queue table in this app's schema; `Result` **new** (kind, source, exact span, role, model, settings hash, the model's options, the strata-models job, input hashes, parameters, cache key, payload or file, confidence, quality flags, the reels job, `superseded_by`); `Override` **new** (target kind and id, kind, value, mode, scope, author, reason, `superseded_by`, `withdrawn`). `src/app/migrations/20261123_ae4455112b76_records.py`: **new**, generated and reviewed.
 - `src/app/results.py`: **new**. `Provenance` (`of(role, served)` takes strata-models' `{model, options, settings_hash, job_id}`), `cache_key`, `record` (the same key returns the stored row; a different request for the same source, kind and span supersedes the current one in the same transaction; refuses a result with no payload or file, no inputs, or a confidence outside 0 to 1), `current`, `find`, `history`, `span`.
