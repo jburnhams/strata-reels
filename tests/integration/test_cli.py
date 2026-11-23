@@ -34,3 +34,24 @@ def test_the_committed_schema_check_passes(cli: Cli):
 def test_the_command_line_runs_as_a_real_process(cli_subprocess: Cli):
     assert "app 0.1.0" in cli_subprocess("doctor").stdout
     assert "no sources yet" in cli_subprocess("sources").stdout
+
+
+def test_added_footage_is_hashed_by_work(cli: Cli, tmp_path):
+    import hashlib
+    import subprocess
+
+    tape = tmp_path / "tape.mp4"
+    subprocess.run(
+        [
+            *("ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=d=1:s=64x48:r=25"),
+            *("-pix_fmt", "yuv420p", str(tape)),
+        ],
+        check=True,
+    )
+    assert "added #1 tape.mp4" in cli("add", str(tape)).stdout
+    assert "(hashing)" in cli("sources").stdout
+    assert "hash       queued" in cli("jobs").stdout
+    assert "hash       done" in cli("work").stdout
+    assert "(nothing queued)" in cli("work").stdout
+    assert hashlib.sha256(tape.read_bytes()).hexdigest()[:12] in cli("sources").stdout
+    assert len(json.loads(cli("jobs", "--json").stdout)["items"]) == 1

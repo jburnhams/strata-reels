@@ -69,3 +69,26 @@ def test_a_tape_added_over_http_is_listed_by_the_cli(server: str, cli: Cli, tmp_
     assert [s["name"] for s in call(server, "GET", "/api/sources")[1]] == ["tape.mp4"]
     assert "tape.mp4" in cli("sources").stdout
     assert "known #1 tape.mp4" in cli("add", str(tape)).stdout
+
+
+def test_the_server_hashes_a_new_tape_in_a_job_process(server: str, cli: Cli, tmp_path):
+    import hashlib
+    import subprocess
+    import time
+
+    tape = tmp_path / "tape.mp4"
+    subprocess.run(
+        [
+            *("ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=d=1:s=64x48:r=25"),
+            *("-pix_fmt", "yuv420p", str(tape)),
+        ],
+        check=True,
+    )
+    assert call(server, "POST", "/api/sources", {"path": str(tape)})[0] == 201
+    digest = hashlib.sha256(tape.read_bytes()).hexdigest()
+    deadline = time.monotonic() + 60  # the first job process starts and imports the app
+    while digest[:12] not in cli("sources").stdout and time.monotonic() < deadline:
+        time.sleep(0.2)
+    assert digest[:12] in cli("sources").stdout
+    (job,) = json.loads(cli("jobs", "--json").stdout)["items"]
+    assert (job["kind"], job["state"], job["domain"]) == ("hash", "done", "source:1")

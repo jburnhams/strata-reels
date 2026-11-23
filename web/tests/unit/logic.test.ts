@@ -32,7 +32,9 @@ describe('the Sources finding and picture', () => {
 describe('the System finding', () => {
   it("reads the home folder's disk and names the threshold crossed", () => {
     expect(homeDisk(systemStatus)).toEqual({ size: 512e9, used: 512e9 - 210.4e9, free: 210.4e9 })
-    expect(homeDisk({ ...systemStatus, folders: [{ name: 'home', path: '/x', exists: false }] })).toBeUndefined()
+    expect(
+      homeDisk({ ...systemStatus, folders: [{ name: 'home', path: '/x', exists: false, free_bytes: null, total_bytes: null }] }),
+    ).toBeUndefined()
     expect(ofSize(301.6e9, 512e9)).toBe(`${format.bytes(301.6e9, 'GB')} of ${format.bytes(512e9, 'GB')}`)
     expect(describeDisk(systemStatus)).toBe(`Everything is running. The data disk is 59% full, with ${format.bytes(210.4e9)} free.`)
     expect(describeDisk(systemNearlyFull)).toMatch(/^The data disk is 96% full, .* Free space before adding more footage\.$/)

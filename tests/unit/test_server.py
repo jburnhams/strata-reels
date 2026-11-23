@@ -20,7 +20,7 @@ def test_the_committed_schema_is_what_the_server_answers():
 
 def test_landing_page_and_built_static_index(tmp_path, monkeypatch: pytest.MonkeyPatch, db_env: str):
     monkeypatch.setattr(server_app, "STATIC", str(tmp_path / "no_static"))
-    with TestClient(create_app()) as c:
+    with TestClient(create_app(run_jobs="off")) as c:
         assert "Add footage" in c.get("/").text
         assert c.get("/api/health").json()["ok"] is True
 
@@ -29,7 +29,7 @@ def test_landing_page_and_built_static_index(tmp_path, monkeypatch: pytest.Monke
     (static / "index.html").write_text("<h1>built react app</h1>", encoding="utf8")
     (static / "assets" / "main.js").write_text("console.log(1)", encoding="utf8")
     monkeypatch.setattr(server_app, "STATIC", str(static))
-    with TestClient(create_app()) as c:
+    with TestClient(create_app(run_jobs="off")) as c:
         assert c.get("/").text == '<base href="./"><h1>built react app</h1>'
         assert "console.log(1)" in c.get("/assets/main.js").text
         assert '<base href="../">' in c.get("/log/2026").text  # one level down: one step back up

@@ -1,6 +1,7 @@
 """Command line. From strata-python: `doctor` (versions and imports), `set` (a setting), `serve` (the web server) and
-`openapi` (the schema file the web app's types are generated from). The app's own: `add` adds footage as sources and
-`sources` lists them."""
+`openapi` (the schema file the web app's types are generated from). The app's own: `add` adds footage as sources (and
+queues each one's content hash), `sources` lists them, `jobs` lists the job queue and `work` runs what is queued, here,
+until nothing is (the server runs the queue itself while it is up)."""
 
 import argparse
 import json
@@ -8,9 +9,10 @@ import sys
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from sqlalchemy.orm import Session
 from strata_python import cli as shared
 
-from app import __version__, db, settings, sources
+from app import __version__, db, jobs, settings, sources
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -29,13 +31,15 @@ def create_app() -> "FastAPI":
 
 
 def cmd_add(args: argparse.Namespace) -> int:
-    with db.session() as s:
+    with db.opened() as engine, Session(engine) as s:
+        q = jobs.queue(engine)
         for path in args.paths:
             try:
                 source, new = sources.add(s, path)
             except sources.SourceError as e:
                 print(f"  refused: {e}", file=sys.stderr)
                 return 1
+            jobs.hash_later(q, source)
             print(
                 json.dumps(sources.as_json(source))
                 if args.json
@@ -52,9 +56,36 @@ def cmd_sources(args: argparse.Namespace) -> int:
         return 0
     if not items:
         print("  (no sources yet: ./app add /path/to/tape.mkv)")
+    with db.session() as s:
+        hashes = {x.id: x.sha256 for x in sources.all_sources(s)}
     for x in items:
-        print(f"  #{x['id']:<4} {x['name']:40} {x['duration'] or 0:9.1f} s  {x['path']}")
+        known = (hashes.get(x["id"]) or "")[:12] or "(hashing)"
+        print(f"  #{x['id']:<4} {x['name']:40} {x['duration'] or 0:9.1f} s  {known:12}  {x['path']}")
     return 0
+
+
+def cmd_jobs(args: argparse.Namespace) -> int:
+    with db.opened() as engine:
+        page = jobs.queue(engine).page(limit=args.limit)
+    if args.json:
+        print(page.model_dump_json(indent=1))
+        return 0
+    if not page.items:
+        print("  (no jobs)")
+    for t in page.items:
+        print(f"  #{t.id:<5} {t.kind:10} {t.state:10} {t.domain or '':14} {t.error or ''}")
+    return 0
+
+
+def cmd_work(args: argparse.Namespace) -> int:
+    with db.opened() as engine:
+        ran = jobs.work(jobs.queue(engine))
+    jobs.close_records()
+    for j in ran:
+        print(f"  #{j.id:<5} {j.kind:10} {j.state:10} {j.domain or '':14} {j.error or ''}")
+    if not ran:
+        print("  (nothing queued)")
+    return 1 if any(j.state == "failed" for j in ran) else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -68,6 +99,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     so = sub.add_parser("sources", help="list the sources")
     so.add_argument("--json", action="store_true")
     so.set_defaults(fn=cmd_sources)
+    jo = sub.add_parser("jobs", help="list the job queue, newest first")
+    jo.add_argument("--limit", type=int, default=50)
+    jo.add_argument("--json", action="store_true")
+    jo.set_defaults(fn=cmd_jobs)
+    wo = sub.add_parser(
+        "work", help="run the queued jobs here until none is left (the server does this while it is up)"
+    )
+    wo.set_defaults(fn=cmd_work)
     shared.add_set(sub, settings.SETTINGS)
     shared.add_serve(sub, run_server, default_port=8360)
     shared.add_openapi(sub, create_app)

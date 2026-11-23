@@ -13,8 +13,18 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client(db_env: str) -> Iterator[TestClient]:
     """The HTTP API on a fresh migrated test database. Used as a context manager so the server's lifespan runs, as
-    under uvicorn: the engine is disposed when the test ends (a SQLite file left open cannot be removed on Windows)."""
+    under uvicorn: the engine is disposed when the test ends (a SQLite file left open cannot be removed on Windows).
+    Jobs it queues stay queued (no job processes in a unit test); a test runs them with `jobs.work`."""
     from app.server.app import create_app
 
-    with TestClient(create_app()) as c:
+    with TestClient(create_app(run_jobs="off")) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _close_job_engines() -> Iterator[None]:
+    """The engines a job handler opened in this process (`app.jobs`), disposed after each test, for the same reason."""
+    yield
+    from app import jobs
+
+    jobs.close_records()
