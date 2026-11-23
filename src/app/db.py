@@ -5,6 +5,7 @@ nothing to set up. The server opens it through `strata_python.db.web.add_databas
 from collections.abc import Generator
 from contextlib import contextmanager
 
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from strata_python.db import Project, local_url
 
@@ -20,11 +21,17 @@ def default_url() -> str:
 
 
 @contextmanager
-def session() -> Generator[Session]:
-    """A session on the migrated database, for one CLI command (the server keeps one engine for its life instead)."""
+def opened() -> Generator[Engine]:
+    """The migrated database, for one CLI command (the server keeps one engine for its life instead)."""
     engine = PROJECT.open(default=default_url())
     try:
-        with Session(engine) as s:
-            yield s
+        yield engine
     finally:
         engine.dispose()
+
+
+@contextmanager
+def session() -> Generator[Session]:
+    """A session on the migrated database, for one CLI command."""
+    with opened() as engine, Session(engine) as s:
+        yield s

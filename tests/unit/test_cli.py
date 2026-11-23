@@ -62,3 +62,36 @@ def test_add_and_sources_commands(capsys: pytest.CaptureFixture[str], db_env: st
     assert "tape.mkv" in capsys.readouterr().out
     assert cli.main(["sources", "--json"]) == 0
     assert [s["name"] for s in json.loads(capsys.readouterr().out)] == ["tape.mkv"]
+
+
+def test_jobs_and_work_commands(capsys: pytest.CaptureFixture[str], db_env: str, tmp_path: Path):
+    from probes import TAPE, answer
+    from sqlalchemy.orm import Session
+
+    from app import jobs, sources
+
+    assert cli.main(["jobs"]) == 0
+    assert "(no jobs)" in capsys.readouterr().out
+    assert cli.main(["work"]) == 0
+    assert "(nothing queued)" in capsys.readouterr().out
+
+    tape = tmp_path / "tape.mkv"
+    tape.write_bytes(b"\0" * 4096)
+    engine = jobs._records()  # pyright: ignore[reportPrivateUsage]
+    with Session(engine) as s:
+        source, _ = sources.add(s, str(tape), probe=answer(TAPE))
+        jobs.hash_later(jobs.queue(engine), source)
+    assert cli.main(["sources"]) == 0
+    assert "(hashing)" in capsys.readouterr().out
+    assert cli.main(["jobs", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["items"][0]["state"] == "queued"
+    assert cli.main(["work"]) == 0
+    assert "hash       done" in capsys.readouterr().out
+    assert cli.main(["sources"]) == 0
+    assert "(hashing)" not in capsys.readouterr().out
+
+    jobs.queue(engine).enqueue("hash", {"source": None})  # a bug, not an outside failure: it fails at once
+    assert cli.main(["work"]) == 1
+    assert "hash       failed" in capsys.readouterr().out
+    assert cli.main(["jobs"]) == 0
+    assert "failed" in capsys.readouterr().out

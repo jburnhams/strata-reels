@@ -1,4 +1,6 @@
 """The app's records: SQLAlchemy models, migrated by Alembic (`src/app/migrations/`, declared in `src/app/strata-db.toml`).
+The data model and its reasons are docs/overview.md §6; the rules that keep these tables honest live in the modules that
+write them (`sources`, `results`, `overrides`, `jobs`), not here.
 
 A source is a
 file of footage as it was added: never changed, never moved by the app (spec §1: source media immutable). It is known by its
@@ -12,9 +14,10 @@ the local SQLite fallback and on the shared Postgres; see strata-python's README
 import datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, DateTime, MetaData, String
+from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, Index, Integer, MetaData, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from strata_python.db import NAMING_CONVENTION
+from strata_python.tasks.queue import jobs_table
 
 
 class Base(MappedAsDataclass, DeclarativeBase):
@@ -42,3 +45,80 @@ class Source(Base):
     ]  # seconds, ffprobe's; exact times come from the streams' rates (strata_python.mediatime)
     probe: Mapped[dict[str, Any]] = mapped_column(JSON)
     added: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default_factory=_now)
+    # The full SHA-256 of the content, its identity in every cache key and render manifest (spec §3 MediaAsset). Reading
+    # a tape of several GB takes a while, so it is filled in by a `hash` job after the source is added (`jobs`), and is
+    # None until then: nothing that needs it may run before it.
+    sha256: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+
+
+# The job queue's table (strata_python.tasks.queue): part of these models, so the app's migrations create it, and in the
+# app's own schema on the shared Postgres. Analysis and hashing run as its jobs (`jobs`).
+JOBS = jobs_table(Base.metadata)
+
+
+class Result(Base):
+    """What one analysis said about a source (the spec's EvidenceArtifact, overview §6). Append-only: a row is never
+    updated except to be marked superseded by the row that replaced it (`results.record`), so every proposal can name
+    the exact results it was built from. Observations and inferences are different kinds, never one payload (spec S4)."""
+
+    __tablename__ = "results"
+    __table_args__ = (Index("ix_results_current", "source_id", "kind", "superseded_by"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    # The footage it is about. A result about a derived asset (a restored tape) still names its source; which file it
+    # read exactly is in `inputs`.
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"))
+    kind: Mapped[str] = mapped_column(String(40))  # shots, transcript, description, faces, ...
+    # The span of source time it covers, half-open, as exact rationals (strata_python.mediatime.text: "1001/30000");
+    # both None for a result about the whole source. Text, not float, so a cut is on the frame it was found on.
+    span_start: Mapped[str | None] = mapped_column(String(40))
+    span_end: Mapped[str | None] = mapped_column(String(40))
+    # Who said it: the strata-models role, or the app's own producer for something it measures itself ("ffprobe").
+    role: Mapped[str] = mapped_column(String(80))
+    # The model that served the role and a hash of the settings it ran with (strata-models' provenance), so a changed
+    # threshold under the same model key is a different result. None for a producer that has neither.
+    model: Mapped[str | None] = mapped_column(String(200))
+    settings_hash: Mapped[str | None] = mapped_column(String(64))
+    # The SHA-256 of every file it read (sources and derived assets), sorted.
+    inputs: Mapped[list[str]] = mapped_column(JSON)
+    # The app's own parameters for the request (a sample rate, a span), which are part of the cache key.
+    parameters: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # hash(inputs + role + model + settings hash + parameters) (`results.cache_key`, spec §6): the same request again
+    # finds this row instead of running.
+    cache_key: Mapped[str] = mapped_column(String(64), index=True)
+    payload: Mapped[Any] = mapped_column(JSON, nullable=True)  # the answer, or None when it is a file
+    # A heavy payload (frame-wise signals) is a file named by its content hash in the app's data folder.
+    file: Mapped[str | None] = mapped_column(String(200), default=None)
+    confidence: Mapped[float | None] = mapped_column(Float, default=None)  # where the producer gives one, 0 to 1
+    flags: Mapped[list[str]] = mapped_column(JSON, default_factory=list)  # quality flags: "low-light", "partial"
+    options: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)  # the model's settings, as run
+    model_job: Mapped[int | None] = mapped_column(Integer, default=None)  # the strata-models job that produced it
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), default=None)  # this app's job that asked
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default_factory=_now)
+    # The result that replaced this one (a re-run with another model or settings); None while it is current.
+    superseded_by: Mapped[int | None] = mapped_column(ForeignKey("results.id"), default=None)
+
+
+class Override(Base):
+    """Something the person said, kept apart from the results it corrects and never written into them (overview §6,
+    spec §3 Constraint/Override): a corrected boundary or description, a name for a face, a lock, pin or ban, a
+    preference for the planner. Append-only like results: a change is a new row that supersedes the old one, and taking
+    one back marks it withdrawn, so a revision can say which overrides it obeyed."""
+
+    __tablename__ = "overrides"
+    __table_args__ = (Index("ix_overrides_target", "target_kind", "target_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    # What it is about: a result, a scene or a clip, by id in that kind's table (scenes and clips arrive in later steps,
+    # so this is a typed reference rather than a foreign key).
+    target_kind: Mapped[str] = mapped_column(String(20))
+    target_id: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(40))  # boundary, description, name, lock, pin, ban, preference
+    value: Mapped[Any] = mapped_column(JSON)  # what the person said: the new boundary, the text, the name
+    mode: Mapped[str] = mapped_column(String(10))  # advisory, prefer, require or forbid (spec §3)
+    scope: Mapped[str] = mapped_column(String(20))  # how far it reaches: this target, its source, or every reel
+    author: Mapped[str] = mapped_column(String(200))  # who said it: a person, or the agent acting for one
+    reason: Mapped[str | None] = mapped_column(Text, default=None)
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default_factory=_now)
+    superseded_by: Mapped[int | None] = mapped_column(ForeignKey("overrides.id"), default=None)
+    withdrawn: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), default=None)

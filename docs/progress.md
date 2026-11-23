@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-23: the records (R1 step 1b)
+
+- Built the tables every later step writes into (overview §6): `results` (append-only; a re-run with another model or settings supersedes; cache key over inputs, role, model, settings hash and parameters), `overrides` (kept apart from results; a change is a new row, a withdrawal a mark), and strata-python's `jobs` table with this app's job kinds. The first kind is `hash`: each new source's full SHA-256, read in a job process while the server is up, or by `./app work`.
+- Provenance comes from strata-models as it ran: #103 (PR #104) records each job's model, options and settings hash when it starts and returns them from `run_with_provenance`; `results.Provenance.of` takes that answer as it comes.
+- A result about a derived asset still names its source (`source_id`); what it read exactly is in `inputs`, by hash. Overrides point at a result, scene or clip by kind and id (scenes and clips arrive in steps 2 and 5), not by a foreign key.
+- Not built yet: derived assets, revisions and renders (with the steps that make them); an API or screen for jobs (the System page is the natural place, with step 2's first long job). Hashing reports no progress: `files.sha256_hex` has no hook for it, and a tape of a few GB reads in seconds to a minute.
+
 ## 2026-11-23: checked against the spec
 
 - Asked for: make sure the work so far is on track against the spec.

@@ -12,7 +12,9 @@ The web app is meant to be read as well as run: each screen in `web/src/screens/
 uv sync                              # creates .venv from uv.lock (install uv: https://docs.astral.sh/uv/)
 uv run app doctor                         # check the environment
 uv run app add /path/to/tape.mkv          # read a file with ffprobe and keep it as a source (~/.reels/reels.db)
-uv run app sources                        # the sources kept so far
+uv run app sources                        # the sources kept so far, with their content hash once it is read
+uv run app jobs                           # the job queue (hashing now; analysis from R1 step 2)
+uv run app work                           # run the queued jobs here until none is left (the server runs them while it is up)
 uv run app serve                          # starts the FastAPI + React app on http://127.0.0.1:8360/
 ```
 
