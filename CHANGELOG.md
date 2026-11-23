@@ -4,6 +4,14 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-23
 
+**Update from python-app-template (branch `claude/project-thread-1p0er6`)**
+Jonathan asked for reels to be brought up to the latest template. Reels was made from template commit `d0793de`; this applies the template's changes since then (`d0793de..3863362`: strata-python 0.2.6 with greetings in a database, typed routes and generated API types, the system page, CI's strata-db, public and Postgres checks, the web on strata-react 1.3.3 with Biome and oxlint, new visual baselines) and keeps reels' own work on top.
+- Taken from the template as they are: the web app, the CI workflows (the weekly strata-python upgrade workflow is gone: dependabot groups uv), `AGENTS.md` (which now describes `strata_python.db`, so the overview's note that it named the old database client is removed), `src/app/{db,greet,system}.py`, the test fixtures and the template's tests. `README.md` merged.
+- Settings: the template dropped `data_dir` (records now live in the app's home); the name stays `reels`, so `REELS_HOME`, `REELS_GREETING`, `REELS_STYLE`, `REELS_DATABASE_URL` and `~/.reels/reels.db`. `deploy/app.service`, `docs/deploying.md`, `tests/README.md` follow. `web/src/api.ts`: the settings schema is `ReelsSettings`, named after the settings.
+- Database layout as the template's: `src/app/strata-db.toml` (app `reels`) and `src/app/migrations/`, so both ship in the wheel. The template's `greetings` revision comes first and reels' `sources` revision (moved from `migrations/`, retyped for strict pyright) now follows it; reels had not been deployed, so nothing had run the old order. `src/app/models.py`: the template's `SentGreeting` and reels' `Source`.
+- `src/app/sources.py`: answers are typed (`Described`, `Video`, `contracts.ApiModel`), so `/api/sources` is in `web/openapi.json` and the generated web types; a `SourceError` is a ValueError, answered 400 by the shared error handlers. `server/app.py` and `cli.py` re-add the sources routes and the `add`/`sources` commands on the template's shape (`db.session()`).
+- Tests: the sources cases re-added to the template's `test_server.py`, `test_cli.py` and `integration/test_server_api.py` (live server, real ffmpeg).
+
 **Plan: how shots are measured, and subjective cuts (branch `claude/project-thread-1p0er6`)**
 Jonathan: measure the shot detector on clips spliced at known points (cuts within one file are the hard ones), not on cuts marked by hand, and treat where to cut inside a shot as its own question, scored and judged A/B by people.
 - `docs/implementation-plan.md`: R1 step 2 names the eval `shots-spliced` in strata-models; step 6 says trims inside a shot are subjective cuts, for a later strata-models role `cut-points`, and snap to phrase ends until then.

@@ -2,25 +2,40 @@
 
     ./app serve [--host 127.0.0.1] [--port 8360]
 
-API (JSON): GET /api/health; GET /api/system; GET /api/sources; POST /api/sources {path} (201 when new, 200 when already a source); GET /api/settings; PUT /api/settings {data_dir?, greeting?} (health and settings come from strata_python.web); GET /api/hello?name=&greeting=;
-GET /api/messages; GET /api/messages/page?after=&limit=; POST /api/messages {name, greeting?}; DELETE /api/messages; DELETE /api/messages/{id}.
-Every other path serves the web app (`src/app/server/static/index.html` when built with `cd web && npm run build`, else the plain stand-in `landing.html`),
-so a reload or a shared link to /settings?tab=appearance opens that screen: the app routes in the browser (React Router)."""
+From strata-python: GET /api/health, GET and PUT /api/settings, GET /api/system, /api/docs, /api/openapi.json, the
+error answers ({detail, payload}) and the web app's pages. This app's own routes:
+
+    GET /api/hello?name=&greeting=    format a greeting without keeping it
+    GET /api/messages                 every kept greeting, newest first
+    GET /api/messages/page?after=&limit=   one page of them (a Page: items, next)
+    POST /api/messages {name, greeting?}   send and keep one
+    DELETE /api/messages              remove them all
+    DELETE /api/messages/{id}         remove one
+    GET /api/sources                  every source, oldest first
+    POST /api/sources {path}          add footage: 201 when new, 200 when it is already a source, 400 when it cannot be one
+
+Every other path serves the web app (`src/app/server/static/index.html` when built with `cd web && npm run build`,
+else the plain stand-in `landing.html`), so a reload or a shared link to /settings?tab=appearance opens that screen.
+The routes are typed (response models from `greet`), so `./app openapi` writes `web/openapi.json` and the web app's
+types are generated from it."""
 
 import os
-from collections.abc import Callable, Sequence
-from typing import Any
+from collections.abc import Sequence
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, Query, Response
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from strata_python import web
-from strata_python.db import Project, local_url
+from strata_python.contracts import Page
 from strata_python.db.web import DbSession, add_database
 
-from app import __version__, greet, settings, sources, system
+from app import __version__, db, greet, settings, sources, system
 
-STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-LANDING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "landing.html")
+HERE = os.path.dirname(os.path.abspath(__file__))
+STATIC = os.path.join(HERE, "static")
+LANDING = os.path.join(HERE, "landing.html")
+COMMIT = web.source_commit(__file__)  # None when installed from a wheel
 
 
 class SourceIn(BaseModel):
@@ -33,66 +48,59 @@ class MessageIn(BaseModel):
 
 
 def create_app() -> FastAPI:
-    # health, settings and (last) the web app's page routes come from the shared library; the routes between are this app's own
-    app = web.base_app("strata-reels", __version__, settings.SETTINGS)
+    app = web.base_app("strata-reels", __version__, settings.SETTINGS, commit=COMMIT)
+    # GreetingError is a ValueError (400) and a missing greeting a KeyError (404): no try/except in the routes.
+    web.add_error_handlers(app)
+    # Opened and migrated on the first request that needs it, so a server nobody records on makes no database.
+    records = add_database(app, db.PROJECT, default=db.default_url)
 
-    def guard(fn: Callable[..., Any], *a: Any, **kw: Any) -> Any:
-        try:
-            return fn(*a, **kw)
-        except greet.GreetingError as e:
-            raise HTTPException(400, str(e)) from e
+    def numbers() -> dict[str, object]:
+        with Session(records.engine()) as s:
+            n = greet.count(s)
+        return system.AppNumbers(greetings=n, home_bytes=system.folder_bytes(settings.SETTINGS.home())).model_dump()
 
-    # the database: the shared Postgres when STRATA_DB_* configures one, else reels.db in the settings folder; opened and migrated on the
-    # first request that needs it
-    add_database(app, Project.load(__file__), default=lambda: local_url(settings.SETTINGS))
-
-    @app.get("/api/sources")
-    def get_sources(db: DbSession):
-        return [sources.as_json(s) for s in sources.all_sources(db)]
-
-    @app.post("/api/sources")
-    def post_source(b: SourceIn, db: DbSession, response: Response):
-        try:
-            source, new = sources.add(db, b.path)
-        except sources.SourceError as e:
-            raise HTTPException(400, str(e)) from e
-        response.status_code = 201 if new else 200
-        return sources.as_json(source)
-
-    @app.get("/api/system")
-    def get_system():
-        return system.status()
+    web.add_system(app, __version__, commit=COMMIT, folders={"home": settings.SETTINGS.home}, extra=numbers)
 
     @app.get("/api/hello")
-    def get_hello(name: str = "World", greeting: str | None = None):
-        return guard(greet.format_greeting, name, greeting)
+    def get_hello(name: str = "World", greeting: str | None = None) -> greet.Greeting:
+        return greet.format_greeting(name, greeting)
 
     @app.get("/api/messages")
-    def get_messages():
-        return greet.list_messages()
+    def get_messages(s: DbSession) -> list[greet.Sent]:
+        return greet.everything(s)
 
     @app.get("/api/messages/page")
-    def get_messages_page(after: int | None = None, limit: int = Query(20, ge=1, le=200)):
-        return greet.page_messages(after, limit)
+    def get_messages_page(
+        s: DbSession, after: int | None = None, limit: Annotated[int, Query(ge=1, le=200)] = 20
+    ) -> Page[greet.Sent]:
+        return greet.page(s, after, limit)
 
     @app.post("/api/messages")
-    def post_message(b: MessageIn):
-        return guard(greet.add_message, b.name, b.greeting)
+    def post_message(b: MessageIn, s: DbSession) -> greet.Sent:
+        return greet.send(s, b.name, b.greeting)
 
     @app.delete("/api/messages")
-    def delete_messages():
-        return greet.clear_messages()
+    def delete_messages(s: DbSession) -> greet.Cleared:
+        return greet.clear(s)
 
     @app.delete("/api/messages/{message_id}")
-    def delete_message(message_id: int):
-        removed = greet.remove_message(message_id)
-        if removed is None:
-            raise HTTPException(404, f"there is no greeting {message_id}")
-        return removed
+    def delete_message(message_id: int, s: DbSession) -> greet.Sent:
+        return greet.remove(s, message_id)
 
-    web.add_web(app, STATIC, LANDING)
+    @app.get("/api/sources")
+    def get_sources(s: DbSession) -> list[sources.Described]:
+        return [sources.Described.of(x) for x in sources.all_sources(s)]
+
+    @app.post("/api/sources", status_code=201)
+    def post_source(b: SourceIn, s: DbSession, response: Response) -> sources.Described:
+        source, new = sources.add(s, b.path)  # a SourceError is a ValueError: 400 with its sentence
+        if not new:
+            response.status_code = 200
+        return sources.Described.of(source)
+
+    web.add_web(app, STATIC, LANDING)  # last: its catch-all serves the web app at every other path
     return app
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    web.serve(create_app(), argv, default_port=8360, banner=f"data folder: {settings.data_dir()}")
+    web.serve(create_app(), argv, default_port=8360, banner=f"settings and records: {settings.SETTINGS.home()}")

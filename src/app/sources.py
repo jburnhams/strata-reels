@@ -5,6 +5,7 @@ footage it is, and ffprobe says what is in it. A file whose fingerprint is alrea
 (the tape was moved) and nothing else changes, so adding is safe to repeat. A file ffprobe cannot read, or one with no video, is refused with
 ffprobe's reason, before anything is stored."""
 
+import datetime
 import os
 from collections.abc import Callable
 from typing import Any
@@ -13,35 +14,57 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from strata_python import files, media
+from strata_python.contracts import ApiModel
 
 from app.models import Source
 
 
 class SourceError(ValueError):
-    """The file cannot be a source: it is missing, unreadable or has no picture."""
+    """The file cannot be a source: it is missing, unreadable or has no picture. The server answers it as a 400 (a ValueError)."""
+
+
+class Video(ApiModel):
+    """The first video stream, as the editor needs it."""
+
+    codec: str | None
+    width: int | None
+    height: int | None
+    rate: str | None  # exact, as ffprobe writes it ("30000/1001"): strata_python.mediatime reads it
+    field_order: str | None  # tt/bb/tb/bt for interlaced tape, progressive, or absent
+
+
+class Described(ApiModel):
+    """A source as the API and the CLI show it."""
+
+    id: int
+    name: str
+    path: str
+    size: int
+    duration: float | None
+    video: Video | None
+    added: datetime.datetime
+
+    @classmethod
+    def of(cls, s: Source) -> "Described":
+        v = media.Probe.from_json(s.path, s.probe).video
+        video = (
+            None
+            if v is None
+            else Video(
+                codec=v.codec,
+                width=v.width,
+                height=v.height,
+                rate=v.raw.get("r_frame_rate"),
+                field_order=v.raw.get("field_order"),
+            )
+        )
+        a = s.added  # SQLite keeps no zone, so its times come back naive; every time stored here is UTC
+        added = a.replace(tzinfo=datetime.UTC) if a.tzinfo is None else a.astimezone(datetime.UTC)
+        return cls(id=s.id, name=s.name, path=s.path, size=s.size, duration=s.duration, video=video, added=added)
 
 
 def as_json(s: Source) -> dict[str, Any]:
-    video = media.Probe.from_json(s.path, s.probe).video
-    return {
-        "id": s.id,
-        "name": s.name,
-        "path": s.path,
-        "size": s.size,
-        "duration": s.duration,
-        "video": None
-        if video is None
-        else {
-            "codec": video.codec,
-            "width": video.width,
-            "height": video.height,
-            "rate": video.raw.get(
-                "r_frame_rate"
-            ),  # exact, as ffprobe writes it ("30000/1001"): strata_python.mediatime reads it
-            "field_order": video.raw.get("field_order"),  # tt/bb/tb/bt for interlaced tape, progressive, or absent
-        },
-        "added": s.added.isoformat(),
-    }
+    return Described.of(s).model_dump(mode="json")
 
 
 def add(db: Session, path: str, probe: Callable[[str], media.Probe] = media.probe) -> tuple[Source, bool]:

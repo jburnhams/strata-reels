@@ -1,0 +1,3 @@
+app = "reels"
+models = "app.models:Base"
+migrations = "migrations"

@@ -66,10 +66,10 @@ def test_files_that_cannot_be_sources_are_refused_before_anything_is_stored(db_s
     with pytest.raises(sources.SourceError, match="there is no file"):
         sources.add(db_session, str(tmp_path / "missing.mp4"))
     assert sources.all_sources(db_session) == []
-    assert (
-        sources.as_json(sources.Source(fingerprint="f", path="p", name="n", size=1, duration=None, probe={}))["video"]
-        is None
-    )
+    bare = sources.Source(fingerprint="f", path="p", name="n", size=1, duration=None, probe={})
+    db_session.add(bare)
+    db_session.commit()
+    assert sources.as_json(bare)["video"] is None  # a stored source with no video stream described
 
 
 def test_the_same_tape_added_twice_at_once_is_one_source(db_session: Session, tmp_path):
