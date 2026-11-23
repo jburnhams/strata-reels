@@ -29,7 +29,8 @@ export default defineVisualConfig({
             setup: async page => {
               await page.getByRole('textbox', { name: 'Add footage' }).fill('/missing/tape.mkv')
               await page.getByRole('button', { name: 'Add' }).click()
-              await page.getByText('The request was refused: there is no file /missing/tape.mkv.').waitFor()
+              // The sentence is under the field and in the button's announcement, so wait on the field turning invalid.
+              await page.locator('input[aria-invalid="true"]').waitFor()
             },
           },
         },
