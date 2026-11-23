@@ -8,7 +8,7 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 Jonathan asked to discuss his AI video editing spec as the basis for this app. After reading the spec, strata-360, strata-models, strata-python, strata-react and strata-vid, the plan was agreed in discussion: models (faces and recognition included) in strata-models, strata-360's lessons but none of its code, a small clean repo, family VHS tapes first. Docs only; no code changed.
 
 - `docs/spec.md`: **new**; the original specification, unchanged, with a short header.
-- `docs/overview.md`: rewritten from the template's brief to this app's: goal and the two first uses, which repository owns what, what is learnt from strata-360, departures from the spec, expected strata-react gaps. The template's principles are kept at the end.
+- `docs/overview.md`: rewritten from the template's brief to this app's: goal and the two first uses, which repository owns what, what is learnt from strata-360, departures from the spec, expected strata-react gaps. The template's principles are kept at the end. Storage says the app's models and migrations live here, on `strata_python.db`, which replaced the `jburnhams/database` client that AGENTS.md still names (a review finding).
 - `docs/implementation-plan.md`: milestone R1 (a tape in, a highlight reel out) and the later ones; the template's milestones kept as done.
 - `docs/progress.md`: the first entry: what was read, found and decided.
 - `README.md`: title and opening paragraph describe this app; the template's setup text is unchanged.
