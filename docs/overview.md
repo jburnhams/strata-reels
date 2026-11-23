@@ -34,7 +34,7 @@ strata-360 tried the spec's core ideas on one kind of footage. It was research-o
 
 ## 4. Departures from the spec, and why
 
-- **Storage**: Postgres, as the spec recommends: one shared database with a schema for this app, the app's typed models and reviewed migrations in this repo, the machinery from `strata_python.db` (which took over the `jburnhams/database` client, `omarchy_db`; strata-python's DEVLOG has the move, and the Database section of [AGENTS.md](../AGENTS.md) still names the old library until the template is updated), plus files on disk for media and heavy artifacts. No vector index or columnar files until a stage needs them.
+- **Storage**: Postgres, as the spec recommends: one shared database with a schema for this app, the app's typed models and reviewed migrations in this repo, the machinery from `strata_python.db` (which took over the `jburnhams/database` client, `omarchy_db`; strata-python's DEVLOG has the move; the Database section of [AGENTS.md](../AGENTS.md) has the rules), plus files on disk for media and heavy artifacts. No vector index or columnar files until a stage needs them.
 - **Models**: the spec's per-stage model research (S1 to S7) happens in strata-models' eval framework, not here. strata-reels records which role and model produced each result, so a model change can be traced and re-run.
 - **First milestone**: the spec's M0 is foundations only. Here the first milestone is a thin end-to-end slice on real footage (a tape in, a highlight reel out) that builds only the foundations that slice needs, because the spec's own risk register warns against building infrastructure before showing that automatic selection makes good edits.
 - **Order of analysis**: for home video, scenes and "what is happening" come before speech; the spec's transcript-first baseline still exists, as one signal among several.
@@ -49,7 +49,7 @@ Each is raised as a strata-react issue when the milestone that needs it starts.
 
 ## 6. The app skeleton
 
-The repository was made from [python-app-template](https://github.com/jburnhams/python-app-template): a FastAPI server and CLI in `src/app/` on strata-python, and a React app in `web/` on strata-react that builds into `src/app/server/static/`. The sample screens (greetings, log, system, settings) stay until the first real screens replace them. Conventions are in [AGENTS.md](../AGENTS.md).
+The repository was made from [python-app-template](https://github.com/jburnhams/python-app-template): a FastAPI server and CLI in `src/app/` on strata-python, and a React app in `web/` on strata-react that builds into `src/app/server/static/`. The template's sample (greetings, a paged log, sample settings) was left out; the screens are Sources, System and Settings (appearance only). Conventions are in [AGENTS.md](../AGENTS.md).
 
 ## 7. Principles kept from the template
 

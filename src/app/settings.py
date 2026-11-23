@@ -1,53 +1,11 @@
-"""User settings: one JSON file, `~/.reels/settings.json` (the folder can be moved with the REELS_HOME environment variable).
+"""User settings: one JSON file, `~/.reels/settings.json` (the folder moves with the REELS_HOME environment variable).
 
-  data_dir   where application data files live. Default: `data/` in this repository (gitignored) until configured. Must be an absolute path.
-  greeting   default greeting word used by `greet.py` (default: 'Hello').
-
-The environment variables REELS_DATA and REELS_GREETING override the file (handy for tests and one-off runs). The file handling, precedence and validation are
+Reels has no settings of its own yet; the template's sample ones (a greeting word and style) went with the sample. The
+declaration stays because it names the app's home, where the settings file and the fallback database live, and the
+`REELS_*` variables. The file handling, precedence, validation and the `GET`/`PUT /api/settings` routes are
 [strata_python.settings](https://github.com/jburnhams/strata-python); this module only declares the app's settings."""
 
-import os
-from collections.abc import Mapping
-from typing import Any
+from strata_python.settings import Settings
 
-from strata_python.settings import Setting, Settings, absolute_path, non_empty
-
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DEFAULT_DATA_DIR = os.path.join(REPO, "data")
-DEFAULT_GREETING = "Hello"
-
-SETTINGS = Settings(
-    "reels",  # not the template's "app": its home and APP_* variables would be shared with every other app made from the template
-    [
-        Setting("data_dir", default=DEFAULT_DATA_DIR, normalise=absolute_path, env="REELS_DATA"),
-        Setting("greeting", default=DEFAULT_GREETING, normalise=non_empty),
-    ],
-)
-KNOWN = SETTINGS.keys
-
-
-def home() -> str:
-    return SETTINGS.home()
-
-
-def load() -> dict[str, Any]:
-    return SETTINGS.load()
-
-
-def save(changes: Mapping[str, object]) -> dict[str, Any]:
-    """Merge `changes` (known keys only) into the settings file; None resets a setting to its default. A bad value raises ValueError, an unknown key KeyError."""
-    return SETTINGS.save(changes)
-
-
-def data_dir() -> str:
-    """The folder that holds application data (created when asked for)."""
-    return SETTINGS.folder("data_dir")
-
-
-def greeting() -> str:
-    """The configured greeting word (e.g. 'Hello')."""
-    return SETTINGS.get("greeting")
-
-
-def all_settings() -> dict[str, str]:
-    return {"data_dir": data_dir(), "greeting": greeting()}
+# not the template's "app": its home and APP_* variables would be shared with every other app made from the template
+SETTINGS = Settings("reels", [])

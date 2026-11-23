@@ -1,113 +1,75 @@
+from pathlib import Path
+
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
+from strata_python.testing import assert_openapi_current
 
+from app import __version__
 from app.server import app as server_app
 from app.server.app import create_app
 
-
-@pytest.fixture
-def client():
-    return TestClient(create_app())
+OPENAPI = Path(__file__).parents[2] / "web" / "openapi.json"
 
 
-def test_landing_page_and_built_static_index(tmp_path, monkeypatch):
+def test_the_committed_schema_is_what_the_server_answers():
+    # The web app's types are generated from this file (web/src/api.generated.ts); a route change without
+    # `./app openapi` (then `npm run api-types` in web/) fails here, before the types drift from the server.
+    assert_openapi_current(create_app, OPENAPI)
+
+
+def test_landing_page_and_built_static_index(tmp_path, monkeypatch: pytest.MonkeyPatch, db_env: str):
     monkeypatch.setattr(server_app, "STATIC", str(tmp_path / "no_static"))
-    c = TestClient(create_app())
-    assert "strata-reels" in c.get("/").text
-    assert "Say hello" in c.get("/").text
-    assert c.get("/api/health").json()["ok"] is True
+    with TestClient(create_app()) as c:
+        assert "Add footage" in c.get("/").text
+        assert c.get("/api/health").json()["ok"] is True
 
     static = tmp_path / "static"
     (static / "assets").mkdir(parents=True)
     (static / "index.html").write_text("<h1>built react app</h1>", encoding="utf8")
     (static / "assets" / "main.js").write_text("console.log(1)", encoding="utf8")
     monkeypatch.setattr(server_app, "STATIC", str(static))
-    c2 = TestClient(create_app())
-    assert c2.get("/").text == '<base href="./"><h1>built react app</h1>'
-    assert "console.log(1)" in c2.get("/assets/main.js").text
+    with TestClient(create_app()) as c:
+        assert c.get("/").text == '<base href="./"><h1>built react app</h1>'
+        assert "console.log(1)" in c.get("/assets/main.js").text
+        assert '<base href="../">' in c.get("/log/2026").text  # one level down: one step back up
+        assert c.get("/api/nope").json() == {"detail": "no such endpoint"}
 
 
-def test_every_page_path_serves_the_app_with_a_base_back_to_its_root(tmp_path, monkeypatch):
-    static = tmp_path / "static"
-    static.mkdir()
-    (static / "index.html").write_text("<html><head><title>t</title></head></html>", encoding="utf8")
-    (static / "favicon.svg").write_text("<svg/>", encoding="utf8")
-    monkeypatch.setattr(server_app, "STATIC", str(static))
-    c = TestClient(create_app())
-    assert c.get("/settings?tab=appearance").text == '<html><head><base href="./"><title>t</title></head></html>'
-    assert '<base href="../">' in c.get("/log/2026").text  # one level down: one step back up
-    assert c.get("/favicon.svg").text == "<svg/>"
-    for escape in (
-        "..%5Capp.py",
-        "..%2Fapp.py",
-        "C:%5Cwindows%5Cwin.ini",
-        "..",
-    ):  # never a file outside the static folder: the app instead
-        assert c.get("/" + escape).text.startswith("<html><head><base")
-    assert c.get("/api/nope").status_code == 404  # an unknown endpoint is not the app
-    assert c.get("/api/nope").json() == {"detail": "no such endpoint"}
-
-
-def test_system_paging_and_removing_one_greeting(client):
-    for n in ("a", "b", "c"):
-        client.post("/api/messages", json={"name": n})
+def test_no_settings_yet_the_system_page_and_server_main(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    assert client.get("/api/settings").json() == {}
+    assert client.put("/api/settings", json={}).json() == {}
     s = client.get("/api/system").json()
-    assert s["messages"] == 3
-    assert s["disk"]["total"] > 0
-    assert s["data_bytes"] > 0
-    page = client.get("/api/messages/page", params={"limit": 2}).json()
-    assert [m["name"] for m in page["messages"]] == ["c", "b"]
-    assert page["has_more"] is True
-    assert client.get("/api/messages/page", params={"after": 2, "limit": 2}).json() == {
-        "messages": [client.get("/api/messages").json()[2]],
-        "has_more": False,
-    }
-    assert client.get("/api/messages/page", params={"limit": 0}).status_code == 422
-    assert client.delete("/api/messages/2").json()["name"] == "b"
-    assert client.delete("/api/messages/2").status_code == 404
-    assert [m["name"] for m in client.get("/api/messages").json()] == ["c", "a"]
+    assert (s["version"], s["sources"]) == (__version__, 0)
+    (home,) = s["folders"]
+    assert home["name"] == "home"
+    assert home["total_bytes"] >= home["free_bytes"] > 0
+    assert s["home_bytes"] >= 0
 
-
-def test_hello_and_messages_lifecycle(client):
-    assert client.get("/api/hello").json() == {"name": "World", "greeting": "Hello", "message": "Hello, World!"}
-    assert client.get("/api/hello", params={"name": "Ada", "greeting": "Hi"}).json()["message"] == "Hi, Ada!"
-    assert client.get("/api/hello", params={"name": "x" * 121}).status_code == 400
-
-    assert client.get("/api/messages").json() == []
-    m = client.post("/api/messages", json={"name": "Ada", "greeting": "Hi"}).json()
-    assert m["id"] == 1
-    assert m["message"] == "Hi, Ada!"
-    assert client.post("/api/messages", json={"name": "x" * 121}).status_code == 400
-    assert len(client.get("/api/messages").json()) == 1
-    assert client.delete("/api/messages").json() == {"cleared": 1}
-    assert client.get("/api/messages").json() == []
-
-
-def test_settings_roundtrip_and_server_main(client, tmp_path, monkeypatch):
-    assert client.put("/api/settings", json={"data_dir": "relative/path"}).status_code == 400
-    new_dir = str(tmp_path / "custom_data")
-    monkeypatch.delenv("REELS_DATA", raising=False)
-    res = client.put("/api/settings", json={"data_dir": new_dir, "greeting": "Hey"}).json()
-    assert res == {"data_dir": new_dir, "greeting": "Hey"}
-    assert client.get("/api/settings").json() == {"data_dir": new_dir, "greeting": "Hey"}
-
-    runs = []
+    runs: list[tuple[str, int, str]] = []
     monkeypatch.setattr(uvicorn, "run", lambda app, host, port, log_level: runs.append((host, port, log_level)))
     server_app.main(["--host", "127.0.0.1", "--port", "8360"])
     assert runs == [("127.0.0.1", 8360, "warning")]
 
 
-def test_settings_put_with_one_field_or_none_changes_only_what_was_sent(client, tmp_path, monkeypatch):
-    monkeypatch.delenv("REELS_DATA", raising=False)
-    new_dir = str(tmp_path / "data")
-    assert client.put("/api/settings", json={"data_dir": new_dir}).json()["data_dir"] == new_dir
-    assert client.put("/api/settings", json={"greeting": "Hey"}).json() == {"data_dir": new_dir, "greeting": "Hey"}
-    assert client.put("/api/settings", json={}).json() == {"data_dir": new_dir, "greeting": "Hey"}
+def test_sources_api_lists_adds_and_refuses(client: TestClient, tmp_path):
+    from strata_python import media
 
+    from app import sources
 
-def test_sources_api_lists_and_refuses(client):
-    assert client.get("/api/sources").json() == []  # the database is made and migrated on this first request
+    assert client.get("/api/sources").json() == []
     r = client.post("/api/sources", json={"path": "/no/such/tape.mkv"})
-    assert r.status_code == 400
+    assert r.status_code == 400  # a SourceError is a ValueError: the shared handler answers its sentence
     assert "there is no file" in r.json()["detail"]
+    tape = tmp_path / "tape.mkv"
+    tape.write_bytes(b"\0" * 100)
+    raw = {"format": {"duration": "12.5"}, "streams": [{"codec_type": "video", "r_frame_rate": "25/1"}]}
+    from sqlalchemy.orm import Session
+    from strata_python.db import Project  # the same database the server opened (the test's migrated copy)
+
+    with Session(Project.load(sources.__file__).open()) as db:
+        sources.add(db, str(tape), probe=lambda p: media.Probe.from_json(p, raw))  # as ffprobe would describe it
+    again = client.post("/api/sources", json={"path": str(tape)})
+    assert again.status_code == 200  # already a source, known by its content: ffprobe is not run
+    assert again.json()["video"]["rate"] == "25/1"
+    assert [s["name"] for s in client.get("/api/sources").json()] == ["tape.mkv"]

@@ -2,16 +2,16 @@
 // owning the `.dark` class (driven by the toolbar, storage off, remounted per choice so stories can
 // call useColorScheme), a fresh query client per story, and the network served by MSW from the
 // app's own handlers. A story puts the server into another state with
-// `beforeEach: ({ msw }) => msw.use(messagesError)`; the mock server's data is reset before each.
+// `beforeEach: ({ msw }) => msw.use(sourcesError)`; the mock server's data is reset before each.
 import '@fontsource-variable/source-sans-3'
 import '@fontsource-variable/fraunces'
 import '@fontsource-variable/jetbrains-mono'
 import '../src/styles/app.css'
-import { useState } from 'react'
 import type { Decorator, Preview } from '@storybook/react-vite'
 import { setupWorker } from 'msw/browser'
 import { mswLoader } from 'msw-storybook-addon/csf3'
-import { StrataQueryProvider, ThemeProvider, createQueryClient, type ColorSchemePreference } from 'strata-react'
+import { useState } from 'react'
+import { type ColorSchemePreference, createQueryClient, StrataQueryProvider, ThemeProvider } from 'strata-react'
 import { handlers, resetMock } from '../src/mocks/handlers'
 
 const withApp: Decorator = (Story, context) => {
@@ -37,7 +37,9 @@ const preview: Preview = {
       return worker
     }),
   ],
-  beforeEach: () => { resetMock() },
+  beforeEach: () => {
+    resetMock()
+  },
   globalTypes: {
     theme: {
       description: 'Light or dark',
