@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-23: checked against the spec
+
+- Asked for: make sure the work so far is on track against the spec.
+- Read: the spec, this plan, reels #6 and #7, strata-python #44 (`mediatime`) and strata-models #102 (`shot-boundaries`, `shots-spliced`).
+- On track: sources are read-only, known by content and probed once; `mediatime` gives exact rational time, half-open spans and an output-to-source map with speed, exact in JSON; shot detection starts from a plain baseline measured on cuts known by construction; reels loads no model. Departures are the ones in overview §4.
+- Gaps found, now in the plan: no data model written down for results, overrides and revisions (overview §6, new); results would not record the model's settings (strata-models only stores the model key, and the client's `run()` drops it); the quick fingerprint is not a content hash; the shot eval has not run on real footage and does not cover tape faults; no job runner yet; consent and deletion for face recognition were not in R2.
+
 ## 2026-11-23: the plan
 
 - Asked for: discuss Jonathan's spec (stored as [spec.md](spec.md)) as the basis for this app: an AI-guided video editing pipeline with manual options, reusable UI built in strata-react, strata-vid as a source of components.

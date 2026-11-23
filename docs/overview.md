@@ -47,11 +47,25 @@ strata-360 tried the spec's core ideas on one kind of footage. It was research-o
 
 Each is raised as a strata-react issue when the milestone that needs it starts.
 
-## 6. The app skeleton
+## 6. The data model
+
+Written down before R1 step 2 stores its first analysis result, because every later step reads these records and the spec's invariants (§1, §3) are cheapest to keep from the first row. Each is a table in this app's schema; heavy payloads (frame-wise signals, thumbnails, proxies) are files on disk named by their content hash and referenced from the row.
+
+- **Source**: a file of footage as added, never changed (built: `models.Source`). Found by its quick fingerprint (size and both ends, milliseconds on a tape); also known by a **full SHA-256** of its content, computed by a background job after it is added, which is its identity in every cache key and render manifest (spec §3 MediaAsset: "cryptographic hash").
+- **Derived asset**: a file made from sources (the restored tape from `video-enhance`, a browser proxy, audio peaks, a thumbnail strip), with its own hash and the same provenance as a result. Never edited in place; a new parameter makes a new one.
+- **Result** (the spec's EvidenceArtifact): what one analysis said about one source or derived asset: kind (`shots`, `transcript`, `description`, `faces`, ...), the span of source time it covers (`mediatime` spans, exact), the payload or a file reference, confidence where the producer gives one, and its provenance: role, model, a hash of the model's settings, the strata-models job id, and the hashes of its inputs. Append-only: a re-run with a different model or settings writes a new result and marks the old one superseded; nothing is overwritten. Its cache key is hash(inputs + role + model + settings hash + parameters) (spec §6). Observations ("a cut at 12.04 s", "faces: 2") and inferences ("a birthday party") are separate fields or separate results, never one sentence (spec S4).
+- **Override**: something the person said, stored apart from the results it corrects and never written into them: a corrected boundary or description, a name for a face, a lock, pin or ban on a scene, a preference for the planner. Each has a target (a result, a scene or a clip), its scope, a mode (advisory, prefer, require, forbid: spec §3 Constraint) and who made it and when.
+- **Revision**: an immutable version of the reel (ordered clips, each a source range with its own id, its `TimeMap`, trims, gain) and the planner inputs that produced it (results used, overrides, seed, planner version). A **proposal** is a revision not yet accepted, with its base revision; accepting one is compare-and-swap on that base, so a stale proposal becomes a conflict, never a silent overwrite (spec §3 Proposal, §6). Locked choices that a new proposal cannot keep are reported as conflicts.
+- **Render**: a render manifest (revision, input hashes, ffmpeg and filter versions, output checksum: spec S8).
+- **Job**: analysis and renders run as queued, resumable jobs on `strata_python.tasks.queue`, keyed by the result's cache key, so a finished one is not run again.
+
+The edit model is ours (rows above), with OpenTimelineIO as an export, not the store: the spec's open decision 1, taken for R1 because provenance and overrides need fields OTIO does not have; OTIO's round-trip loss is reported when export is built.
+
+## 7. The app skeleton
 
 The repository was made from [python-app-template](https://github.com/jburnhams/python-app-template): a FastAPI server and CLI in `src/app/` on strata-python, and a React app in `web/` on strata-react that builds into `src/app/server/static/`. The template's sample (greetings, a paged log, sample settings) was left out; the screens are Sources, System and Settings (appearance only). Conventions are in [AGENTS.md](../AGENTS.md).
 
-## 7. Principles kept from the template
+## 8. Principles kept from the template
 
 - **Hermetic tests by default**: every test run gets an isolated home and data directory, stripped environment overrides and a socket guard against outbound network calls. strata-models is reached through the plugin's `fake_models` in unit tests and a real service only where a test is marked for it.
 - **Two-tier test suites** (unit and integration, Python and web) with ratcheting coverage floors.
