@@ -7,7 +7,8 @@ error answers ({detail, payload}) and the web app's pages. This app's own routes
 
     GET /api/sources                  every source, oldest first
     POST /api/sources {path}          add footage: 201 when new, 200 when it is already a source, 400 when it cannot be one;
-                                      a source with no content hash yet gets a `hash` job
+                                      a source is queued for ingest (its `hash`
+                                      job, which queues the proxy, thumbnails and peaks)
 
 The server runs the job queue (`app.jobs.Runner`) while it is up: jobs start once the database is open.
 
@@ -64,7 +65,7 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
     @app.post("/api/sources", status_code=201)
     def post_source(b: SourceIn, s: DbSession, response: Response) -> sources.Described:
         source, new = sources.add(s, b.path)  # a SourceError is a ValueError: 400 with its sentence
-        jobs.hash_later(jobs.queue(records.engine()), source)
+        jobs.ingest_later(jobs.queue(records.engine()), source)
         if not new:
             response.status_code = 200
         return sources.Described.of(source)

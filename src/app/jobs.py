@@ -16,7 +16,13 @@ Kinds:
 - `hash`: the full SHA-256 of a source's content (`Source.sha256`), its identity in every cache key. Queued when a source
   is added (`hash_later`). The file is checked against the source's quick fingerprint before and after reading, so a
   file changed or replaced under the same path is refused rather than hashed as the source. Holds the `disk` resource:
-  two tapes read at once from one drive are slower than one after the other."""
+  two tapes read at once from one drive are slower than one after the other. When it is done it queues the source's
+  derived assets.
+- `proxy`, `thumbnails`, `peaks`: the source's derived assets from the raw footage (`derived`), each a result with a
+  file. Queued by the `hash` job (they are keyed on the hash), or by `ingest_later` for a source already hashed. Each
+  checks the file is still the source's footage first. Peaks only for a source with sound. They hold `disk` too.
+
+Ingest is these four. Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
 
 import logging
 import os
@@ -30,7 +36,7 @@ from strata_python.db import url_for
 from strata_python.db.web import Database
 from strata_python.tasks.queue import Handler, Job, Queue, Worker
 
-from app import db
+from app import db, derived
 from app.models import JOBS, Source
 
 log = logging.getLogger(__name__)
@@ -52,6 +58,23 @@ def hash_later(q: Queue, source: Source) -> int | None:
     return q.enqueue("hash", {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=["disk"])
 
 
+def derive_later(q: Queue, source: Source) -> list[int]:
+    """Queue the derived assets of a hashed source; the jobs' ids (the same ones while they are queued or running)."""
+    if source.sha256 is None:
+        return []
+    return [
+        q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=["disk"])
+        for kind in derived.wanted(source)
+    ]
+
+
+def ingest_later(q: Queue, source: Source) -> list[int]:
+    """Everything a source added needs: its hash, which then queues the derived assets, or those at once when the
+    hash is known (a tape added again). A job whose asset is already stored finds it and makes nothing."""
+    jid = hash_later(q, source)
+    return [jid] if jid is not None else derive_later(q, source)
+
+
 def hash_source(job: Job) -> dict[str, Any]:
     """The `hash` job: read the whole file and store its SHA-256 on the source."""
     source_id = int(job.options["source"])
@@ -60,6 +83,9 @@ def hash_source(job: Job) -> dict[str, Any]:
         if source is None:
             raise KeyError(f"there is no source {source_id}")
         if source.sha256 is not None:
+            # a retry after the hash was stored but before its assets were all queued: queue them now (deduped, and
+            # a job whose asset is stored finds it)
+            derive_later(queue(_records()), source)
             return {"sha256": source.sha256}
         path, expected = source.path, source.fingerprint
     _same_footage(path, expected)
@@ -71,10 +97,23 @@ def hash_source(job: Job) -> dict[str, Any]:
             raise KeyError(f"there is no source {source_id}")
         source.sha256 = digest
         s.commit()
+        derive_later(queue(_records()), source)
     return {"sha256": digest}
 
 
-HANDLERS: dict[str, Handler] = {"hash": hash_source}
+def derive_asset(job: Job) -> dict[str, Any]:
+    """The `proxy`, `thumbnails` and `peaks` jobs: make the asset (or find it made) and store it as a result."""
+    source_id = int(job.options["source"])
+    with Session(_records(), expire_on_commit=False) as s:
+        source = s.get(Source, source_id)
+        if source is None:
+            raise KeyError(f"there is no source {source_id}")
+        _same_footage(source.path, source.fingerprint)
+        r, new = derived.make(s, source, job.kind, job_id=job.id)
+        return {"result": r.id, "file": r.file, "new": new}
+
+
+HANDLERS: dict[str, Handler] = {"hash": hash_source, **dict.fromkeys(derived.KINDS, derive_asset)}
 
 
 def work(q: Queue) -> list[Job]:

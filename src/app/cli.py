@@ -1,6 +1,6 @@
 """Command line. From strata-python: `doctor` (versions and imports), `set` (a setting), `serve` (the web server) and
 `openapi` (the schema file the web app's types are generated from). The app's own: `add` adds footage as sources (and
-queues each one's content hash), `sources` lists them, `jobs` lists the job queue and `work` runs what is queued, here,
+queues each one's ingest: the content hash, then the proxy, thumbnails and peaks), `sources` lists them, `jobs` lists the job queue and `work` runs what is queued, here,
 until nothing is (the server runs the queue itself while it is up)."""
 
 import argparse
@@ -39,7 +39,7 @@ def cmd_add(args: argparse.Namespace) -> int:
             except sources.SourceError as e:
                 print(f"  refused: {e}", file=sys.stderr)
                 return 1
-            jobs.hash_later(q, source)
+            jobs.ingest_later(q, source)
             print(
                 json.dumps(sources.as_json(source))
                 if args.json
