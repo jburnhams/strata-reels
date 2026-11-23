@@ -1,16 +1,16 @@
-"""Derived assets as results with files (app/derived.py) and their jobs, over the test's migrated database. ffmpeg's
-part is stood in for (the `made` fixture in conftest.py, and the strata-python calls below); tests/integration makes
-real proxies, thumbnails and peaks from a real clip."""
+"""Derived assets as results with files (app/derived.py) and their jobs, over the test's migrated database. The app's
+makers run for real; ffmpeg is stood in for at strata-python's edge (the `made` fixture in conftest.py), and
+tests/integration makes real proxies, thumbnails and peaks from a real clip."""
 
+import hashlib
 import json
 import os
-from fractions import Fraction
 
 import pytest
 from probes import TAPE, answer
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
-from strata_python import derive, media
+from strata_python import derive
 
 from app import derived, jobs, results, settings, sources
 from app.models import Source
@@ -58,7 +58,7 @@ def test_an_asset_is_a_result_with_provenance_made_once(engine, tmp_path, made):
         assert derived.path_of(r).startswith(settings.SETTINGS.home())
         again, new = derived.make(s, src, "proxy")
         assert (again.id, new) == (r.id, False)
-        assert made == [(source.id, "proxy")]  # found, not made again
+        assert made == [("tape.mkv", "proxy")]  # found, not made again
 
 
 def test_a_deleted_file_is_made_again_under_the_same_row(engine, tmp_path, made):
@@ -71,7 +71,7 @@ def test_a_deleted_file_is_made_again_under_the_same_row(engine, tmp_path, made)
         again, new = derived.make(s, src, "peaks")
         assert (again.id, new) == (r.id, True)
         assert os.path.isfile(derived.path_of(r))
-        assert made == [(source.id, "peaks"), (source.id, "peaks")]
+        assert made == [("tape.mkv", "peaks"), ("tape.mkv", "peaks")]
 
 
 def test_a_changed_recipe_supersedes_the_old_asset(engine, tmp_path, monkeypatch):
@@ -137,45 +137,28 @@ def test_an_asset_job_refuses_a_changed_file_and_a_missing_source(engine, tmp_pa
     assert made == []
 
 
-def test_the_makers_call_strata_python_and_describe_the_files(engine, tmp_path, monkeypatch):
-    """The real makers with strata-python's ffmpeg calls stood in for: what reels passes and what it keeps."""
+def test_each_asset_says_what_its_file_is(engine, tmp_path, made):
     source = hashed(engine, tmp_path)
-    asked: dict[str, dict[str, object]] = {}
-
-    def proxy(src, out, **kw):
-        asked["proxy"] = kw
-        kw["progress"](12.0)
-        with open(out, "wb") as f:
-            f.write(b"mp4")
-        return media.Probe.from_json(out, {"streams": [{"codec_type": "video", "width": 720, "height": 540}]})
-
-    def thumbnails(src, folder, **kw):
-        asked["thumbnails"] = kw
-        os.makedirs(folder)
-        return [derive.Thumb(Fraction(i * 10), os.path.join(folder, f"{i:06d}.jpg")) for i in range(2)]
-
-    def peaks(src, **kw):
-        asked["peaks"] = kw
-        return derive.Peaks(50, [-0.5, -0.25], [0.5, 0.25])
-
-    monkeypatch.setattr(derive, "interlacing", lambda path, info=None: "tff")
-    monkeypatch.setattr(derive, "proxy", proxy)
-    monkeypatch.setattr(derive, "thumbnails", thumbnails)
-    monkeypatch.setattr(derive, "peaks", peaks)
-    os.makedirs(os.path.join(settings.SETTINGS.home(), "derived", "k"))
-
-    p = derived.make_proxy(source, "k")
-    assert p.file == os.path.join("derived", "k", "proxy.mp4")
-    assert p.payload["interlace"] == "tff"
-    assert (p.payload["width"], p.payload["height"], p.payload["bytes"], p.payload["audio"]) == (720, 540, 3, False)
-    assert asked["proxy"]["gop"] == Fraction(1, 2)
-    assert asked["proxy"]["interlace"] == "tff"
-
-    t = derived.make_thumbnails(source, "k")
-    assert t.payload == {"thumbnails": [{"time": "0", "name": "000000.jpg"}, {"time": "10", "name": "000001.jpg"}]}
-    assert asked["thumbnails"]["every"] == 10
-
-    k = derived.make_peaks(source, "k")
-    assert (k.payload["per_second"], k.payload["slices"], k.payload["seconds"]) == (50, 2, "1/25")
-    with open(os.path.join(settings.SETTINGS.home(), k.file)) as f:
-        assert json.load(f) == {"per_second": 50, "min": [-0.5, -0.25], "max": [0.5, 0.25]}
+    with Session(engine) as s:
+        src = s.get(Source, source.id)
+        assert src is not None
+        proxy, _ = derived.make(s, src, "proxy")
+        thumbs, _ = derived.make(s, src, "thumbnails")
+        peaks, _ = derived.make(s, src, "peaks")
+        home = settings.SETTINGS.home()
+        assert proxy.payload == {
+            "sha256": hashlib.sha256(b"mp4").hexdigest(),
+            "bytes": 3,
+            "width": 720,
+            "height": 540,
+            "interlace": "tff",
+            "audio": True,
+        }
+        assert thumbs.file == os.path.join("derived", thumbs.cache_key, "thumbnails")
+        assert thumbs.payload == {
+            "thumbnails": [{"time": "0", "name": "000000.jpg"}, {"time": "10", "name": "000001.jpg"}]
+        }
+        assert sorted(os.listdir(os.path.join(home, thumbs.file))) == ["000000.jpg", "000001.jpg"]
+        assert (peaks.payload["per_second"], peaks.payload["slices"], peaks.payload["seconds"]) == (50, 2, "1/25")
+        with open(derived.path_of(peaks)) as f:
+            assert json.load(f) == {"per_second": 50, "min": [-0.5, -0.25], "max": [0.5, 0.25]}

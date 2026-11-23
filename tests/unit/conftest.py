@@ -5,9 +5,7 @@ import os
 
 import pytest
 from hypothesis import HealthCheck, settings
-
-from app import derived
-from app import settings as app_settings
+from strata_python import derive, media, mediatime
 
 settings.register_profile(
     "unit", deadline=None, max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture]
@@ -16,31 +14,50 @@ settings.load_profile("unit")
 
 
 @pytest.fixture(autouse=True)
-def made(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str]]:
-    """ffmpeg's part of each derived asset, stood in for (a unit test starts no processes; tests/integration makes the
-    real ones from real footage). Each stand-in writes a small file where the real one would and records
-    (source id, kind); the list is the fixture's value."""
-    calls: list[tuple[int, str]] = []
+def made(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """ffmpeg, stood in for at strata-python's edge (`strata_python.derive`), since a unit test starts no processes.
+    The app's own makers (`app.derived`) run for real on top; strata-python tests these functions against the real
+    ffmpeg, and tests/integration runs the whole path on a real clip. Each stand-in writes what the real one would (an
+    MP4 file, a folder of JPEGs, peaks) and records (file name, kind); the list is the fixture's value."""
+    calls: list[tuple[str, str]] = []
 
-    def maker(kind: str, name: str):
-        def make(source, key):
-            calls.append((source.id, kind))
-            rel = os.path.join(derived.folder(key), name)
-            path = os.path.join(app_settings.SETTINGS.home(), rel)
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w") as f:
-                f.write(kind)
-            return derived.Made(rel, {"kind": kind})
+    def interlacing(path, *, info=None, **_):
+        return "tff"
 
-        return make
+    def proxy(src, out, *, info=None, progress=None, **_):
+        calls.append((os.path.basename(src), "proxy"))
+        if progress is not None:
+            progress(1.0)
+        os.makedirs(os.path.dirname(out), exist_ok=True)  # as files.atomic_path does
+        with open(out, "wb") as f:
+            f.write(b"mp4")
+        return media.Probe.from_json(os.fspath(out), PROXY_PROBE)
 
-    monkeypatch.setattr(
-        derived,
-        "MAKERS",
-        {
-            "proxy": maker("proxy", "proxy.mp4"),
-            "thumbnails": maker("thumbnails", "thumbnails"),
-            "peaks": maker("peaks", "peaks.json"),
-        },
-    )
+    def thumbnails(src, folder, *, every=10, **_):
+        calls.append((os.path.basename(src), "thumbnails"))
+        os.makedirs(folder, exist_ok=True)
+        step = mediatime.rational(every)
+        out = []
+        for i in range(2):
+            path = os.path.join(folder, f"{i:06d}.jpg")
+            with open(path, "wb") as f:
+                f.write(b"jpg")
+            out.append(derive.Thumb(i * step, path))
+        return out
+
+    def peaks(src, *, per_second=50, **_):
+        calls.append((os.path.basename(src), "peaks"))
+        return derive.Peaks(per_second, [-0.5, -0.25], [0.5, 0.25])
+
+    for name, fn in [("interlacing", interlacing), ("proxy", proxy), ("thumbnails", thumbnails), ("peaks", peaks)]:
+        monkeypatch.setattr(derive, name, fn)
     return calls
+
+
+PROXY_PROBE = {
+    "format": {"duration": "5400.04", "format_name": "mov,mp4,m4a,3gp,3g2,mj2"},
+    "streams": [
+        {"codec_type": "video", "codec_name": "h264", "width": 720, "height": 540},
+        {"codec_type": "audio", "codec_name": "aac", "channels": 2},
+    ],
+}

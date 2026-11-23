@@ -83,6 +83,9 @@ def hash_source(job: Job) -> dict[str, Any]:
         if source is None:
             raise KeyError(f"there is no source {source_id}")
         if source.sha256 is not None:
+            # a retry after the hash was stored but before its assets were all queued: queue them now (deduped, and
+            # a job whose asset is stored finds it)
+            derive_later(queue(_records()), source)
             return {"sha256": source.sha256}
         path, expected = source.path, source.fingerprint
     _same_footage(path, expected)

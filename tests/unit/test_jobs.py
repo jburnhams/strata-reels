@@ -60,8 +60,14 @@ def test_a_new_source_is_hashed_once_by_a_queued_job(engine: Engine, tmp_path):
     assert jobs.work(q) == []
     # a second hash job that finds the hash already there (queued twice from two places) reads nothing
     q.enqueue("hash", {"source": source.id})
-    (again,) = jobs.work(q)
+    again, *assets = jobs.work(q)
     assert again.result == {"sha256": digest}
+    # and queues the assets again, in case a crash came between storing the hash and queueing them: each finds its own
+    assert [(j.kind, j.result is not None and j.result["new"]) for j in assets] == [
+        ("proxy", False),
+        ("thumbnails", False),
+        ("peaks", False),
+    ]
 
 
 def test_a_changed_or_missing_file_is_not_hashed_as_the_source(engine: Engine, tmp_path):
