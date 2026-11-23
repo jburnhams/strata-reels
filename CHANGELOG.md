@@ -4,6 +4,10 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-23
 
+**Plan: how shots are measured, and subjective cuts (branch `claude/project-thread-1p0er6`)**
+Jonathan: measure the shot detector on clips spliced at known points (cuts within one file are the hard ones), not on cuts marked by hand, and treat where to cut inside a shot as its own question, scored and judged A/B by people.
+- `docs/implementation-plan.md`: R1 step 2 names the eval `shots-spliced` in strata-models; step 6 says trims inside a shot are subjective cuts, for a later strata-models role `cut-points`, and snap to phrase ends until then.
+
 **Footage in: sources in the database (branch `claude/project-thread-1p0er6`)**
 The first code of milestone R1 step 1: add a tape as a source, known by its content, probed once, kept in the database. Restored copies and proxies come next, once strata-python's time model is released.
 - `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.6,<0.3` from PyPI, as strata-python's README now says apps depend on it, replacing the git source that tracked main (the lock was at a commit from before `media` and `db`); the `[db]` extra brings SQLAlchemy, Alembic and psycopg. `[tool.strata-db]` (app `reels`). Project name `strata-reels`.
