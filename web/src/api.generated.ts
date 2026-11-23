@@ -20,76 +20,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/hello": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Hello */
-        get: operations["get_hello_api_hello_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Messages */
-        get: operations["get_messages_api_messages_get"];
-        put?: never;
-        /** Post Message */
-        post: operations["post_message_api_messages_post"];
-        /** Delete Messages */
-        delete: operations["delete_messages_api_messages_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/messages/page": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Messages Page */
-        get: operations["get_messages_page_api_messages_page_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/messages/{message_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Message */
-        delete: operations["delete_message_api_messages__message_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -147,11 +77,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Cleared */
-        Cleared: {
-            /** Cleared */
-            cleared: number;
-        };
         /**
          * Described
          * @description A source as the API and the CLI show it.
@@ -190,71 +115,13 @@ export interface components {
             /** Total Bytes */
             total_bytes?: number | null;
         };
-        /**
-         * Greeting
-         * @description A formatted greeting.
-         */
-        Greeting: {
-            /** Greeting */
-            greeting: string;
-            /** Message */
-            message: string;
-            /** Name */
-            name: string;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** MessageIn */
-        MessageIn: {
-            /** Greeting */
-            greeting?: string | null;
-            /**
-             * Name
-             * @default World
-             */
-            name: string;
-        };
-        /** Page[Sent] */
-        Page_Sent_: {
-            /** Items */
-            items: components["schemas"]["Sent"][];
-            /** Next */
-            next?: string | null;
-            /** Total */
-            total?: number | null;
-        };
         /** ReelsSettings */
-        ReelsSettings: {
-            /** Greeting */
-            greeting: string;
-            /**
-             * Style
-             * @enum {string}
-             */
-            style: "excited" | "calm";
-        };
-        /**
-         * Sent
-         * @description A greeting that was sent and kept. Ids grow with time and are never reused.
-         */
-        Sent: {
-            /**
-             * Created
-             * Format: date-time
-             */
-            created: string;
-            /** Greeting */
-            greeting: string;
-            /** Id */
-            id: number;
-            /** Message */
-            message: string;
-            /** Name */
-            name: string;
-        };
+        ReelsSettings: Record<string, never>;
         /**
          * ServiceStatus
          * @description Another strata service this app calls, as its health endpoint answered just now.
@@ -357,174 +224,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
-                };
-            };
-        };
-    };
-    get_hello_api_hello_get: {
-        parameters: {
-            query?: {
-                name?: string;
-                greeting?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Greeting"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_messages_api_messages_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Sent"][];
-                };
-            };
-        };
-    };
-    post_message_api_messages_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MessageIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Sent"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_messages_api_messages_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Cleared"];
-                };
-            };
-        };
-    };
-    get_messages_page_api_messages_page_get: {
-        parameters: {
-            query?: {
-                after?: number | null;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Page_Sent_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_message_api_messages__message_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                message_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Sent"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

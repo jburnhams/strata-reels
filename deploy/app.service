@@ -11,7 +11,7 @@ WorkingDirectory=%h/path/to/checkout
 # `--locked` refuses to start if uv.lock and pyproject.toml disagree, instead of silently changing the environment.
 # systemd does not search ~/.local/bin, so give uv's full path (`command -v uv` shows it; %h is your home folder).
 ExecStart=%h/.local/bin/uv run --locked --no-dev app serve --host 127.0.0.1 --port 8360
-# Where the greetings are kept (see docs/deploying.md). Without it they go to a SQLite file in the app's home
+# Where the sources are kept (see docs/deploying.md). Without it they go to a SQLite file in the app's home
 # (~/.reels/reels.db, moved with REELS_HOME), which is outside the checkout. For the shared Postgres, set the URL's name
 # here and keep the URL itself (it holds a password) in a file only you can read:
 # EnvironmentFile=%h/.config/<name>/env      # REELS_DATABASE_URL=postgresql+psycopg://..., STRATA_DB_LIVE=1

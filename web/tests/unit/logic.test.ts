@@ -1,36 +1,31 @@
 import { readFileSync } from 'node:fs'
 import { colorSchemeScript, format } from 'strata-react'
 import { describe, expect, it } from 'vitest'
-import { greetingProblem } from '../../src/api'
-import { initialMessages, makeMessages, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
-import { messagePage } from '../../src/mocks/handlers'
-import { describeLatest, favouriteWord } from '../../src/screens/GreetingsScreen'
+import { initialSources, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
+import { describePicture, describeSources, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
 
-describe('api helpers', () => {
-  it("says what is wrong with a name or greeting that is too long, in the server's words, and nothing otherwise", () => {
-    expect(greetingProblem('name', 'Ada')).toBeUndefined()
-    expect(greetingProblem('name', `  ${'x'.repeat(120)}  `)).toBeUndefined()
-    expect(greetingProblem('name', 'x'.repeat(121))).toBe('Use at most 120 characters for the name; this is 121.')
-    expect(greetingProblem('greeting', 'g'.repeat(61))).toBe('Use at most 60 characters for the greeting; this is 61.')
-  })
-})
-
-describe('the Greetings finding and figures', () => {
-  it('counts greetings and people and names the latest', () => {
-    const two = [
-      { id: 2, name: 'Ada', greeting: 'Hi', message: 'Hi, Ada!', created: '2026-11-09T09:12:00Z' },
-      { id: 1, name: 'Ada', greeting: 'Hello', message: 'Hello, Ada!', created: '2026-11-08T09:12:00Z' },
-    ]
-    expect(describeLatest(two)).toBe(
-      `${format.count(2, 'greeting')} to ${format.count(1, 'person', 'people')}. The latest, “Hi, Ada!”, went out on ${format.dateTime('2026-11-09T09:12:00Z')}.`,
+describe('the Sources finding and picture', () => {
+  it('counts sources and adds up their running time, naming those of unknown length', () => {
+    expect(describeSources(initialSources)).toBe(`${format.count(5, 'source')} running ${format.runningTime(31_043.1)} in all.`)
+    const untimed = { ...initialSources[0], id: 9, duration: null }
+    expect(describeSources([untimed, initialSources[1]])).toBe(
+      `${format.count(2, 'source')} running ${format.runningTime(94.5)} in all (${format.count(1, 'source')} of unknown length).`,
     )
-    expect(describeLatest([])).toBe('No greetings have gone out yet. Send the first one below.')
+    expect(describeSources([untimed])).toBe(`${format.count(1, 'source')} (${format.count(1, 'source')} of unknown length).`)
+    expect(describeSources([])).toBe('No footage yet. Add a tape transfer or a clip below.')
   })
 
-  it('finds the most used greeting word', () => {
-    expect(favouriteWord(initialMessages)).toEqual({ word: 'Hello', times: 4 })
-    expect(favouriteWord([])).toBeUndefined()
+  it("reads ffprobe's frame rate and says what a person checks of the picture", () => {
+    expect(framesPerSecond('25/1')).toBe(25)
+    expect(framesPerSecond('30000/1001')).toBeCloseTo(29.97, 2)
+    expect(framesPerSecond('0/0')).toBeNull()
+    expect(framesPerSecond(null)).toBeNull()
+    const pal = initialSources[0].video
+    expect(describePicture(pal)).toBe(`720\u00a0×\u00a0576, ${format.withUnit(25, 'fps')}, interlaced`)
+    expect(describePicture(initialSources[1].video)).toBe(`1920\u00a0×\u00a01080, ${format.withUnit(29.97, 'fps')}`)
+    expect(describePicture({ codec: null, width: null, height: null, rate: null, field_order: 'unknown' })).toBeNull()
+    expect(describePicture(null)).toBeNull()
   })
 })
 
@@ -40,7 +35,7 @@ describe('the System finding', () => {
     expect(homeDisk({ ...systemStatus, folders: [{ name: 'home', path: '/x', exists: false }] })).toBeUndefined()
     expect(ofSize(301.6e9, 512e9)).toBe(`${format.bytes(301.6e9, 'GB')} of ${format.bytes(512e9, 'GB')}`)
     expect(describeDisk(systemStatus)).toBe(`Everything is running. The data disk is 59% full, with ${format.bytes(210.4e9)} free.`)
-    expect(describeDisk(systemNearlyFull)).toMatch(/^The data disk is 96% full, .* Free space before greetings stop saving\.$/)
+    expect(describeDisk(systemNearlyFull)).toMatch(/^The data disk is 96% full, .* Free space before adding more footage\.$/)
     const filling = { ...systemStatus, folders: [{ name: 'home', path: '/x', exists: true, total_bytes: 100, free_bytes: 15 }] }
     expect(describeDisk(systemStatus, false)).toBe(
       `The server is not answering. When last read, the data disk was 59% full, with ${format.bytes(210.4e9)} free.`,
@@ -49,16 +44,6 @@ describe('the System finding', () => {
     const unread = { ...systemStatus, folders: [] }
     expect(describeDisk(unread)).toBe('Everything is running. The data disk could not be read.')
     expect(describeDisk(unread, false)).toBe('The server is not answering.')
-  })
-})
-
-describe('the mock server', () => {
-  it("pages the log after a cursor with the server's own next, as greet.page does", () => {
-    const log = makeMessages(5) // ids 5..1, newest first
-    const url = (q: string) => `http://x/api/messages/page?${q}`
-    expect(messagePage(url('limit=2'), log)).toEqual({ items: log.slice(0, 2), next: '4' })
-    expect(messagePage(url('after=2&limit=2'), log)).toEqual({ items: log.slice(4), next: null })
-    expect(messagePage(url(''), log).items).toHaveLength(5)
   })
 })
 

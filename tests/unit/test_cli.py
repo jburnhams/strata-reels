@@ -24,35 +24,9 @@ def test_doctor_success_and_missing_module(capsys: pytest.CaptureFixture[str], m
     assert "MISSING  uvicorn" in capsys.readouterr().out
 
 
-def test_hello_and_messages_commands(capsys: pytest.CaptureFixture[str], db_env: str):
-    assert cli.main(["hello"]) == 0
-    assert capsys.readouterr().out.strip() == "Hello, World!"
-    assert cli.main(["hello", "Alice", "--greeting", "Hi", "--save", "--json"]) == 0
-    rec = json.loads(capsys.readouterr().out)
-    assert (rec["id"], rec["message"]) == (1, "Hi, Alice!")
-
-    assert cli.main(["messages"]) == 0
-    assert "#1    Hi, Alice!" in capsys.readouterr().out
-    assert cli.main(["messages", "--json"]) == 0
-    assert [m["name"] for m in json.loads(capsys.readouterr().out)] == ["Alice"]
-    assert cli.main(["messages", "--clear"]) == 0
-    assert "cleared 1 greeting(s)" in capsys.readouterr().out
-    assert cli.main(["messages"]) == 0
-    assert "no greetings kept yet" in capsys.readouterr().out
-    assert cli.main(["messages", "--clear", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"cleared": 0}
-
-    with pytest.raises(SystemExit, match="at most 120 characters"):
-        cli.main(["hello", "x" * 121, "--save"])
-
-
 def test_set_serve_and_openapi_commands(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
-    assert cli.main(["set", "style"]) == 0
-    assert "style = excited  (one of: excited, calm)" in capsys.readouterr().out
-    assert cli.main(["set", "greeting", "Howdy"]) == 0
-    assert "greeting = Howdy" in capsys.readouterr().out
     with pytest.raises(SystemExit, match="unknown setting"):
         cli.main(["set", "bad_key", "val"])
 
@@ -63,7 +37,7 @@ def test_set_serve_and_openapi_commands(
 
     out = tmp_path / "openapi.json"
     assert cli.main(["openapi", "-o", str(out)]) == 0
-    assert '"/api/messages/page"' in out.read_text(encoding="utf8")
+    assert '"/api/sources"' in out.read_text(encoding="utf8")
 
 
 def test_add_and_sources_commands(capsys: pytest.CaptureFixture[str], db_env: str, tmp_path: Path):

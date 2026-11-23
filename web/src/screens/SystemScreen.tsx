@@ -57,7 +57,7 @@ export function describeDisk(s: SystemStatus, answering = true): string {
   if (!answering) return `The server is not answering. When last read, the data disk was ${format.percent(share)} full, with ${left}.`
   if (!crossed) return `Everything is running. The data disk is ${format.percent(share)} full, with ${left}.`
   return crossed.tone === 'danger'
-    ? `The data disk is ${format.percent(share)} full, with ${left}. Free space before greetings stop saving.`
+    ? `The data disk is ${format.percent(share)} full, with ${left}. Free space before adding more footage.`
     : `The data disk is ${format.percent(share)} full, with ${left}. Nothing needs doing yet.`
 }
 
@@ -159,8 +159,8 @@ export function SystemScreen() {
                     <span className="tabular-nums">{s.python}</span>
                   </Fact>
                   <Fact term="Platform">{s.platform}</Fact>
-                  <Fact term="Greetings kept">
-                    <span className="tabular-nums">{format.integer(s.greetings)}</span>
+                  <Fact term="Sources">
+                    <span className="tabular-nums">{format.integer(s.sources)}</span>
                   </Fact>
                 </dl>
               </section>
@@ -170,11 +170,7 @@ export function SystemScreen() {
                   Go to
                 </h2>
                 <LinkCardList label="Places to go from here">
-                  <LinkCard
-                    to="/settings"
-                    title="Settings"
-                    description="Change the default greeting and how greetings end, or choose light or dark."
-                  />
+                  <LinkCard to="/settings" title="Settings" description="Choose light or dark." />
                   <LinkCard
                     href={api.url('/api/docs')}
                     title="API reference"

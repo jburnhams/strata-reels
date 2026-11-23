@@ -14,14 +14,14 @@ describe('System', () => {
     expect(meter).toHaveAttribute('aria-valuenow', String(512e9 - 210.4e9))
     expect(screen.getByRole('table', { name: /in all/ })).toHaveTextContent('This app’s data')
     expect(screen.getByText('Answering')).toBeInTheDocument()
-    expect(screen.getByText('/home/ada/.app')).toBeInTheDocument()
+    expect(screen.getByText('/home/ada/.reels')).toBeInTheDocument()
     expect(screen.getByText('1427b94c0ffe')).toBeInTheDocument() // the source commit the server runs
   })
 
   it('names the threshold a nearly full disk has crossed, and what to do', async () => {
     server.use(systemNearlyFull)
     openApp('/system')
-    expect(await screen.findByText(/Free space before greetings stop saving/)).toBeInTheDocument()
+    expect(await screen.findByText(/Free space before adding more footage/)).toBeInTheDocument()
     expect(screen.getByText('Nearly full')).toBeInTheDocument()
   })
 
@@ -36,9 +36,7 @@ describe('System', () => {
 
   it('links to settings in the app and to the API outside it', async () => {
     openApp('/system')
-    expect(
-      await screen.findByRole('link', { name: /^Settings/, description: /Change the default greeting and how greetings end/ }),
-    ).toHaveAttribute('href', '/settings')
+    expect(await screen.findByRole('link', { name: /^Settings/, description: /Choose light or dark/ })).toHaveAttribute('href', '/settings')
     expect(screen.getByRole('link', { name: /API reference/ })).toHaveAttribute('href', '/api/docs')
   })
 

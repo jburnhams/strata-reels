@@ -5,8 +5,8 @@ Vitest 5, Testing Library, user-event, MSW, and strata-react's test helpers (`st
 ## Layout
 
 - `unit/`: node environment, no DOM. Pure functions: the field checks (`api.ts`), the screens' findings, the mock server's paging, and that `index.html` inlines Strata's colour-scheme script.
-- `integration/`: jsdom. One file per screen (`GreetingsScreen`, `LogScreen`, `SystemScreen`, `SettingsScreen`) plus `App` for the frame and routing. Each test opens the app at a URL with `openApp('/settings?tab=appearance')` (`utils/render.tsx`), which renders the app's own route tree (`src/routes.tsx`) through `renderRoutes` from `strata-react/testing`, with a fresh query client (retries off) and ThemeProvider (storage off).
-- `utils/`: `server.ts` is the msw server over the app's mock handlers (`src/mocks/handlers.ts`: **every endpoint the app calls needs a handler there**; an unanswered request fails the test). Put the server into another state with the named handlers (`server.use(messagesError)`); the store resets after each test. `setup.ts` installs Strata's layout shims so tables and lists measure in jsdom. `render.tsx` provides `openApp()`.
+- `integration/`: jsdom. One file per screen (`SourcesScreen`, `SystemScreen`, `SettingsScreen`) plus `App` for the frame and routing. Each test opens the app at a URL with `openApp('/?sort=length.desc')` (`utils/render.tsx`), which renders the app's own route tree (`src/routes.tsx`) through `renderRoutes` from `strata-react/testing`, with a fresh query client (retries off) and ThemeProvider (storage off).
+- `utils/`: `server.ts` is the msw server over the app's mock handlers (`src/mocks/handlers.ts`: **every endpoint the app calls needs a handler there**; an unanswered request fails the test). Put the server into another state with the named handlers (`server.use(sourcesError)`); the store resets after each test. `setup.ts` installs Strata's layout shims so tables and lists measure in jsdom. `render.tsx` provides `openApp()`.
 - `visual/baselines/`: committed PNGs written by `strata-visual` (see below).
 
 ## Conventions
@@ -15,7 +15,7 @@ Vitest 5, Testing Library, user-event, MSW, and strata-react's test helpers (`st
 - One concept per `it`, named as a sentence. Cover the happy path, loading, empty, a server error and the edge values.
 - No arbitrary sleeps: `findBy*`, `waitFor`, or fake timers (`vi.useFakeTimers({ shouldAdvanceTime: true })` and `openApp(route, { user: { advanceTimers: vi.advanceTimersByTime } })` to run out the undo window).
 - Never mock a module or stub `fetch`: put the server into the state with MSW.
-- Copy from strata-react's `format` joins counts with a non-breaking space: match `/^2\sgreetings selected$/`, not a typed `"2 greetings selected"`.
+- Copy from strata-react's `format` joins counts with a non-breaking space: match `/^5\ssources/`, not a typed `"5 sources"`.
 - A bug found while testing: write `it.todo` or `it.fails`, comment it as a finding, and don't change app behaviour in a test-only change.
 
 ## Visual tests
@@ -33,7 +33,6 @@ Vitest 5, Testing Library, user-event, MSW, and strata-react's test helpers (`st
 | `src/api.ts`                                   | 100     | done   | unit/logic.test.ts and every integration test            |
 | `src/routes.tsx`                               | 100     | done   | integration/App.test.tsx                                 |
 | `src/screens/Layout.tsx`, `NotFoundScreen.tsx` | 100     | done   | integration/App.test.tsx                                 |
-| `src/screens/GreetingsScreen.tsx`              | 100     | done   | integration/GreetingsScreen.test.tsx, unit/logic.test.ts |
-| `src/screens/LogScreen.tsx`                    | 100     | done   | integration/LogScreen.test.tsx                           |
+| `src/screens/SourcesScreen.tsx`                | 100     | done   | integration/SourcesScreen.test.tsx, unit/logic.test.ts   |
 | `src/screens/SystemScreen.tsx`                 | 100     | done   | integration/SystemScreen.test.tsx, unit/logic.test.ts    |
 | `src/screens/SettingsScreen.tsx`               | 100     | done   | integration/SettingsScreen.test.tsx                      |

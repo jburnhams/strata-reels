@@ -1,6 +1,6 @@
 """The app's records: SQLAlchemy models, migrated by Alembic (`src/app/migrations/`, declared in `src/app/strata-db.toml`).
 
-The template's sample table, the greetings that were sent, until its screens are replaced; then reels' own. A source is a
+A source is a
 file of footage as it was added: never changed, never moved by the app (spec §1: source media immutable). It is known by its
 content (`fingerprint`: size and SHA-256 of both ends, `strata_python.files.quick_fingerprint`), so adding the same tape
 twice, or after it was moved, finds the one already there. What ffprobe said about it is kept whole (`probe`), because the
@@ -12,7 +12,7 @@ the local SQLite fallback and on the shared Postgres; see strata-python's README
 import datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, DateTime, Integer, MetaData, String
+from sqlalchemy import JSON, BigInteger, DateTime, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from strata_python.db import NAMING_CONVENTION
 
@@ -21,21 +21,6 @@ class Base(MappedAsDataclass, DeclarativeBase):
     # Written out rather than `make_base()`: ty refuses a function's result as a base class. The shared naming convention
     # gives every constraint the same name on every app and engine, so migrations never drift on a name.
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
-
-
-class SentGreeting(Base):
-    """A greeting that went out. Ids grow with time and are never reused (the web app hides a removed row by its id
-    until the removal is committed, and pages the log with `after=<id>`), hence AUTOINCREMENT on SQLite, which would
-    otherwise hand the largest id out again after the newest row is removed; Postgres identities never go back."""
-
-    __tablename__ = "greetings"
-    __table_args__ = {"sqlite_autoincrement": True}  # noqa: RUF012 - SQLAlchemy reads it from the class
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, init=False)
-    name: Mapped[str] = mapped_column(String(120))
-    greeting: Mapped[str] = mapped_column(String(60))
-    message: Mapped[str] = mapped_column(String(200))
-    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
 
 
 def _now() -> datetime.datetime:

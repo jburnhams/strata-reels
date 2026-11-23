@@ -33,30 +33,13 @@ def call(base: str, method: str, path: str, body: object = None) -> tuple[int, A
         return e.code, json.loads(e.read())
 
 
-def test_greetings_sent_over_http_are_kept_and_seen_by_the_cli(server: str, cli: Cli):
+def test_health_and_errors_answer_over_http(server: str):
     status, health = call(server, "GET", "/api/health")
     assert (status, health["ok"], health["version"]) == (200, True, "0.1.0")
-    for n in ("Ann", "Ben", "Cat"):
-        assert call(server, "POST", "/api/messages", {"name": n})[0] == 200
-    assert call(server, "DELETE", "/api/messages/2")[0] == 200
-    out = cli("messages").stdout
-    assert ("Hello, Ann!" in out, "Hello, Ben!" in out, "Hello, Cat!" in out) == (True, False, True)
-    assert call(server, "POST", "/api/messages", {"name": "Dee"})[1]["id"] == 4
-    status, page = call(server, "GET", "/api/messages/page?limit=2")
-    assert (status, [m["name"] for m in page["items"]], page["next"]) == (200, ["Dee", "Cat"], "3")
-    assert call(server, "GET", "/api/system")[1]["greetings"] == 3
-
-
-def test_errors_answer_with_the_sentence(server: str):
-    status, body = call(server, "POST", "/api/messages", {"name": "x" * 121})
-    assert (status, body) == (400, {"detail": "Use at most 120 characters for the name; this is 121.", "payload": None})
-    assert call(server, "DELETE", "/api/messages/99")[0] == 404
-    assert call(server, "PUT", "/api/settings", {"style": "loud"})[0] == 400
-
-
-def test_settings_changes_affect_later_greetings(server: str):
-    assert call(server, "PUT", "/api/settings", {"greeting": "Bonjour", "style": "calm"})[0] == 200
-    assert call(server, "GET", "/api/hello?name=Monde")[1]["message"] == "Bonjour, Monde."
+    status, body = call(server, "POST", "/api/sources", {"path": "/no/such/tape.mkv"})
+    assert (status, body["detail"]) == (400, "there is no file /no/such/tape.mkv")
+    assert call(server, "PUT", "/api/settings", {"greeting": "Hi"})[0] == 400  # no such setting
+    assert call(server, "GET", "/api/system")[1]["sources"] == 0
 
 
 def test_a_reload_on_any_screen_gets_the_app(server: str):

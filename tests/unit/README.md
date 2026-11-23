@@ -8,9 +8,8 @@ Fast and isolated: synthetic data, a migrated SQLite copy per test for the recor
 
 | Module | Tests | Coverage | Status | Notes |
 | --- | --- | --- | --- | --- |
-| `settings.py` | `test_settings.py` | 100% | done | greeting and style defaults, environment overrides, save/reset, the choices |
-| `greet.py` | `test_greet.py` | 100% | done | formatting, length limits and their sentences, the style, hypothesis properties, keeping and clearing, ids never reused, cursor paging after a removed cursor, times answered in UTC |
+| `settings.py` | `test_settings.py` | 100% | done | the `reels` home and its variable; no settings yet, so any key is refused |
 | `models.py`, `migrations/` | `test_database.py` | 100% | done | strata-python's standard tests: migrations up and down, schema matches the models |
 | `system.py` | `test_system.py` | 100% | done | folder sizes (files that vanish mid-walk) |
-| `cli.py`, `db.py` | `test_cli.py` | 100% | done | doctor, hello (kept and not), messages, set with choices, serve delegation, openapi |
-| `server/app.py` | `test_server.py` | 100% | done | the committed `openapi.json`, landing/static index with its relative `<base>`, hello, send, clear, paging, removing one, error bodies, system, settings with choices, `main` |
+| `cli.py`, `db.py` | `test_cli.py` | 100% | done | doctor, set refusing an unknown key, serve delegation, openapi, add and sources (text and JSON) |
+| `server/app.py` | `test_server.py` | 100% | done | the committed `openapi.json`, landing/static index with its relative `<base>`, sources listed, added (201, then 200 when known) and refused (400), error bodies, system, no settings, `main` |

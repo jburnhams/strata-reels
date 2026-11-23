@@ -49,7 +49,7 @@ Each is raised as a strata-react issue when the milestone that needs it starts.
 
 ## 6. The app skeleton
 
-The repository was made from [python-app-template](https://github.com/jburnhams/python-app-template): a FastAPI server and CLI in `src/app/` on strata-python, and a React app in `web/` on strata-react that builds into `src/app/server/static/`. The sample screens (greetings, log, system, settings) stay until the first real screens replace them. Conventions are in [AGENTS.md](../AGENTS.md).
+The repository was made from [python-app-template](https://github.com/jburnhams/python-app-template): a FastAPI server and CLI in `src/app/` on strata-python, and a React app in `web/` on strata-react that builds into `src/app/server/static/`. The template's sample (greetings, a paged log, sample settings) was left out; the screens are Sources, System and Settings (appearance only). Conventions are in [AGENTS.md](../AGENTS.md).
 
 ## 7. Principles kept from the template
 

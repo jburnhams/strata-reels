@@ -2,7 +2,7 @@
 // owning the `.dark` class (driven by the toolbar, storage off, remounted per choice so stories can
 // call useColorScheme), a fresh query client per story, and the network served by MSW from the
 // app's own handlers. A story puts the server into another state with
-// `beforeEach: ({ msw }) => msw.use(messagesError)`; the mock server's data is reset before each.
+// `beforeEach: ({ msw }) => msw.use(sourcesError)`; the mock server's data is reset before each.
 import '@fontsource-variable/source-sans-3'
 import '@fontsource-variable/fraunces'
 import '@fontsource-variable/jetbrains-mono'

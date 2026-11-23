@@ -34,7 +34,7 @@ artifacts = ["src/app/server/static/**"]
 [tool.pytest.ini_options]
 pythonpath = ["tests/utils"]
 strata_env_prefix = "REELS"               # strata-python plugin: REELS_HOME and REELS_DATA point into a tmp dir for every test
-strata_tuning_vars = ["REELS_GREETING", "REELS_STYLE"]    # removed from the environment for every test
+strata_tuning_vars = []                  # none yet: variables that tune a run are removed from the environment for every test
 testpaths = ["tests/unit"]
 addopts = "-ra --timeout=300 --strict-markers --strict-config --import-mode=importlib"   # importlib: tests/unit and tests/integration may share file names
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]       # TestClient noise from the installed starlette; remove when the dependency moves on

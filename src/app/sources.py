@@ -10,7 +10,7 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from strata_python import files, media
@@ -117,3 +117,8 @@ def _by_fingerprint(db: Session, fingerprint: str) -> Source | None:
 def all_sources(db: Session) -> list[Source]:
     """Every source, oldest first."""
     return list(db.scalars(select(Source).order_by(Source.id)))
+
+
+def count(db: Session) -> int:
+    """How many sources there are (the System page shows it)."""
+    return db.scalar(select(func.count()).select_from(Source)) or 0

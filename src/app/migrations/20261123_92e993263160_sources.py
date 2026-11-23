@@ -1,7 +1,7 @@
 """sources
 
 Revision ID: 92e993263160
-Revises: 44054abeb50e
+Revises:
 Create Date: 2026-11-23 16:44:43.107644
 
 """
@@ -13,9 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "92e993263160"
-# After the template's greetings, which came in with the template update; reels had not been deployed, so its one
-# revision moved behind them instead of the two being merged.
-down_revision: str | Sequence[str] | None = "44054abeb50e"
+down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
