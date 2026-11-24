@@ -2,8 +2,11 @@ import { readFileSync } from 'node:fs'
 import { colorSchemeScript, format } from 'strata-react'
 import { describe, expect, it } from 'vitest'
 import { initialSources, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
+import { tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
+import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
 import { describePicture, describeSources, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
+import { aspectOf, describeFaces, describeScenes, sceneName, transcriptGroups } from '../../src/screens/TapeScreen'
 
 describe('the Sources finding and picture', () => {
   it('counts sources and adds up their running time, naming those of unknown length', () => {
@@ -53,5 +56,85 @@ describe('index.html', () => {
   it('inlines the colour-scheme script ThemeProvider expects, so a dark page does not flash light', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8')
     expect(html).toContain(`<script>${colorSchemeScript()}</script>`)
+  })
+})
+
+describe('the tape page', () => {
+  it('says how many scenes, what is not described, which starts to check and what is to come', () => {
+    expect(describeScenes(tapeScenes)).toBe(
+      `${format.count(6, 'scene')} over 2:59:48; ${format.count(1, 'scene')} not described yet; 2 starts to check.`,
+    )
+    expect(describeScenes(waitingScenes(4))).toBe('Grouping the shots into scenes (the keyframes and scenes jobs).')
+    const one = { ...tapeScenes, scenes: [{ ...tapeScenes.scenes[0] }], analysis: { ...tapeScenes.analysis, transcript: false } }
+    expect(describeScenes(one)).toBe(`${format.count(1, 'scene')} over 6:52; speech still to come.`)
+    expect(describeScenes({ ...one, scenes: [], waiting: null })).toBe('No scenes found.')
+    const unsure = { ...one, scenes: [{ ...tapeScenes.scenes[4] }] }
+    expect(describeScenes(unsure)).toBe(`${format.count(1, 'scene')} over 7:12; not described yet; 1 start to check; speech still to come.`)
+  })
+
+  it('counts faces as a floor, and names scenes from one', () => {
+    expect(describeFaces(null)).toBeNull()
+    expect(describeFaces(0)).toBe('No faces')
+    expect(describeFaces(3)).toBe(`Up to ${format.count(3, 'face')}`)
+    expect(sceneName({ index: 0 })).toBe('Scene 1')
+  })
+
+  it('shows a tape 4:3 whatever its stored pixels, anything else as it is', () => {
+    expect(aspectOf(initialSources[0])).toBe('4/3')
+    expect(aspectOf(initialSources[1])).toBe('1920/1080')
+    expect(aspectOf(initialSources[2])).toBeUndefined()
+    expect(aspectOf({ ...initialSources[0], video: { ...initialSources[0].video!, height: 480 } })).toBe('4/3')
+    expect(aspectOf({ ...initialSources[0], video: { ...initialSources[0].video!, height: 400 } })).toBe('720/400')
+  })
+
+  it('puts each phrase under the scene it starts in, with its words, doubt kept', () => {
+    const groups = transcriptGroups(tapeTranscript, tapeScenes.scenes)
+    expect(groups.map(g => g.title)).toEqual(['Scene 1', 'Scene 2', 'Scene 4', 'Scene 5', 'Scene 6'])
+    expect(groups[0].phrases[0].words[0]).toEqual({ text: 'Is', start: 4, end: 4.4, confidence: 0.93 })
+    const hiss = groups[4].phrases[0]
+    expect(hiss.words).toEqual([{ text: 'Thank you.', start: 6000, end: 6004, doubtful: true }])
+    const odd = transcriptGroups(
+      {
+        ...tapeTranscript,
+        segments: [
+          { start: 1, end: 2, text: 'mm', doubtful: true, words: [{ start: 1, end: 2, word: ' mm', probability: 0.9 }] },
+          { start: 3, end: 4, text: 'yes', doubtful: false, words: [{ start: 3, end: 4, word: ' yes', probability: null }] },
+        ],
+      },
+      tapeScenes.scenes,
+    )
+    expect(odd[0].phrases.map(p => p.words[0])).toEqual([
+      { text: 'mm', start: 1, end: 2, doubtful: true },
+      { text: 'yes', start: 3, end: 4 },
+    ])
+  })
+})
+
+describe('the jobs page', () => {
+  it('names a job by what it does to which source', () => {
+    expect(describeJob({ kind: 'shots', domain: 'source:5' }, initialSources)).toBe('Find the shots in christmas-1996.mkv')
+    expect(describeJob({ kind: 'hash', domain: 'source:77' }, initialSources)).toBe('Read all of source 77')
+    expect(describeJob({ kind: 'hash', domain: null }, initialSources)).toBe('Read all of a source')
+    expect(describeJob({ kind: 'restore', domain: 'source:5' }, initialSources)).toBe('restore (christmas-1996.mkv)')
+    expect(describeJob({ kind: 'restore', domain: null }, [])).toBe('restore')
+  })
+  it('says what the queue is doing', () => {
+    expect(describeQueue({ running: 1, queued: 2, done: 7 })).toBe('1 running, 2 waiting.')
+    expect(describeQueue({ done: 1 })).toBe('Nothing to do: every job has finished.')
+    expect(describeQueue({})).toBe('Nothing to do: every job has finished.')
+    expect([isBusy(undefined), isBusy({ done: 3, failed: 1 }), isBusy({ queued: 1 }), isBusy({ running: 1 })]).toEqual([
+      false,
+      false,
+      true,
+      true,
+    ])
+  })
+  it('says when the list is cut, and how to find the rest', () => {
+    expect(describeMore({ items: Array(200), total: 1340 })).toBe(
+      `Showing the newest 200 of ${format.count(1340, 'job')}. Choose Failed or Waiting to find older ones that need you.`,
+    )
+    expect(describeMore({ items: Array(200), total: null })).toBe(
+      'Showing the newest 200. Choose Failed or Waiting to find older ones that need you.',
+    )
   })
 })

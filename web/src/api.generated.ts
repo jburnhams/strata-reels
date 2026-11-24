@@ -20,6 +20,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Jobs */
+        get: operations["list_jobs_api_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job Counts */
+        get: operations["job_counts_api_jobs_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_api_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Job */
+        post: operations["cancel_job_api_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Job */
+        post: operations["retry_job_api_jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -56,6 +141,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Source */
+        get: operations["get_source_api_sources__source_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/keyframes/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Keyframe */
+        get: operations["get_keyframe_api_sources__source_id__keyframes__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/peaks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Peaks */
+        get: operations["get_peaks_api_sources__source_id__peaks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/proxy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Proxy */
+        get: operations["get_proxy_api_sources__source_id__proxy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/scenes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Scenes */
+        get: operations["get_scenes_api_sources__source_id__scenes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/thumbnails/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Thumbnail */
+        get: operations["get_thumbnail_api_sources__source_id__thumbnails__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/transcript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Transcript */
+        get: operations["get_transcript_api_sources__source_id__transcript_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system": {
         parameters: {
             query?: never;
@@ -77,6 +281,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Analysis
+         * @description Which of the source's results exist, for the page's finding and its waiting words.
+         */
+        Analysis: {
+            /** Described */
+            described: number;
+            /** Faces */
+            faces: boolean;
+            /** Peaks */
+            peaks: boolean;
+            /** Proxy */
+            proxy: boolean;
+            /** Shots */
+            shots: number | null;
+            /** Thumbnails */
+            thumbnails: boolean;
+            /**
+             * Transcript
+             * @description None for a source with no sound
+             */
+            transcript: boolean | null;
+        };
         /**
          * Described
          * @description A source as the API and the CLI show it.
@@ -100,6 +327,35 @@ export interface components {
             video: components["schemas"]["Video"] | null;
         };
         /**
+         * Description
+         * @description strata-models' description of a scene (preset `scene-describe-v1`): what is seen kept apart from what is
+         *     guessed, each guess with its evidence.
+         */
+        Description: {
+            /** Activity */
+            activity: string;
+            /** Children */
+            children: number;
+            /** Inferred */
+            inferred: components["schemas"]["Guess"][];
+            /**
+             * Model
+             * @description the model that wrote it
+             */
+            model: string | null;
+            /** Observed */
+            observed: string[];
+            /** People */
+            people: number;
+            picture: components["schemas"]["Picture"];
+            /** Setting */
+            setting: string;
+            /** Summary */
+            summary: string;
+            /** Tags */
+            tags: string[];
+        };
+        /**
          * Folder
          * @description A folder the app uses, and the disk it is on (None when the folder does not exist yet).
          */
@@ -115,13 +371,154 @@ export interface components {
             /** Total Bytes */
             total_bytes: number | null;
         };
+        /**
+         * Frame
+         * @description A picture of the scene at `time` seconds; `url` is a path from the app's root, which the page puts its base before
+         *     (`api.url`), as for every request.
+         */
+        Frame: {
+            /** Time */
+            time: number;
+            /** Url */
+            url: string;
+        };
+        /** Guess */
+        Guess: {
+            /** Because */
+            because: string;
+            /** Guess */
+            guess: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** Page[Task] */
+        Page_Task_: {
+            /** Items */
+            items: components["schemas"]["Task"][];
+            /** Next */
+            next: string | null;
+            /** Total */
+            total: number | null;
+        };
+        /**
+         * Peaks
+         * @description The source's sound as the lowest and highest sample of each slice, -1 to 1, over `seconds`.
+         */
+        Peaks: {
+            /** Max */
+            max: number[];
+            /** Min */
+            min: number[];
+            /** Seconds */
+            seconds: number;
+        };
+        /** Picture */
+        Picture: {
+            /** Problems */
+            problems: string[];
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "good" | "fair" | "poor";
+        };
+        /**
+         * Progress
+         * @description How far a task has got. `total` None means not known yet; `text` is the line a person reads ("Page 3 of 40").
+         */
+        Progress: {
+            /** At */
+            at: string | null;
+            /**
+             * Done
+             * @default 0
+             */
+            done: number;
+            /** Stage */
+            stage: string | null;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /** Total */
+            total: number | null;
+        };
         /** ReelsSettings */
         ReelsSettings: Record<string, never>;
+        /**
+         * Scene
+         * @description One scene: its place on the tape, how sure the cut that starts it is, and what step 3 found about it (`None`
+         *     where that job has not run yet).
+         */
+        Scene: {
+            /**
+             * Confidence
+             * @description that the cut before it starts a scene; None for the first
+             */
+            confidence: number | null;
+            description: components["schemas"]["Description"] | null;
+            /** End */
+            end: number;
+            /**
+             * Faces
+             * @description the most faces on any one of its keyframes; None before the faces job
+             */
+            faces: number | null;
+            /** Frames */
+            frames: components["schemas"]["Frame"][];
+            /**
+             * Index
+             * @description from 0, in time order
+             */
+            index: number;
+            /**
+             * Reasons
+             * @description why the cut before it is a boundary, in words
+             */
+            reasons: string[];
+            /** Shots */
+            shots: number;
+            /**
+             * Speech
+             * @description what is said in it (doubtful segments left out); None before the transcript
+             */
+            speech: string | null;
+            /** Start */
+            start: number;
+        };
+        /**
+         * Scenes
+         * @description A source's scenes as the browser shows them. `waiting` says, in a sentence, what the scenes wait for while there
+         *     are none yet.
+         */
+        Scenes: {
+            analysis: components["schemas"]["Analysis"];
+            /** Scenes */
+            scenes: components["schemas"]["Scene"][];
+            source: components["schemas"]["Described"];
+            /** Waiting */
+            waiting: string | null;
+        };
+        /** Segment */
+        Segment: {
+            /**
+             * Doubtful
+             * @description Whisper itself doubts it is speech
+             */
+            doubtful: boolean;
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
+            /** Text */
+            text: string;
+            /** Words */
+            words: components["schemas"]["Word"][];
+        };
         /**
          * ServiceStatus
          * @description Another strata service this app calls, as its health endpoint answered just now.
@@ -168,6 +565,56 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * Task
+         * @description A job or task row as an API answers it.
+         */
+        Task: {
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Domain */
+            domain: string | null;
+            /** Error */
+            error: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Id */
+            id: number | string;
+            /** Kind */
+            kind: string;
+            progress: components["schemas"]["Progress"] | null;
+            /** Result */
+            result: unknown;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "done" | "failed" | "cancelled";
+        };
+        /**
+         * Transcript
+         * @description The whole source's speech, or no segments with `waiting` set before the transcript job has run.
+         */
+        Transcript: {
+            /** Language */
+            language: string | null;
+            /** Model */
+            model: string | null;
+            /** Segments */
+            segments: components["schemas"]["Segment"][];
+            /** Waiting */
+            waiting: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -197,6 +644,17 @@ export interface components {
             /** Width */
             width: number | null;
         };
+        /** Word */
+        Word: {
+            /** End */
+            end: number;
+            /** Probability */
+            probability: number | null;
+            /** Start */
+            start: number;
+            /** Word */
+            word: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -224,6 +682,156 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    list_jobs_api_jobs_get: {
+        parameters: {
+            query?: {
+                state?: ("queued" | "running" | "done" | "failed" | "cancelled")[] | null;
+                kind?: string | null;
+                domain?: string | null;
+                after?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_Task_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_counts_api_jobs_counts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    get_job_api_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_job_api_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_job_api_jobs__job_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -323,6 +931,221 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Described"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_source_api_sources__source_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Described"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_keyframe_api_sources__source_id__keyframes__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_peaks_api_sources__source_id__peaks_get: {
+        parameters: {
+            query?: {
+                buckets?: number;
+            };
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Peaks"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_proxy_api_sources__source_id__proxy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scenes_api_sources__source_id__scenes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_thumbnail_api_sources__source_id__thumbnails__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transcript_api_sources__source_id__transcript_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transcript"];
                 };
             };
             /** @description Validation Error */

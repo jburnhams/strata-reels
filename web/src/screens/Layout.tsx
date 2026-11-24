@@ -1,12 +1,13 @@
 // The frame every screen shares: product name, side nav (a scrolling row on phones) and the main
 // region, from Strata's AppShell. Nav items are React Router NavLinks, so the current screen is
 // marked with aria-current. Each screen supplies its own PageHeader inside <Outlet />.
-import { Film, Server, Settings } from 'lucide-react'
+import { Film, ListChecks, Server, Settings } from 'lucide-react'
 import { Outlet } from 'react-router'
 import { AppShell, type NavItem } from 'strata-react'
 
 export const nav: NavItem[] = [
   { to: '/', label: 'Sources', icon: Film, end: true },
+  { to: '/jobs', label: 'Jobs', icon: ListChecks },
   { to: '/system', label: 'System', icon: Server },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]

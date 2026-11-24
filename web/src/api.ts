@@ -15,6 +15,12 @@ import type { paths, Schema } from './api.generated'
 export type Source = Schema<'Described'>
 export type Video = Schema<'Video'>
 export type Folder = Schema<'Folder'>
+export type Scenes = Schema<'Scenes'>
+export type Scene = Schema<'Scene'>
+export type Transcript = Schema<'Transcript'>
+export type Peaks = Schema<'Peaks'>
+export type Job = Schema<'Task'>
+export type JobsPage = Schema<'Page_Task_'>
 /** `GET /api/system`: strata-python's SystemInfo plus this app's own numbers (src/app/system.py
  *  AppNumbers). Those are extra fields on the shared model, so the schema does not name them. */
 export type SystemStatus = Schema<'SystemInfo'> & { sources: number; home_bytes: number }
@@ -25,4 +31,8 @@ export const api = createTypedApi<paths>()
 export const keys = {
   system: ['system'],
   sources: ['sources'],
+  scenes: (id: number) => ['sources', id, 'scenes'] as const,
+  transcript: (id: number) => ['sources', id, 'transcript'] as const,
+  peaks: (id: number) => ['sources', id, 'peaks'] as const,
+  jobs: ['jobs'],
 } as const

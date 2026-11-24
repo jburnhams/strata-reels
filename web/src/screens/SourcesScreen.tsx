@@ -22,6 +22,7 @@ import {
   Input,
   PageHeader,
   TableSkeleton,
+  TextLink,
   useAsyncAction,
   useLoad,
 } from 'strata-react'
@@ -57,7 +58,18 @@ export function describeSources(sources: Source[]): string {
 }
 
 const columns: Column<Source>[] = [
-  { key: 'name', header: 'Name', value: s => s.name, cell: s => <span title={s.path}>{s.name}</span>, truncate: true },
+  {
+    key: 'name',
+    header: 'Name',
+    value: s => s.name,
+    // the tape's scenes: its own page
+    cell: s => (
+      <span title={s.path}>
+        <TextLink to={`/sources/${s.id}`}>{s.name}</TextLink>
+      </span>
+    ),
+    truncate: true,
+  },
   { key: 'length', header: 'Length', numeric: true, value: s => s.duration, cell: s => format.runningTime(s.duration) },
   { key: 'picture', header: 'Picture', value: s => describePicture(s.video), missing: 'No video' },
   { key: 'size', header: 'Size', numeric: true, value: s => s.size, cell: s => format.bytes(s.size) },

@@ -1,6 +1,65 @@
 {
  "components": {
   "schemas": {
+   "Analysis": {
+    "description": "Which of the source's results exist, for the page's finding and its waiting words.",
+    "properties": {
+     "described": {
+      "title": "Described",
+      "type": "integer"
+     },
+     "faces": {
+      "title": "Faces",
+      "type": "boolean"
+     },
+     "peaks": {
+      "title": "Peaks",
+      "type": "boolean"
+     },
+     "proxy": {
+      "title": "Proxy",
+      "type": "boolean"
+     },
+     "shots": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shots"
+     },
+     "thumbnails": {
+      "title": "Thumbnails",
+      "type": "boolean"
+     },
+     "transcript": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "None for a source with no sound",
+      "title": "Transcript"
+     }
+    },
+    "required": [
+     "proxy",
+     "thumbnails",
+     "peaks",
+     "shots",
+     "transcript",
+     "faces",
+     "described"
+    ],
+    "title": "Analysis",
+    "type": "object"
+   },
    "Described": {
     "description": "A source as the API and the CLI show it.",
     "properties": {
@@ -59,6 +118,81 @@
     "title": "Described",
     "type": "object"
    },
+   "Description": {
+    "description": "strata-models' description of a scene (preset `scene-describe-v1`): what is seen kept apart from what is\nguessed, each guess with its evidence.",
+    "properties": {
+     "activity": {
+      "title": "Activity",
+      "type": "string"
+     },
+     "children": {
+      "title": "Children",
+      "type": "integer"
+     },
+     "inferred": {
+      "items": {
+       "$ref": "#/components/schemas/Guess"
+      },
+      "title": "Inferred",
+      "type": "array"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the model that wrote it",
+      "title": "Model"
+     },
+     "observed": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Observed",
+      "type": "array"
+     },
+     "people": {
+      "title": "People",
+      "type": "integer"
+     },
+     "picture": {
+      "$ref": "#/components/schemas/Picture"
+     },
+     "setting": {
+      "title": "Setting",
+      "type": "string"
+     },
+     "summary": {
+      "title": "Summary",
+      "type": "string"
+     },
+     "tags": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+     }
+    },
+    "required": [
+     "summary",
+     "observed",
+     "inferred",
+     "setting",
+     "people",
+     "children",
+     "activity",
+     "tags",
+     "picture",
+     "model"
+    ],
+    "title": "Description",
+    "type": "object"
+   },
    "Folder": {
     "description": "A folder the app uses, and the disk it is on (None when the folder does not exist yet).",
     "properties": {
@@ -107,6 +241,43 @@
     "title": "Folder",
     "type": "object"
    },
+   "Frame": {
+    "description": "A picture of the scene at `time` seconds; `url` is a path from the app's root, which the page puts its base before\n(`api.url`), as for every request.",
+    "properties": {
+     "time": {
+      "title": "Time",
+      "type": "number"
+     },
+     "url": {
+      "title": "Url",
+      "type": "string"
+     }
+    },
+    "required": [
+     "time",
+     "url"
+    ],
+    "title": "Frame",
+    "type": "object"
+   },
+   "Guess": {
+    "properties": {
+     "because": {
+      "title": "Because",
+      "type": "string"
+     },
+     "guess": {
+      "title": "Guess",
+      "type": "string"
+     }
+    },
+    "required": [
+     "guess",
+     "because"
+    ],
+    "title": "Guess",
+    "type": "object"
+   },
    "HTTPValidationError": {
     "properties": {
      "detail": {
@@ -120,9 +291,334 @@
     "title": "HTTPValidationError",
     "type": "object"
    },
+   "Page_Task_": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/Task"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "next": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next"
+     },
+     "total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total"
+     }
+    },
+    "required": [
+     "items",
+     "next",
+     "total"
+    ],
+    "title": "Page[Task]",
+    "type": "object"
+   },
+   "Peaks": {
+    "description": "The source's sound as the lowest and highest sample of each slice, -1 to 1, over `seconds`.",
+    "properties": {
+     "max": {
+      "items": {
+       "type": "number"
+      },
+      "title": "Max",
+      "type": "array"
+     },
+     "min": {
+      "items": {
+       "type": "number"
+      },
+      "title": "Min",
+      "type": "array"
+     },
+     "seconds": {
+      "title": "Seconds",
+      "type": "number"
+     }
+    },
+    "required": [
+     "seconds",
+     "min",
+     "max"
+    ],
+    "title": "Peaks",
+    "type": "object"
+   },
+   "Picture": {
+    "properties": {
+     "problems": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Problems",
+      "type": "array"
+     },
+     "quality": {
+      "enum": [
+       "good",
+       "fair",
+       "poor"
+      ],
+      "title": "Quality",
+      "type": "string"
+     }
+    },
+    "required": [
+     "quality",
+     "problems"
+    ],
+    "title": "Picture",
+    "type": "object"
+   },
+   "Progress": {
+    "description": "How far a task has got. `total` None means not known yet; `text` is the line a person reads (\"Page 3 of 40\").",
+    "properties": {
+     "at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "At"
+     },
+     "done": {
+      "default": 0,
+      "title": "Done",
+      "type": "number"
+     },
+     "stage": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stage"
+     },
+     "text": {
+      "default": "",
+      "title": "Text",
+      "type": "string"
+     },
+     "total": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total"
+     }
+    },
+    "required": [
+     "done",
+     "total",
+     "text",
+     "stage",
+     "at"
+    ],
+    "title": "Progress",
+    "type": "object"
+   },
    "ReelsSettings": {
     "properties": {},
     "title": "ReelsSettings",
+    "type": "object"
+   },
+   "Scene": {
+    "description": "One scene: its place on the tape, how sure the cut that starts it is, and what step 3 found about it (`None`\nwhere that job has not run yet).",
+    "properties": {
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "that the cut before it starts a scene; None for the first",
+      "title": "Confidence"
+     },
+     "description": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Description"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "end": {
+      "title": "End",
+      "type": "number"
+     },
+     "faces": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the most faces on any one of its keyframes; None before the faces job",
+      "title": "Faces"
+     },
+     "frames": {
+      "items": {
+       "$ref": "#/components/schemas/Frame"
+      },
+      "title": "Frames",
+      "type": "array"
+     },
+     "index": {
+      "description": "from 0, in time order",
+      "title": "Index",
+      "type": "integer"
+     },
+     "reasons": {
+      "description": "why the cut before it is a boundary, in words",
+      "items": {
+       "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+     },
+     "shots": {
+      "title": "Shots",
+      "type": "integer"
+     },
+     "speech": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "what is said in it (doubtful segments left out); None before the transcript",
+      "title": "Speech"
+     },
+     "start": {
+      "title": "Start",
+      "type": "number"
+     }
+    },
+    "required": [
+     "index",
+     "start",
+     "end",
+     "shots",
+     "confidence",
+     "reasons",
+     "frames",
+     "description",
+     "faces",
+     "speech"
+    ],
+    "title": "Scene",
+    "type": "object"
+   },
+   "Scenes": {
+    "description": "A source's scenes as the browser shows them. `waiting` says, in a sentence, what the scenes wait for while there\nare none yet.",
+    "properties": {
+     "analysis": {
+      "$ref": "#/components/schemas/Analysis"
+     },
+     "scenes": {
+      "items": {
+       "$ref": "#/components/schemas/Scene"
+      },
+      "title": "Scenes",
+      "type": "array"
+     },
+     "source": {
+      "$ref": "#/components/schemas/Described"
+     },
+     "waiting": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Waiting"
+     }
+    },
+    "required": [
+     "source",
+     "analysis",
+     "waiting",
+     "scenes"
+    ],
+    "title": "Scenes",
+    "type": "object"
+   },
+   "Segment": {
+    "properties": {
+     "doubtful": {
+      "description": "Whisper itself doubts it is speech",
+      "title": "Doubtful",
+      "type": "boolean"
+     },
+     "end": {
+      "title": "End",
+      "type": "number"
+     },
+     "start": {
+      "title": "Start",
+      "type": "number"
+     },
+     "text": {
+      "title": "Text",
+      "type": "string"
+     },
+     "words": {
+      "items": {
+       "$ref": "#/components/schemas/Word"
+      },
+      "title": "Words",
+      "type": "array"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "text",
+     "doubtful",
+     "words"
+    ],
+    "title": "Segment",
     "type": "object"
    },
    "ServiceStatus": {
@@ -245,6 +741,174 @@
     "title": "SystemInfo",
     "type": "object"
    },
+   "Task": {
+    "description": "A job or task row as an API answers it.",
+    "properties": {
+     "attempts": {
+      "default": 0,
+      "title": "Attempts",
+      "type": "integer"
+     },
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "domain": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Domain"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "finished_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Finished At"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "string"
+       }
+      ],
+      "title": "Id"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "progress": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Progress"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "result": {
+      "title": "Result"
+     },
+     "started_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At"
+     },
+     "state": {
+      "enum": [
+       "queued",
+       "running",
+       "done",
+       "failed",
+       "cancelled"
+      ],
+      "title": "State",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "state",
+     "created_at",
+     "started_at",
+     "finished_at",
+     "error",
+     "result",
+     "progress",
+     "attempts",
+     "domain"
+    ],
+    "title": "Task",
+    "type": "object"
+   },
+   "Transcript": {
+    "description": "The whole source's speech, or no segments with `waiting` set before the transcript job has run.",
+    "properties": {
+     "language": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Language"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model"
+     },
+     "segments": {
+      "items": {
+       "$ref": "#/components/schemas/Segment"
+      },
+      "title": "Segments",
+      "type": "array"
+     },
+     "waiting": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Waiting"
+     }
+    },
+    "required": [
+     "language",
+     "model",
+     "waiting",
+     "segments"
+    ],
+    "title": "Transcript",
+    "type": "object"
+   },
    "ValidationError": {
     "properties": {
      "ctx": {
@@ -353,6 +1017,41 @@
     ],
     "title": "Video",
     "type": "object"
+   },
+   "Word": {
+    "properties": {
+     "end": {
+      "title": "End",
+      "type": "number"
+     },
+     "probability": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Probability"
+     },
+     "start": {
+      "title": "Start",
+      "type": "number"
+     },
+     "word": {
+      "title": "Word",
+      "type": "string"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "word",
+     "probability"
+    ],
+    "title": "Word",
+    "type": "object"
    }
   }
  },
@@ -380,6 +1079,276 @@
      }
     },
     "summary": "Get Health"
+   }
+  },
+  "/api/jobs": {
+   "get": {
+    "operationId": "list_jobs_api_jobs_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "state",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "items": {
+          "enum": [
+           "queued",
+           "running",
+           "done",
+           "failed",
+           "cancelled"
+          ],
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "State"
+      }
+     },
+     {
+      "in": "query",
+      "name": "kind",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Kind"
+      }
+     },
+     {
+      "in": "query",
+      "name": "domain",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Domain"
+      }
+     },
+     {
+      "in": "query",
+      "name": "after",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "After"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Page_Task_"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "List Jobs",
+    "tags": [
+     "jobs"
+    ]
+   }
+  },
+  "/api/jobs/counts": {
+   "get": {
+    "operationId": "job_counts_api_jobs_counts_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": {
+          "type": "integer"
+         },
+         "title": "Response Job Counts Api Jobs Counts Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Job Counts",
+    "tags": [
+     "jobs"
+    ]
+   }
+  },
+  "/api/jobs/{job_id}": {
+   "get": {
+    "operationId": "get_job_api_jobs__job_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "job_id",
+      "required": true,
+      "schema": {
+       "title": "Job Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Task"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Job",
+    "tags": [
+     "jobs"
+    ]
+   }
+  },
+  "/api/jobs/{job_id}/cancel": {
+   "post": {
+    "operationId": "cancel_job_api_jobs__job_id__cancel_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "job_id",
+      "required": true,
+      "schema": {
+       "title": "Job Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Task"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Cancel Job",
+    "tags": [
+     "jobs"
+    ]
+   }
+  },
+  "/api/jobs/{job_id}/retry": {
+   "post": {
+    "operationId": "retry_job_api_jobs__job_id__retry_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "job_id",
+      "required": true,
+      "schema": {
+       "title": "Job Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Task"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Retry Job",
+    "tags": [
+     "jobs"
+    ]
    }
   },
   "/api/settings": {
@@ -515,6 +1484,288 @@
      }
     },
     "summary": "Post Source"
+   }
+  },
+  "/api/sources/{source_id}": {
+   "get": {
+    "operationId": "get_source_api_sources__source_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Described"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Source"
+   }
+  },
+  "/api/sources/{source_id}/keyframes/{name}": {
+   "get": {
+    "operationId": "get_keyframe_api_sources__source_id__keyframes__name__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "name",
+      "required": true,
+      "schema": {
+       "title": "Name",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Keyframe"
+   }
+  },
+  "/api/sources/{source_id}/peaks": {
+   "get": {
+    "operationId": "get_peaks_api_sources__source_id__peaks_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "buckets",
+      "required": false,
+      "schema": {
+       "default": 4000,
+       "maximum": 20000,
+       "minimum": 1,
+       "title": "Buckets",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Peaks"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Peaks"
+   }
+  },
+  "/api/sources/{source_id}/proxy": {
+   "get": {
+    "operationId": "get_proxy_api_sources__source_id__proxy_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Proxy"
+   }
+  },
+  "/api/sources/{source_id}/scenes": {
+   "get": {
+    "operationId": "get_scenes_api_sources__source_id__scenes_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Scenes"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Scenes"
+   }
+  },
+  "/api/sources/{source_id}/thumbnails/{name}": {
+   "get": {
+    "operationId": "get_thumbnail_api_sources__source_id__thumbnails__name__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "name",
+      "required": true,
+      "schema": {
+       "title": "Name",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Thumbnail"
+   }
+  },
+  "/api/sources/{source_id}/transcript": {
+   "get": {
+    "operationId": "get_transcript_api_sources__source_id__transcript_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Transcript"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Transcript"
    }
   },
   "/api/system": {
