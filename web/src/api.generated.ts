@@ -277,6 +277,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workflows/tape/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["list_runs_api_workflows_tape_subjects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/tape/subjects/{subject}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_workflows_tape_subjects__subject__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/tape/subjects/{subject}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Subject */
+        post: operations["run_subject_api_workflows_tape_subjects__subject__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/tape/subjects/{subject}/stages/{stage}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stage History */
+        get: operations["stage_history_api_workflows_tape_subjects__subject__stages__stage__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/tape/subjects/{subject}/stages/{stage}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Stage */
+        post: operations["approve_stage_api_workflows_tape_subjects__subject__stages__stage__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/tape/subjects/{subject}/stages/{stage}/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clear Stage */
+        post: operations["clear_stage_api_workflows_tape_subjects__subject__stages__stage__clear_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -303,6 +405,15 @@ export interface components {
              * @description None for a source with no sound
              */
             transcript: boolean | null;
+        };
+        /**
+         * Approval
+         * @description The body of an approval: `value` is kept with it (the choice made, the policy judged by). A request body, so a
+         *     plain BaseModel (`contracts.ApiModel` would give the schema an -Input and an -Output twin).
+         */
+        Approval: {
+            /** Value */
+            value?: unknown;
         };
         /**
          * Described
@@ -403,6 +514,15 @@ export interface components {
             /** Total */
             total: number | null;
         };
+        /** Page[WorkflowRun] */
+        Page_WorkflowRun_: {
+            /** Items */
+            items: components["schemas"]["WorkflowRun"][];
+            /** Next */
+            next: string | null;
+            /** Total */
+            total: number | null;
+        };
         /**
          * Peaks
          * @description The source's sound as the lowest and highest sample of each slice, -1 to 1, over `seconds`.
@@ -465,7 +585,7 @@ export interface components {
             end: number;
             /**
              * Faces
-             * @description the most faces on any one of its keyframes; None before the faces job
+             * @description the most faces on any one of its keyframes; None before the faces step
              */
             faces: number | null;
             /** Frames */
@@ -541,6 +661,57 @@ export interface components {
             path: string;
         };
         /**
+         * StageEvent
+         * @description One record of a stage: `status` done, failed or cleared; `by` who approved a gate or cleared it; `data` the
+         *     stage's answer (or a gate's value), sent only where one stage's history is asked for.
+         */
+        StageEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** By */
+            by: string | null;
+            /** Data */
+            data: unknown;
+            /**
+             * Elapsed S
+             * @default 0
+             */
+            elapsed_s: number;
+            /** Error */
+            error: string | null;
+            /** Metrics */
+            metrics: {
+                [key: string]: unknown;
+            };
+            /** Stage */
+            stage: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * StageRun
+         * @description A stage of a pipeline as one subject stands: what a step list on screen draws, a row per stage.
+         */
+        StageRun: {
+            /** Gate */
+            gate: boolean;
+            last: components["schemas"]["StageEvent"] | null;
+            /** Name */
+            name: string;
+            /** Needs */
+            needs: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "done" | "ready" | "stale" | "failed" | "waiting" | "blocked";
+            /** Title */
+            title: string;
+        };
+        /**
          * SystemInfo
          * @description What `GET /api/system` answers: what is running, where its data is, and whether its services answer.
          */
@@ -603,7 +774,7 @@ export interface components {
         };
         /**
          * Transcript
-         * @description The whole source's speech, or no segments with `waiting` set before the transcript job has run.
+         * @description The whole source's speech, or no segments with `waiting` set before the transcript step has run.
          */
         Transcript: {
             /** Language */
@@ -654,6 +825,28 @@ export interface components {
             start: number;
             /** Word */
             word: string;
+        };
+        /**
+         * WorkflowRun
+         * @description One subject's way through one pipeline, and the queue job advancing it now (or the last one), if any.
+         */
+        WorkflowRun: {
+            /** Failed */
+            failed: string[];
+            job: components["schemas"]["Task"] | null;
+            /** Pipeline */
+            pipeline: string;
+            /** Stages */
+            stages: components["schemas"]["StageRun"][];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "done" | "failed" | "waiting" | "blocked" | "stopped";
+            /** Subject */
+            subject: string;
+            /** Waiting */
+            waiting: string[];
         };
     };
     responses: never;
@@ -1175,6 +1368,201 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemInfo"];
+                };
+            };
+        };
+    };
+    list_runs_api_workflows_tape_subjects_get: {
+        parameters: {
+            query?: {
+                state?: string[] | null;
+                after?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_WorkflowRun_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_workflows_tape_subjects__subject__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_subject_api_workflows_tape_subjects__subject__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_history_api_workflows_tape_subjects__subject__stages__stage__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+                stage: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StageEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_stage_api_workflows_tape_subjects__subject__stages__stage__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+                stage: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Approval"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_stage_api_workflows_tape_subjects__subject__stages__stage__clear_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: string;
+                stage: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

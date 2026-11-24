@@ -56,18 +56,18 @@ def _keyframes(db: Session, source: Source, found: Result) -> Result:
 
 
 def _inputs(db: Session, source: Source) -> tuple[Result, Result, Result]:
-    """The current shots, their keyframes and the scenes grouped from them. KeyError before the scenes job has run."""
+    """The current shots, their keyframes and the scenes grouped from them. KeyError before the scenes step has run."""
     found = shots.current(db, source)
     grouped = scenes.current(db, source)
     if found is None or grouped is None or grouped.parameters.get("shots") != found.cache_key:
-        raise KeyError(f"{source.name} has no scenes yet: its descriptions wait for the scenes job")
+        raise KeyError(f"{source.name} has no scenes yet: its descriptions wait for the scenes step")
     return found, _keyframes(db, source, found), grouped
 
 
 def describe(db: Session, source: Source, *, job_id: int | None = None) -> list[tuple[Result, bool]]:
     """A description of every current scene, each asked of strata-models unless the same request is stored, and
     whether it is new. Recorded one by one, so a failure part way keeps the scenes already described. The transcript
-    is read when there is one; the caller waits for it on a source with sound (`jobs.describe_scenes`)."""
+    is read when there is one; the `describe` stage needs the `transcript` stage (`jobs.TAPE`), so it has run."""
     assert source.sha256 is not None  # noqa: S101 - the scenes needed it
     found, keys, grouped = _inputs(db, source)
     said = speech.current(db, source)
@@ -185,7 +185,7 @@ def find_faces(db: Session, source: Source, *, job_id: int | None = None) -> tup
 
 
 def current_faces(db: Session, source: Source) -> Result | None:
-    """The faces on the current keyframes, or None before the faces job has run for them."""
+    """The faces on the current keyframes, or None before the faces step has run for them."""
     found = shots.current(db, source)
     if found is None:
         return None

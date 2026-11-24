@@ -6,7 +6,7 @@ import { tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
 import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
 import { describePicture, describeSources, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
-import { aspectOf, describeFaces, describeScenes, sceneName, transcriptGroups } from '../../src/screens/TapeScreen'
+import { aspectOf, describeFaces, describeJobNow, describeScenes, sceneName, transcriptGroups } from '../../src/screens/TapeScreen'
 
 describe('the Sources finding and picture', () => {
   it('counts sources and adds up their running time, naming those of unknown length', () => {
@@ -64,12 +64,20 @@ describe('the tape page', () => {
     expect(describeScenes(tapeScenes)).toBe(
       `${format.count(6, 'scene')} over 2:59:48; ${format.count(1, 'scene')} not described yet; 2 starts to check.`,
     )
-    expect(describeScenes(waitingScenes(4))).toBe('Grouping the shots into scenes (the keyframes and scenes jobs).')
+    expect(describeScenes(waitingScenes(4))).toBe('Grouping the shots into scenes (the keyframes and scenes steps).')
     const one = { ...tapeScenes, scenes: [{ ...tapeScenes.scenes[0] }], analysis: { ...tapeScenes.analysis, transcript: false } }
     expect(describeScenes(one)).toBe(`${format.count(1, 'scene')} over 6:52; speech still to come.`)
     expect(describeScenes({ ...one, scenes: [], waiting: null })).toBe('No scenes found.')
     const unsure = { ...one, scenes: [{ ...tapeScenes.scenes[4] }] }
     expect(describeScenes(unsure)).toBe(`${format.count(1, 'scene')} over 7:12; not described yet; 1 start to check; speech still to come.`)
+  })
+
+  it('says what the tape’s job is doing now', () => {
+    const progress = { done: 4, total: 10, text: 'Find the faces', stage: 'faces', at: null }
+    expect(describeJobNow({ state: 'running', attempts: 1, progress })).toBe('Find the faces')
+    expect(describeJobNow({ state: 'running', attempts: 1, progress: null })).toBe('Starting')
+    expect(describeJobNow({ state: 'queued', attempts: 0, progress: null })).toBe('Waiting for its turn')
+    expect(describeJobNow({ state: 'queued', attempts: 2, progress: null })).toBe('Trying the failed step again shortly')
   })
 
   it('counts faces as a floor, and names scenes from one', () => {
@@ -112,10 +120,10 @@ describe('the tape page', () => {
 
 describe('the jobs page', () => {
   it('names a job by what it does to which source', () => {
-    expect(describeJob({ kind: 'shots', domain: 'source:5' }, initialSources)).toBe('Find the shots in christmas-1996.mkv')
-    expect(describeJob({ kind: 'hash', domain: 'source:77' }, initialSources)).toBe('Read all of source 77')
-    expect(describeJob({ kind: 'hash', domain: null }, initialSources)).toBe('Read all of a source')
-    expect(describeJob({ kind: 'restore', domain: 'source:5' }, initialSources)).toBe('restore (christmas-1996.mkv)')
+    expect(describeJob({ kind: 'workflow:tape', domain: 'tape:source:5' }, initialSources)).toBe('Analyse christmas-1996.mkv')
+    expect(describeJob({ kind: 'workflow:tape', domain: 'tape:source:77' }, initialSources)).toBe('Analyse source 77')
+    expect(describeJob({ kind: 'workflow:tape', domain: null }, initialSources)).toBe('Analyse a source')
+    expect(describeJob({ kind: 'restore', domain: 'tape:source:5' }, initialSources)).toBe('restore (christmas-1996.mkv)')
     expect(describeJob({ kind: 'restore', domain: null }, [])).toBe('restore')
   })
   it('says what the queue is doing', () => {

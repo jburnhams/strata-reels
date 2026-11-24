@@ -1,7 +1,7 @@
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { scenesError, scenesPartWay, scenesWaiting, transcriptWaiting } from '../../src/mocks/handlers'
-import { tapeScenes, waitingScenes } from '../../src/mocks/tape'
+import { runError, scenesError, scenesPartWay, scenesWaiting, transcriptWaiting } from '../../src/mocks/handlers'
+import { tapeRunFailed, tapeRunPartWay, tapeScenes, waitingScenes } from '../../src/mocks/tape'
 import { openApp, screen, waitFor, within } from '../utils/render'
 import { mock, server } from '../utils/server'
 
@@ -114,27 +114,62 @@ describe('a tape', () => {
     server.use(transcriptWaiting)
     openApp('/sources/5?view=transcript')
     expect(await screen.findByText('No transcript yet')).toBeInTheDocument()
-    expect(screen.getByText('Listening for speech (the transcript job).')).toBeInTheDocument()
+    expect(screen.getByText('Listening for speech (the transcript step).')).toBeInTheDocument()
   })
 
-  it('names what the scenes wait for, and where to see the jobs', async () => {
+  it('names what the scenes wait for, shows the steps, and links to the jobs', async () => {
     server.use(scenesWaiting)
     const { user, router } = openApp('/sources/5')
     expect(await screen.findByText('No scenes yet')).toBeInTheDocument()
     expect(screen.getByText(/Grouping the shots into scenes/)).toBeInTheDocument()
+    expect(await screen.findByRole('list', { name: 'Steps of the analysis' })).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: 'jobs page' }))
     expect(router.state.location.pathname).toBe('/jobs')
   })
 
-  it('fills in as the tape’s jobs finish, without a reload', { timeout: 15_000 }, async () => {
+  it('fills in as the tape’s job runs, without a reload', { timeout: 15_000 }, async () => {
     let grouped = false
     server.use(http.get('*/api/sources/:id/scenes', () => HttpResponse.json(grouped ? tapeScenes : waitingScenes(5))))
+    mock.runs[5] = tapeRunPartWay
     openApp('/sources/5')
     expect(await screen.findByText('No scenes yet')).toBeInTheDocument()
-    // the scenes job finishes, and with it the rest of the tape's queue
+    expect(await screen.findByText('Analysing')).toBeInTheDocument() // the job's word, over the steps
+    // the scenes are grouped, and the tape's job finishes the rest
     grouped = true
-    for (const j of mock.jobs) if (j.state === 'queued' || j.state === 'running') j.state = 'done'
+    mock.runs[5] = {
+      ...tapeRunPartWay,
+      stages: tapeRunPartWay.stages.map(s => ({ ...s, state: 'done' })),
+      state: 'done',
+      job: { ...tapeRunPartWay.job!, state: 'done' },
+    }
     expect(await screen.findByRole('list', { name: 'Scenes' }, { timeout: 12_000 })).toBeInTheDocument()
+  })
+
+  it('names a failed step in the finding, and runs the tape again from its Steps tab', async () => {
+    mock.runs[5] = tapeRunFailed
+    const { user, router } = openApp('/sources/5')
+    expect(await screen.findByText(/"Find the faces" failed: the Steps tab says why\.$/)).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Steps' }))
+    expect(router.state.location.search).toBe('?view=steps')
+    const steps = await screen.findByRole('list', { name: 'Steps of the analysis' })
+    expect(within(steps).getAllByRole('listitem')).toHaveLength(10)
+    const faces = within(steps)
+      .getAllByRole('listitem')
+      .find(li => li.textContent?.includes('Find the faces'))!
+    expect(faces).toHaveTextContent('strata-models is not answering')
+    await user.click(within(faces).getByRole('button', { name: /Try again/ }))
+    await waitFor(() => expect(mock.runs[5].job?.state).toBe('queued'))
+    expect(await screen.findByText('Analysing')).toBeInTheDocument() // the job's progress while it runs again
+    expect(screen.getByText('Trying the failed step again shortly')).toBeInTheDocument() // the same job, retrying
+    expect(screen.queryByText(/failed: the Steps tab says why/)).toBeNull()
+  })
+
+  it('says the steps could not be read without losing the scenes', async () => {
+    server.use(runError)
+    const { user } = openApp('/sources/5?view=steps')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server could not answer (503)')
+    await user.click(screen.getByRole('tab', { name: 'Scenes' }))
+    expect(screen.getByRole('list', { name: 'Scenes' })).toBeInTheDocument()
   })
 
   it('shows a tape part way through its jobs without calling anything missing', async () => {
