@@ -55,7 +55,8 @@ def test_added_footage_is_hashed_by_work(cli: Cli, tmp_path):
     assert "hash       done" in cli("work").stdout  # and the proxy and thumbnails it queued (no sound, no peaks)
     assert "(nothing queued)" in cli("work").stdout
     assert hashlib.sha256(tape.read_bytes()).hexdigest()[:12] in cli("sources").stdout
-    assert len(json.loads(cli("jobs", "--json").stdout)["items"]) == 3
+    # and the shots, which wait for strata-models (not running here: the job is queued to try again)
+    assert len(json.loads(cli("jobs", "--json").stdout)["items"]) == 4
 
 
 def test_work_makes_the_proxy_thumbnails_and_peaks_from_the_raw_tape(cli: Cli, tmp_path):
@@ -95,3 +96,70 @@ def test_work_makes_the_proxy_thumbnails_and_peaks_from_the_raw_tape(cli: Cli, t
             assert max(json.load(f)["max"]) > 0.1
         assert all(r[0].inputs == [source.sha256] for r in (proxy, thumbs, peaks))
     assert "(nothing queued)" in cli("work").stdout
+
+
+def _colour(path: str) -> list[float]:
+    """A keyframe's average colour (Y, U and V, centred), read by the real ffmpeg shrinking it to one pixel: the
+    stand-in embedding below. Not a lavfi `movie=` source, which a Windows path's colon breaks."""
+    import subprocess
+
+    out = subprocess.run(
+        [
+            *("ffmpeg", "-v", "error", "-i", path, "-vf", "scale=1:1:flags=area,format=yuv444p"),
+            *("-f", "rawvideo", "-"),
+        ],
+        capture_output=True,
+        check=True,
+    ).stdout
+    y, u, v = out[0], out[1], out[2]
+    return [y / 255, (u - 128) / 128, (v - 128) / 128]
+
+
+def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp_path, fake_models):
+    """Step 2 end to end with the real ffmpeg: red for 4 s, dark red for 3 s, black for 1 s, blue for 4 s. strata-models
+    is stood in for (it is another service) and answers the cuts at their known frames; the keyframes are cut from the
+    real file, and their stand-in vectors are their real average colours, so the grouping sees what the pictures show:
+    red and dark red are one scene, the black is the gap, blue is another."""
+    import subprocess
+
+    from app import db, results, scenes, shots
+    from app.models import Source
+
+    tape = tmp_path / "tape.mkv"
+    parts = [("red", 4), ("darkred", 3), ("black", 1), ("blue", 4)]
+    inputs = [a for c, d in parts for a in ("-f", "lavfi", "-i", f"color=c={c}:size=320x240:rate=25:duration={d}")]
+    joined = "".join(f"[{i}:v]" for i in range(len(parts))) + f"concat=n={len(parts)}:v=1:a=0"
+    subprocess.run(
+        ["ffmpeg", "-nostdin", "-v", "error", "-y", *inputs, "-filter_complex", joined, "-c:v", "ffv1", str(tape)],
+        check=True,
+    )
+    fake_models.results["shot-boundaries"] = {
+        "cuts": [{"time": 4.0, "frame": 100, "score": 0.4}, {"time": 7.0, "frame": 175, "score": 0.9},
+                 {"time": 8.0, "frame": 200, "score": 1.0}],
+        "black": [{"start": 7.0, "end": 8.0}], "fps": 25.0, "frames": 300, "threshold": 0.3, "min_shot_s": 0.6,
+    }  # fmt: skip
+    fake_models.results["image-embed"] = lambda p: {"images": [_colour(x) for x in p["paths"]], "dim": 3}
+    cli("add", str(tape))
+    out = cli("work").stdout
+    for kind in ("shots", "keyframes", "scenes"):
+        assert f"{kind:10} done" in out
+    with db.session() as s:
+        source = s.get(Source, 1)
+        assert source is not None
+        found = shots.current(s, source)
+        assert found is not None
+        assert [(x["start"], x["end"], x["black"]) for x in found.payload["shots"]] == [
+            ("0", "4", False), ("4", "7", False), ("7", "8", True), ("8", "12", False),
+        ]  # fmt: skip
+        (keys,) = results.current(s, source, "keyframes")
+        assert [f["frame"] for f in keys.payload["frames"]] == [49, 137, 249]  # the middle of each shot shown
+        grouped = scenes.current(s, source)
+        assert grouped is not None
+        levels = [(b["at"], b["level"]) for b in grouped.payload["boundaries"]]
+        assert levels == [("4", "shot"), ("8", "scene")]
+        assert [(sc["start"], sc["end"], sc["shots"]) for sc in grouped.payload["scenes"]] == [
+            ("0", "7", [0, 1]), ("8", "12", [3]),
+        ]  # fmt: skip
+    listed = cli("scenes", "1").stdout
+    assert "0.00 to      7.00 s    2 shots" in listed
+    assert "8.00 to     12.00 s    1 shots  (boundary 100%)" in listed

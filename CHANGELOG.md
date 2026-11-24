@@ -4,6 +4,17 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-24
 
+**Shots and scenes (R1 step 2; branch `claude/project-thread-36vaj1`)**
+Jonathan asked to start the next step of the plan: split a tape into shots and group them into scenes. Shots come from strata-models; the keyframe each shot needs is made by a new strata-python helper (strata-python #69, pinned by commit until it is released).
+- `src/app/shots.py`: **new**. `detect` asks strata-models' `shot-boundaries` (low priority) unless the same model and settings answered before, and records a `shots` result with its provenance; `payload_of` keeps shots by frame, half-open, with exact times from the stream's rate, each cut's score and a `black` mark, and black stretches snapped to frames; `rate_of`; `keyframes` makes the middle frame of each shot that is not black (`derive.frames`), a derived asset keyed on the shots result; `current`, `middles`.
+- `src/app/scenes.py`: **new**. `embed` asks `image-embed` for the keyframes' vectors and stores them in a file (result `embeddings`); `group` (pure) gives every cut a confidence, level and reasons from cosine similarity and black, and the scenes as runs of shots; `find_scenes` records it as a `scenes` result (role `reels-scenes`, `VERSION`, `PARAMETERS`, the shots and embeddings it read); `current`, `cosine`.
+- `src/app/jobs.py`: kinds `shots` (no local resource), `keyframes` (`disk`) and `scenes`, each queueing the next; `derive_later` also queues the shots; `later`.
+- `src/app/cli.py`: `scenes <source> [--json]`.
+- `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.15,<0.3`, the first release with `derive.frames` and the shot-boundaries client (strata-python #69). The branch pinned #69's commit through `[tool.uv.sources]` until then. strata-python's changelog lists them under 0.2.14, but the 0.2.14 wheel on PyPI does not have them: 0.2.14 was cut before #69 merged.
+- Tests: `tests/unit/test_scenes.py` **new**; `tests/unit/conftest.py` stands in for `derive.frames` and adds `tape_models` (strata-python's `fake_models` answering shots and vectors); `tests/utils/probes.py` holds that tape's answers; `tests/unit/test_jobs.py` and `test_derived.py` expect the step 2 jobs after the hash; `tests/integration/test_cli.py` cuts real keyframes from a red, dark red, black and blue clip and groups them by their real colours (read by shrinking each to one pixel, not with a lavfi `movie=` source, which failed on strata-python's Windows CI); `tests/integration/test_server_api.py` expects the shots job to wait for strata-models, which is not running there. `tests/unit/README.md`: ledger rows.
+- Docs: `docs/implementation-plan.md` step 2 started and what is left; `docs/overview.md` §6 names the new kinds of result; `docs/progress.md` entry; `README.md`, `AGENTS.md`: the jobs and the `scenes` command.
+- Not done: a run on a real tape, `shots-spliced` on real footage and a tape-fault check (all on the GPU machine); measured thresholds; an API for scenes (with step 4's screen).
+
 **strata-python from PyPI again (branch `claude/project-thread-42bdk4`)**
 PR #10 merged with strata-python pinned to strata-python#56's commit through git, since `derive` was not released yet. It is in 0.2.12 (0.2.10 went out without it and 0.2.11 was not uploaded), so reels takes it from PyPI. A correction to #10's entry, which named 0.2.10.
 - `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.12,<0.3`; the `[tool.uv.sources]` git line is removed.

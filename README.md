@@ -13,8 +13,9 @@ uv sync                              # creates .venv from uv.lock (install uv: h
 uv run app doctor                         # check the environment
 uv run app add /path/to/tape.mkv          # read a file with ffprobe and keep it as a source (~/.reels/reels.db)
 uv run app sources                        # the sources kept so far, with their content hash once it is read
-uv run app jobs                           # the job queue (hashing now; analysis from R1 step 2)
+uv run app jobs                           # the job queue: hash, proxy, thumbnails, peaks, shots, keyframes, scenes
 uv run app work                           # run the queued jobs here until none is left (the server runs them while it is up)
+uv run app scenes 1                       # source 1's scenes, once its shots are found (strata-models must be running)
 uv run app serve                          # starts the FastAPI + React app on http://127.0.0.1:8360/
 ```
 
