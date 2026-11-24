@@ -272,8 +272,20 @@ export const tapePeaks: Peaks = (() => {
   return { seconds, min, max }
 })()
 
-// Times before now, so "20 minutes ago" reads the same in every run of the screenshots.
-const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString()
+// Times before now, so "20 minutes ago" reads the same in every run of the screenshots. They are made when this
+// module loads, which in the visual suite is minutes before the last page is shot, so the handlers move them on by
+// the time since (`fresh`), or "33 minutes ago" turns into "34" part way through a run.
+const loaded = Date.now()
+const at = (minutesAgo: number) => new Date(loaded - minutesAgo * 60_000).toISOString()
+const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/
+
+/** A copy of a fixture with every time in it moved on by the time since this module loaded. */
+export function fresh<T>(value: T): T {
+  const by = Date.now() - loaded
+  return JSON.parse(JSON.stringify(value), (_k, v: unknown) =>
+    typeof v === 'string' && ISO.test(v) ? new Date(Date.parse(v) + by).toISOString() : v,
+  ) as T
+}
 /** A tape's job (`workflow:tape`, src/app/jobs.py): one per tape, advancing it through every stage. */
 const job = (id: number, source: number, state: Job['state'], more: Partial<Job> = {}): Job => ({
   // the newest (highest id) was made last

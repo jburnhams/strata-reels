@@ -10,6 +10,7 @@ import { delay, HttpResponse, http } from 'msw'
 import type { Source, WorkflowRun } from '../api'
 import { initialSources, systemNearlyFull as nearlyFull, readSource, systemStatus } from './fixtures'
 import {
+  fresh,
   jobsPage,
   proxyWebm,
   tapeId,
@@ -120,7 +121,7 @@ export const handlers = [
     const states = query.getAll('state')
     const domain = query.get('domain')
     const items = mock.jobs.filter(j => (!states.length || states.includes(j.state)) && (domain === null || j.domain === domain))
-    return HttpResponse.json({ items, next: null, total: items.length })
+    return HttpResponse.json(fresh({ items, next: null, total: items.length }))
   }),
   // As strata-python's queue does: a queued job is cancelled at once, a running one asked to stop; a
   // failed or cancelled one is queued again; anything else is refused with the server's sentence.
@@ -142,7 +143,7 @@ export const handlers = [
   // again by a queued job, as `enqueue` dedupes on the tape).
   http.get(at(paths.run), ({ params }) => {
     const id = subjectId(params.subject)
-    return sourceOf(id) ? HttpResponse.json(runOf(id)) : notFound(`there is no source ${String(id)}`)
+    return sourceOf(id) ? HttpResponse.json(fresh(runOf(id))) : notFound(`there is no source ${String(id)}`)
   }),
   http.post(at(paths.runAgain), ({ params }) => {
     const id = subjectId(params.subject)
@@ -156,7 +157,7 @@ export const handlers = [
       stages: now.stages.map(s => (s.state === 'failed' ? { ...s, state: 'ready' as const } : s)),
       job,
     }
-    return HttpResponse.json(mock.runs[id])
+    return HttpResponse.json(fresh(mock.runs[id]))
   }),
 ]
 
@@ -193,14 +194,14 @@ export const jobsLoading = queue(async () => {
 export const jobsEmpty = queue(counts => HttpResponse.json(counts ? {} : { items: [], next: null, total: 0 }))
 export const jobsError = queue(down)
 /** More jobs than the page shows: the list is cut, and says so. */
-export const jobsMore = http.get(at(paths.jobs), () => HttpResponse.json({ items: mock.jobs, next: 'c200', total: 1340 }))
+export const jobsMore = http.get(at(paths.jobs), () => HttpResponse.json(fresh({ items: mock.jobs, next: 'c200', total: 1340 })))
 
 /** The tape part way through its pipeline, its job running. */
-export const runPartWay = http.get(at(paths.run), () => HttpResponse.json(tapeRunPartWay))
+export const runPartWay = http.get(at(paths.run), () => HttpResponse.json(fresh(tapeRunPartWay)))
 /** The tape's faces stage failed, and its job waits to try again. */
-export const runFailed = http.get(at(paths.run), () => HttpResponse.json(tapeRunFailed))
+export const runFailed = http.get(at(paths.run), () => HttpResponse.json(fresh(tapeRunFailed)))
 export const runError = http.get(at(paths.run), down)
 /** The tape before its scenes are grouped: the scenes step next, nothing running (as `scenesWaiting`). */
 export const runWaiting = http.get(at(paths.run), () =>
-  HttpResponse.json(tapeRun(tapeId, { scenes: 'ready', faces: 'ready', transcript: 'ready', describe: 'blocked' })),
+  HttpResponse.json(fresh(tapeRun(tapeId, { scenes: 'ready', faces: 'ready', transcript: 'ready', describe: 'blocked' }))),
 )
