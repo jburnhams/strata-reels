@@ -4,6 +4,10 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-24
 
+**strata-python 0.2.18, for tapes with over 100 keyframes (branch `strata-python-0.2.18`)**
+ffmpeg 9 (the GPU machine's) refused to pick more than 100 frames in one run; strata-python 0.2.18 picks them in sums it takes.
+- `pyproject.toml`, `uv.lock`: strata-python `>=0.2.18`.
+
 **Tuned on the first real tape: several keyframes a shot, scene numbers, doubtful speech (branch `real-tape`)**
 The pipeline ran on a real 21-minute VHS family tape on the GPU machine; what it showed is in `docs/progress.md`.
 - `src/app/shots.py`: a keyframe about every six seconds of a shot instead of one (`KEYFRAMES["every_s"]`, `frames_of`, `keyframe_frames`, `frames_in`; `middles` is gone).
