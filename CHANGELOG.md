@@ -13,6 +13,8 @@ Jonathan asked for the web view of a tape's scenes (thumbnail strips, transcript
 - `web/src/mocks/tape.ts`: **new**, christmas-1996.mkv's stand-in results (six scenes, SVG thumbnails, a transcript, quiet peaks, a job queue, a two-second WebM for the player); `handlers.ts` answers every new route and adds states.
 - Tests: `tests/unit/test_browse.py` **new** (9); `web/tests/integration/TapeScreen.test.tsx` and `JobsScreen.test.tsx` **new**; `web/tests/unit/logic.test.ts`: the findings, job names, aspect and transcript grouping. Stories `web/stories/tape.stories.tsx`, `jobs.stories.tsx` **new**; `web/strata-visual.config.ts`: the `tape` and `jobs` routes; baselines for them.
 - Docs: `docs/implementation-plan.md` step 4 started; `docs/progress.md` entry; `README.md`, `AGENTS.md` (`browse.py`), `tests/unit/README.md` ledger row.
+- `web/package.json`, `package-lock.json`: strata-react `^1.3.10`, the release with `FilmStrip` and `Waveform normalise` (strata-react #322), made for this page.
+- Visual baselines: new `tape` and `jobs` route shots and `screens-tape--*`, `screens-jobs--*` stories; every existing route shot changed for the Jobs entry in the menu and the sources' names as links. Written on CI's runner by the update-visual-baselines workflow.
 - Not done: corrections stored as overrides (the rest of step 4); a look at a real tape's page on the GPU machine.
 
 **Speech, faces and scene descriptions (R1 step 3; branch `claude/project-thread-36vaj1`)**
