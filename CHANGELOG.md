@@ -13,6 +13,7 @@ The pipeline ran on a real 21-minute VHS family tape on the GPU machine; what it
 - `src/app/jobs.py`, `web/src/mocks/tape.ts`: the keyframes stage is "Take pictures of each shot". `src/app/browse.py`, `web/openapi.json`, `web/src/api.generated.ts`: the preset's name.
 - `tests/integration/conftest.py`: no strata-models in the integration tests, also where the real one runs. `tests/unit/test_scenes.py`, `test_describe.py`: the above.
 - `docs/implementation-plan.md`, `docs/progress.md`.
+- `web/tests/visual/baselines/`: the tape page's steps, for the keyframes stage's new words (written by the CI runner).
 
 **The tape's analysis as one strata-python pipeline, with its steps on the tape page (branch `claude/project-thread-5wm5fj`)**
 Jonathan asked to update to the latest strata-python and strata-react and make full use of their changes, and chose to move the job chain onto strata-python's new `workflow` pipeline now. One job per tape replaces eleven kinds of job that queued each other; the tape page shows the steps with strata-react's `WorkflowSteps`.
