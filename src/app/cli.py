@@ -42,7 +42,7 @@ def cmd_add(args: argparse.Namespace) -> int:
             except sources.SourceError as e:
                 print(f"  refused: {e}", file=sys.stderr)
                 return 1
-            jobs.ingest_later(q, source)
+            jobs.ingest_later(q, source, again=not new, by="cli")
             print(
                 json.dumps(sources.as_json(source))
                 if args.json
@@ -115,7 +115,9 @@ def cmd_jobs(args: argparse.Namespace) -> int:
 
 def cmd_work(args: argparse.Namespace) -> int:
     with db.opened() as engine:
-        ran = jobs.work(jobs.queue(engine))
+        q = jobs.queue(engine)
+        jobs.adopt(q)
+        ran = jobs.work(q)
         shown = {j.id: jobs.stages_of(j) for j in ran}
     jobs.close_records()
     for j in ran:

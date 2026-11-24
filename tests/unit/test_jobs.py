@@ -3,6 +3,7 @@ run in this process (`jobs.work`, the queue's deterministic `step`) or by the se
 test's migrated database and real files. Job processes (the server's default) run in tests/integration."""
 
 import hashlib
+import os
 import time
 
 import pytest
@@ -14,7 +15,7 @@ from strata_python import media
 from strata_python.db import Project
 from strata_python.db.web import Database
 
-from app import jobs, sources
+from app import derived, jobs, results, sources
 from app.models import Source
 
 STAGES = ["hash", "proxy", "thumbnails", "peaks", "shots", "keyframes", "scenes", "faces", "transcript", "describe"]
@@ -136,7 +137,8 @@ def test_the_server_queues_the_tape_and_runs_it_while_it_is_up(db_env: str, tmp_
         while any(t.state != "done" for t in q.page().items) and time.monotonic() < deadline:
             time.sleep(0.05)
         run = client.get("/api/workflows/tape/subjects/source:1").json()
-    assert [(t.kind, t.state) for t in q.page().items] == [("workflow:tape", "done")]
+    # the server took up the tape it had no record of (`adopt`), then ran it again when it was added again
+    assert {(t.kind, t.state) for t in q.page().items} == {("workflow:tape", "done")}
     assert run["state"] == "done"
     assert run["job"]["state"] == "done"
     # no audio stream: the peaks and transcript stages are done with nothing to make
@@ -184,3 +186,44 @@ def test_the_workflow_routes_show_a_tape_and_run_it_again(client: TestClient, en
     cleared = client.post(f"/api/workflows/tape/subjects/{subject}/stages/faces/clear").json()
     assert {s["name"]: s["state"] for s in cleared["stages"]}["faces"] == "ready"
     assert cleared["job"]["state"] == "queued"
+
+
+def test_a_tape_added_again_checks_each_step_against_what_is_stored(engine: Engine, tmp_path, tape_models):
+    source = add(engine, tmp_path, b"\x09" * 300_000)
+    q = jobs.queue(engine)
+    jobs.ingest_later(q, source)
+    jobs.work(q)
+    # the browser copy is deleted, and strata-models gets a new shot detector
+    with Session(engine) as s:
+        (proxy,) = results.current(s, s.get(Source, source.id), "proxy")  # type: ignore[arg-type]
+        os.remove(derived.path_of(proxy))
+    tape_models.models["shot-boundaries"] = "a-newer-detector"
+    jobs.ingest_later(q, source)  # queued as before: every stage is done for the tape's inputs, so nothing runs
+    jobs.work(q)
+    assert made(source)["proxy"] is True  # still the first run's records
+    jobs.ingest_later(q, source, again=True, by="ada")  # added again: each step looks
+    (job,) = jobs.work(q)
+    assert job.state == "done"
+    assert made(source) == {"hash": None, "proxy": True, "thumbnails": False, "peaks": False, "shots": True} | {
+        "transcript": False, "keyframes": True, "scenes": True, "faces": True, "describe": 2,
+    }  # fmt: skip
+    cleared = [r for r in jobs.store().history(jobs.subject_of(source)) if r.status == "cleared"]
+    assert {r.by for r in cleared} == {"ada"}
+    assert "hash" not in {r.stage for r in cleared}  # the whole file is not read again
+
+
+def test_a_queue_from_before_the_pipeline_is_adopted(engine: Engine, tmp_path, tape_models):
+    old = add(engine, tmp_path, b"\x0a" * 200_000)
+    with Session(engine) as s:  # hashed by the old `hash` job, whose assets job is still waiting
+        found = s.get(Source, old.id)
+        assert found is not None
+        found.sha256 = hashlib.sha256(b"\x0a" * 200_000).hexdigest()
+        s.commit()
+    q = jobs.queue(engine)
+    stuck = q.enqueue("proxy", {"source": old.id}, domain=f"source:{old.id}")
+    assert jobs.adopt(q) == [old.id]
+    assert q.get(stuck).state == "cancelled"  # type: ignore[union-attr]
+    (job,) = jobs.work(q)
+    assert (job.kind, job.state) == ("workflow:tape", "done")
+    assert made(old)["hash"] is None  # the hash it had stands: the file was not read again
+    assert jobs.adopt(q) == []  # nothing more to take up

@@ -94,7 +94,7 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
     @app.post("/api/sources", status_code=201)
     def post_source(b: SourceIn, s: DbSession, response: Response) -> sources.Described:
         source, new = sources.add(s, b.path)  # a SourceError is a ValueError: 400 with its sentence
-        jobs.ingest_later(jobs.queue(records.engine()), source)
+        jobs.ingest_later(jobs.queue(records.engine()), source, again=not new, by="person")
         if not new:
             response.status_code = 200
         return sources.Described.of(source)

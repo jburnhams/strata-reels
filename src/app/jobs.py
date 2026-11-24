@@ -43,7 +43,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 from strata_python import files
 from strata_python.db import url_for
@@ -119,8 +119,10 @@ def _found(ctx: Context, r: Result, new: bool, **more: Any) -> dict[str, Any]:
 def _hash(ctx: Context) -> dict[str, Any]:
     with Session(_records()) as s:
         source = _source(s, ctx)
-        path, expected = source.path, source.fingerprint
+        path, expected, known = source.path, source.fingerprint, source.sha256
     _same_footage(path, expected)
+    if known is not None:  # read before (a tape from before the pipeline): its fingerprint still matches, so it stands
+        return {"sha256": known}
     digest = files.sha256_hex(path)
     _same_footage(path, expected)  # and still: a file rewritten while it was read is not the source either
     with Session(_records()) as s:
@@ -191,6 +193,13 @@ def _describe(ctx: Context) -> dict[str, Any]:
         return {"results": [r.id for r, _ in made], "key": request_key(*(r.cache_key for r, _ in made))}
 
 
+def _version(*parts: Any) -> str:
+    """A stage's version from what this app asks of it (its parameters), so a release that asks otherwise runs it again.
+    What strata-models answers with (its model and settings) is checked by the stage itself, against its stored result,
+    when the tape is added again (`ingest_later(again=True)`)."""
+    return request_key(*parts)[:12]
+
+
 def _recipe(kind: str) -> str:
     """A derived stage's version: its recipe (reels' parameters and strata-python's), so a changed one runs it again."""
     return request_key(derived.parameters(kind))[:12]
@@ -203,12 +212,12 @@ TAPE = Pipeline(
         step("proxy", _asset("proxy"), needs=("hash",), version=_recipe("proxy"), resources=("disk",), label="Make a browser copy"),
         step("thumbnails", _asset("thumbnails"), needs=("hash",), version=_recipe("thumbnails"), resources=("disk",), label="Make thumbnails"),
         step("peaks", _asset("peaks"), needs=("hash",), version=_recipe("peaks"), resources=("disk",), label="Draw the sound"),
-        step("shots", _shots, needs=("hash",), label="Find the shots"),
-        step("keyframes", _keyframes, needs=("shots",), resources=("disk",), label="Take a picture of each shot"),
-        step("scenes", _scenes, needs=("shots", "keyframes"), label="Group the shots into scenes"),
-        step("faces", _faces, needs=("keyframes",), label="Find the faces"),
-        step("transcript", _transcript, needs=("hash",), label="Write down what is said"),
-        step("describe", _describe, needs=("scenes", "transcript"), label="Describe the scenes"),
+        step("shots", _shots, needs=("hash",), version=_version(shots.ASK, str(shots.BLACK_SHARE)), label="Find the shots"),
+        step("keyframes", _keyframes, needs=("shots",), version=_version(shots.KEYFRAMES), resources=("disk",), label="Take a picture of each shot"),
+        step("scenes", _scenes, needs=("shots", "keyframes"), version=scenes.VERSION, label="Group the shots into scenes"),
+        step("faces", _faces, needs=("keyframes",), version=_version(describe.FACE_FIELDS), label="Find the faces"),
+        step("transcript", _transcript, needs=("hash",), version=_version(speech.ASK, speech.NO_SPEECH, speech.LOW_LOGPROB), label="Write down what is said"),
+        step("describe", _describe, needs=("scenes", "transcript"), version=_version(describe.PRESET, describe.FRAMES, speech.SAID_CHARS), label="Describe the scenes"),
     ],
 )  # fmt: skip
 
@@ -218,10 +227,46 @@ def store() -> DbStore:
     return DbStore(_records(), STAGES, TAPE)
 
 
-def ingest_later(q: Queue, source: Source | int) -> int:
+# The stages that stand on what is outside the pipeline's keys: a file in the app's home (which can be deleted) or
+# strata-models' model and settings (which can change). Each checks those against its stored result when it runs.
+RECHECKED = ("proxy", "thumbnails", "peaks", "shots", "transcript")
+
+
+def ingest_later(q: Queue, source: Source | int, *, again: bool = False, by: str | None = None) -> int:
     """Queue the job that advances a tape through every stage not done; its id (the one already queued or running for
-    the tape, if there is one). A tape whose stages are all done for its inputs runs nothing."""
-    return enqueue(q, TAPE, subject_of(source))
+    the tape, if there is one). A tape whose stages are all done for its inputs runs nothing, unless it is `again` (the
+    tape added again): then every stage after the hash runs, and each makes again only what it finds missing or out of
+    date (a deleted browser copy, a new model on strata-models) and otherwise finds its stored result."""
+    subject = subject_of(source)
+    if again:
+        s = store()
+        for name in RECHECKED:  # each clears what needs it, so everything after the hash
+            TAPE.clear(s, subject, name, by=by)
+    return enqueue(q, TAPE, subject)
+
+
+# The kinds of job before the tape pipeline (one per step, each queueing the next): left queued they would wait for
+# ever, since no worker has their handlers. `adopt` cancels them and queues each tape's one job instead.
+OLD_KINDS = ("hash", "proxy", "thumbnails", "peaks", "shots", "keyframes", "scenes", "faces", "transcript", "describe")
+
+
+def adopt(q: Queue) -> list[int]:
+    """Bring a queue from before the tape pipeline onto it: cancel the old kinds of job still waiting or running, and
+    queue the tape job of every source the pipeline has no record of; the sources queued. Cheap when there is nothing
+    to do, so the server and `./app work` call it every time they start."""
+    for kind in OLD_KINDS:
+        while page := q.page(state=("queued", "running"), kind=kind, limit=200).items:
+            for t in page:
+                q.cancel(int(t.id))
+            if all(t.state == "running" for t in page):  # asked to stop: they leave the list when they do
+                break
+    known = set(store().subjects())
+    with Session(_records()) as s:
+        ids = list(s.scalars(select(Source.id).order_by(Source.id)))
+    queued = [i for i in ids if subject_of(i) not in known]
+    for i in queued:
+        ingest_later(q, i)
+    return queued
 
 
 def advance_tape(job: Job) -> dict[str, Any]:
@@ -298,6 +343,7 @@ class Runner:
                 queue(engine), HANDLERS, concurrency=self.concurrency, isolate=self.isolate, poll_s=self.poll_s
             )
             if not self._stop.is_set():
+                adopt(worker.queue)
                 self.worker = worker.start()
             return
 
