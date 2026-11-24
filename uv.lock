@@ -1080,7 +1080,7 @@ wheels = [
 [[package]]
 name = "strata-python"
 version = "0.2.13"
-source = { git = "https://github.com/jburnhams/strata-python?rev=aaabd9b9e9b23b5178c014bcc9cbab834fd2ff7e#aaabd9b9e9b23b5178c014bcc9cbab834fd2ff7e" }
+source = { git = "https://github.com/jburnhams/strata-python?rev=500b8c191a86ebad8574706cf361b2a7a02b15ed#500b8c191a86ebad8574706cf361b2a7a02b15ed" }
 dependencies = [
     { name = "fastapi" },
     { name = "pydantic" },
@@ -1124,7 +1124,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "strata-python", extras = ["db"], git = "https://github.com/jburnhams/strata-python?rev=aaabd9b9e9b23b5178c014bcc9cbab834fd2ff7e" },
+    { name = "strata-python", extras = ["db"], git = "https://github.com/jburnhams/strata-python?rev=500b8c191a86ebad8574706cf361b2a7a02b15ed" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 
@@ -1132,7 +1132,7 @@ requires-dist = [
 dev = [
     { name = "diff-cover", specifier = ">=9" },
     { name = "hypothesis", specifier = ">=6" },
-    { name = "strata-python", extras = ["dev"], git = "https://github.com/jburnhams/strata-python?rev=aaabd9b9e9b23b5178c014bcc9cbab834fd2ff7e" },
+    { name = "strata-python", extras = ["dev"], git = "https://github.com/jburnhams/strata-python?rev=500b8c191a86ebad8574706cf361b2a7a02b15ed" },
 ]
 
 [[package]]

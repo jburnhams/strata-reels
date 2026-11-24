@@ -99,21 +99,19 @@ def test_work_makes_the_proxy_thumbnails_and_peaks_from_the_raw_tape(cli: Cli, t
 
 
 def _colour(path: str) -> list[float]:
-    """A keyframe's average colour (Y, U and V, centred), read by the real ffprobe: the stand-in embedding below."""
+    """A keyframe's average colour (Y, U and V, centred), read by the real ffmpeg shrinking it to one pixel: the
+    stand-in embedding below. Not a lavfi `movie=` source, which a Windows path's colon breaks."""
     import subprocess
 
     out = subprocess.run(
         [
-            *("ffprobe", "-v", "error", "-f", "lavfi", "-i", f"movie={path},signalstats"),
-            *("-show_entries", "frame_tags=lavfi.signalstats.YAVG,lavfi.signalstats.UAVG,lavfi.signalstats.VAVG"),
-            *("-of", "json"),
+            *("ffmpeg", "-v", "error", "-i", path, "-vf", "scale=1:1:flags=area,format=yuv444p"),
+            *("-f", "rawvideo", "-"),
         ],
         capture_output=True,
-        text=True,
         check=True,
-    )
-    tags = json.loads(out.stdout)["frames"][0]["tags"]
-    y, u, v = (float(tags[f"lavfi.signalstats.{k}AVG"]) for k in "YUV")
+    ).stdout
+    y, u, v = out[0], out[1], out[2]
     return [y / 255, (u - 128) / 128, (v - 128) / 128]
 
 
