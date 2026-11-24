@@ -43,8 +43,10 @@ from strata_python.tasks.web import add_jobs
 
 from app import __version__, browse, db, jobs, settings, sources, system
 
-# A derived file never changes under its name (a new recipe is a new folder), so the browser may keep it.
+# A thumbnail or keyframe URL carries its result's key (`?v=`, browse.py), so a new recipe is a new URL and the browser
+# may keep the old one for good. The proxy's URL is the tape's, whichever proxy is current, so it is checked each time.
 IMMUTABLE = "public, max-age=31536000, immutable"
+REVALIDATE = "no-cache"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
@@ -116,7 +118,7 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
     def get_proxy(source_id: int, s: DbSession) -> FileResponse:
         # Starlette answers Range requests from the file, which the <video> needs to seek.
         return FileResponse(
-            browse.file_of(s, one(s, source_id), "proxy"), media_type="video/mp4", headers={"Cache-Control": IMMUTABLE}
+            browse.file_of(s, one(s, source_id), "proxy"), media_type="video/mp4", headers={"Cache-Control": REVALIDATE}
         )
 
     @app.get("/api/sources/{source_id}/thumbnails/{name}", response_class=FileResponse)

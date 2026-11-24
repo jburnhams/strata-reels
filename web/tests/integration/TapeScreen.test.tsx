@@ -1,9 +1,9 @@
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { scenesError, scenesPartWay, scenesWaiting, transcriptWaiting } from '../../src/mocks/handlers'
-import { tapeScenes } from '../../src/mocks/tape'
+import { tapeScenes, waitingScenes } from '../../src/mocks/tape'
 import { openApp, screen, waitFor, within } from '../utils/render'
-import { server } from '../utils/server'
+import { mock, server } from '../utils/server'
 
 // The tape's page (R1 step 4) over the mock server's christmas-1996.mkv: six scenes, five described.
 
@@ -124,6 +124,17 @@ describe('a tape', () => {
     expect(screen.getByText(/Grouping the shots into scenes/)).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: 'jobs page' }))
     expect(router.state.location.pathname).toBe('/jobs')
+  })
+
+  it('fills in as the tape’s jobs finish, without a reload', { timeout: 15_000 }, async () => {
+    let grouped = false
+    server.use(http.get('*/api/sources/:id/scenes', () => HttpResponse.json(grouped ? tapeScenes : waitingScenes(5))))
+    openApp('/sources/5')
+    expect(await screen.findByText('No scenes yet')).toBeInTheDocument()
+    // the scenes job finishes, and with it the rest of the tape's queue
+    grouped = true
+    for (const j of mock.jobs) if (j.state === 'queued' || j.state === 'running') j.state = 'done'
+    expect(await screen.findByRole('list', { name: 'Scenes' }, { timeout: 12_000 })).toBeInTheDocument()
   })
 
   it('shows a tape part way through its jobs without calling anything missing', async () => {

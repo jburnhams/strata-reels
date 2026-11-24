@@ -8,7 +8,8 @@ what it is waiting for. A step that has not run is `None` (or `waiting`), never 
 - **Pictures of a scene** are the thumbnails made every ten seconds that fall inside it, since a strip through the scene
   shows it move on; a scene shorter than the step, which may hold none, gets its shots' keyframes instead.
 - **Files are served by name from a result's payload**, never by a path from the request, so a name with `..` in it
-  is simply not one of them (404).
+  is simply not one of them (404). A picture's URL ends `?v=` and its result's key: the server does not read it, but a
+  thumbnail made again by a new recipe has a new URL, so the browser can keep each one for good.
 - **The waveform is reduced here** (`peaks`) to the number of slices the page draws: a three-hour tape at fifty slices a
   second is half a million pairs, which no page needs. Each slice keeps the lowest and highest of the ones it covers,
   so a short loud moment is never averaged away. Tape sound is quiet; the page scales the drawing (strata-react's
@@ -157,6 +158,10 @@ def _keyframes(db: Session, source: Source, cut: Result | None) -> Result | None
     )
 
 
+def _versioned(name: str, r: Result) -> str:
+    return f"{name}?v={r.cache_key[:12]}"
+
+
 def _description(r: Result | None) -> Description | None:
     if r is None:
         return None
@@ -189,9 +194,13 @@ def scenes_of(db: Session, source: Source) -> Scenes:
     if grouped is None or cut is None:
         return Scenes(source=Described.of(source), analysis=analysis, waiting=_waiting(source, cut), scenes=[])
     thumb_times = (
-        [] if thumbs is None else [(_seconds(t["time"]), str(t["name"])) for t in thumbs.payload["thumbnails"]]
+        []
+        if thumbs is None
+        else [(_seconds(t["time"]), _versioned(str(t["name"]), thumbs)) for t in thumbs.payload["thumbnails"]]
     )
-    key_names = {} if keys is None else {int(f["frame"]): str(f["name"]) for f in keys.payload["frames"]}
+    key_names = (
+        {} if keys is None else {int(f["frame"]): _versioned(str(f["name"]), keys) for f in keys.payload["frames"]}
+    )
     rate = mediatime.Rate.parse(grouped.payload["rate"])
     starts = {b["shot"]: b for b in grouped.payload["boundaries"]}
     out: list[Scene] = []

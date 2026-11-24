@@ -35,6 +35,7 @@ export const paths = {
   proxy: '/api/sources/:id/proxy',
   thumbnail: '/api/sources/:id/thumbnails/:name',
   jobs: '/api/jobs',
+  jobCounts: '/api/jobs/counts',
   cancel: '/api/jobs/:id/cancel',
   retry: '/api/jobs/:id/retry',
 } as const
@@ -82,9 +83,14 @@ export const handlers = [
     const svg = thumbnailSvg(String(params.name))
     return svg ? new HttpResponse(svg, { headers: { 'Content-Type': 'image/svg+xml' } }) : notFound(`no thumbnail ${String(params.name)}`)
   }),
+  http.get(at(paths.jobCounts), () =>
+    HttpResponse.json(Object.fromEntries(Object.entries(Object.groupBy(mock.jobs, j => j.state)).map(([k, v]) => [k, v?.length ?? 0]))),
+  ),
   http.get(at(paths.jobs), ({ request }) => {
-    const states = new URL(request.url).searchParams.getAll('state')
-    const items = states.length ? mock.jobs.filter(j => states.includes(j.state)) : mock.jobs
+    const query = new URL(request.url).searchParams
+    const states = query.getAll('state')
+    const domain = query.get('domain')
+    const items = mock.jobs.filter(j => (!states.length || states.includes(j.state)) && (domain === null || j.domain === domain))
     return HttpResponse.json({ items, next: null, total: items.length })
   }),
   // As strata-python's queue does: a queued job is cancelled at once, a running one asked to stop; a
@@ -128,6 +134,14 @@ export const transcriptWaiting = http.get(at(paths.transcript), () =>
   HttpResponse.json({ language: null, model: null, waiting: 'Listening for speech (the transcript job).', segments: [] }),
 )
 export const peaksLoading = http.get(at(paths.peaks), () => delay('infinite'))
-export const jobsLoading = http.get(at(paths.jobs), () => delay('infinite'))
-export const jobsEmpty = http.get(at(paths.jobs), () => HttpResponse.json({ items: [], next: null, total: 0 }))
-export const jobsError = http.get(at(paths.jobs), down)
+// The queue's states answer its list and its counts alike (`/api/jobs*`), so the finding agrees with the table.
+const queue = (answer: (counts: boolean) => Response | Promise<Response>) =>
+  http.get(at(`${paths.jobs}*`), ({ request }) => answer(new URL(request.url).pathname.endsWith('/counts')))
+export const jobsLoading = queue(async () => {
+  await delay('infinite')
+  return down()
+})
+export const jobsEmpty = queue(counts => HttpResponse.json(counts ? {} : { items: [], next: null, total: 0 }))
+export const jobsError = queue(down)
+/** More jobs than the page shows: the list is cut, and says so. */
+export const jobsMore = http.get(at(paths.jobs), () => HttpResponse.json({ items: mock.jobs, next: 'c200', total: 1340 }))

@@ -31,6 +31,13 @@ jobs:
       - run: npm run test:visual:update
       # Writing and then checking proves the new baselines are stable on this runner.
       - run: npm run test:visual
+      # A shot that differs between two runs on the same runner is unstable: keep its diff to find out why.
+      - name: Upload screenshots that differ
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-diffs
+          path: web/tests/visual/output/
       - name: Commit the baselines
         working-directory: .
         run: |

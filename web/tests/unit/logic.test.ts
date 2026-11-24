@@ -3,7 +3,7 @@ import { colorSchemeScript, format } from 'strata-react'
 import { describe, expect, it } from 'vitest'
 import { initialSources, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
 import { tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
-import { describeJob, describeQueue } from '../../src/screens/JobsScreen'
+import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
 import { describePicture, describeSources, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
 import { aspectOf, describeFaces, describeScenes, sceneName, transcriptGroups } from '../../src/screens/TapeScreen'
@@ -119,7 +119,22 @@ describe('the jobs page', () => {
     expect(describeJob({ kind: 'restore', domain: null }, [])).toBe('restore')
   })
   it('says what the queue is doing', () => {
-    expect(describeQueue([{ state: 'running' }, { state: 'queued' }, { state: 'queued' }, { state: 'done' }])).toBe('1 running, 2 waiting.')
-    expect(describeQueue([{ state: 'done' }])).toBe('Nothing to do: every job has finished.')
+    expect(describeQueue({ running: 1, queued: 2, done: 7 })).toBe('1 running, 2 waiting.')
+    expect(describeQueue({ done: 1 })).toBe('Nothing to do: every job has finished.')
+    expect(describeQueue({})).toBe('Nothing to do: every job has finished.')
+    expect([isBusy(undefined), isBusy({ done: 3, failed: 1 }), isBusy({ queued: 1 }), isBusy({ running: 1 })]).toEqual([
+      false,
+      false,
+      true,
+      true,
+    ])
+  })
+  it('says when the list is cut, and how to find the rest', () => {
+    expect(describeMore({ items: Array(200), total: 1340 })).toBe(
+      `Showing the newest 200 of ${format.count(1340, 'job')}. Choose Failed or Waiting to find older ones that need you.`,
+    )
+    expect(describeMore({ items: Array(200), total: null })).toBe(
+      'Showing the newest 200. Choose Failed or Waiting to find older ones that need you.',
+    )
   })
 })

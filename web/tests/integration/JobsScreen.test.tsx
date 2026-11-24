@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { jobsEmpty, jobsError } from '../../src/mocks/handlers'
+import { jobsEmpty, jobsError, jobsMore } from '../../src/mocks/handlers'
 import { openApp, screen, waitFor, within } from '../utils/render'
 import { mock, server } from '../utils/server'
 
@@ -34,6 +34,15 @@ describe('Jobs', () => {
     await user.click(screen.getByRole('radio', { name: 'Failed' }))
     expect(router.state.location.search).toBe('?state=failed')
     await waitFor(() => expect(within(screen.getByRole('grid', { name: /Jobs/ })).getAllByRole('row')).toHaveLength(2))
+  })
+
+  it('counts the whole queue, not the page, and says when the list is cut', async () => {
+    server.use(jobsMore)
+    const { user } = openApp('/jobs')
+    expect(await screen.findByText(/Showing the newest 11 of 1,340\sjobs\./)).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Failed' }))
+    // the finding is the queue's, whichever state the list shows
+    expect(await screen.findByText('1 running, 1 waiting, 1 failed.')).toBeInTheDocument()
   })
 
   it('says when there is nothing in the queue, and when the server is down', async () => {

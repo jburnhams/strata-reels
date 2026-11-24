@@ -9,6 +9,11 @@
 //   src/app/browse.py), which says what each step has found so far, so a tape part way through its
 //   jobs shows what is done and names what is not, never an empty answer that reads as "nothing".
 //   The waveform and the transcript are reads of their own, so a slow one never holds the scenes.
+// - The page follows the tape's jobs while any is waiting or running (`useJob` over this source's
+//   queued and running jobs): the scenes are read again every few seconds then, and everything once
+//   the last finishes, so a tape opened part way fills in without a reload. The transcript's key
+//   carries whether there is one, so it is read again when it arrives; the waveform is read when the
+//   scenes first say it is there.
 // - Playback is Strata's MediaPlayer over the browser copy (the proxy job's file), driven from the
 //   page through `mediaRef`: a frame of a strip, a scene's Play button, a word of the transcript and
 //   the waveform all seek it. The scenes are the player's spans and the waveform's chapter marks.
@@ -41,6 +46,7 @@ import {
   type TranscriptGroup,
   TranscriptView,
   useExpanded,
+  useJob,
   useLoad,
   Waveform,
 } from 'strata-react'
@@ -105,11 +111,22 @@ export function transcriptGroups(t: Transcript, scenes: Scene[]): TranscriptGrou
   return groups.filter(g => g.phrases.length)
 }
 
+/** How often the page reads the tape again while its jobs run. */
+const FOLLOW = 5000
+
 export function TapeScreen() {
   const id = Number(useParams().id)
+  const work = useJob({
+    queryKey: [...keys.jobs, 'source', id],
+    queryFn: () => api.get('/api/jobs', { query: { domain: `source:${String(id)}`, state: ['queued', 'running'], limit: 1 } }),
+    isRunning: p => p.items.length > 0,
+    every: FOLLOW,
+    invalidates: [keys.scenes(id), keys.transcript(id), keys.peaks(id)],
+  })
   const load = useLoad({
     queryKey: keys.scenes(id),
     queryFn: () => api.get('/api/sources/{source_id}/scenes', { path: { source_id: id } }),
+    refetchInterval: work.running ? FOLLOW : false,
   })
   return (
     <>
@@ -198,7 +215,7 @@ function Tape({ data }: { data: Scenes }) {
       >
         {view =>
           view === 'transcript' ? (
-            <TapeTranscript sourceId={source.id} scenes={scenes} time={time} onSeek={seek} />
+            <TapeTranscript sourceId={source.id} ready={analysis.transcript} scenes={scenes} time={time} onSeek={seek} />
           ) : (
             <SceneList scenes={scenes} playing={playing} time={time} onSeek={seek} />
           )
@@ -394,17 +411,20 @@ function SceneDetail({ scene }: { scene: Scene }) {
 
 function TapeTranscript({
   sourceId,
+  ready,
   scenes,
   time,
   onSeek,
 }: {
   sourceId: number
+  /** The scenes' word on the transcript: a change reads it again. */
+  ready: boolean | null
   scenes: Scene[]
   time: number
   onSeek: (t: number, play?: boolean) => void
 }) {
   const load = useLoad({
-    queryKey: keys.transcript(sourceId),
+    queryKey: [...keys.transcript(sourceId), ready],
     queryFn: () => api.get('/api/sources/{source_id}/transcript', { path: { source_id: sourceId } }),
   })
   return (

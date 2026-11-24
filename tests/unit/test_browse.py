@@ -88,8 +88,12 @@ def test_each_scene_has_its_pictures_speech_description_and_faces(client: TestCl
     assert second["confidence"] > 0.5
     assert "black at the cut" in second["reasons"]
     # the thumbnails inside each scene (0 s in the first, 10 s in the second), by name under the source
-    assert first["frames"] == [{"time": 0.0, "url": f"/api/sources/{sid}/thumbnails/000000.jpg"}]
-    assert second["frames"] == [{"time": 10.0, "url": f"/api/sources/{sid}/thumbnails/000001.jpg"}]
+    # (each URL carries its result's key, so a remade thumbnail is a new URL the browser has not kept)
+    v = first["frames"][0]["url"].split("?v=")[1]
+    assert len(v) == 12
+    assert first["frames"] == [{"time": 0.0, "url": f"/api/sources/{sid}/thumbnails/000000.jpg?v={v}"}]
+    assert second["frames"] == [{"time": 10.0, "url": f"/api/sources/{sid}/thumbnails/000001.jpg?v={v}"}]
+    assert "immutable" in client.get(first["frames"][0]["url"]).headers["cache-control"]
     assert (first["speech"], second["speech"]) == ("Say hello to Grandma!", "Happy birthday to you")
     assert (first["faces"], second["faces"]) == (2, 0)
     d = first["description"]
@@ -105,7 +109,7 @@ def test_without_thumbnails_a_scene_shows_its_keyframes_and_unrun_steps_are_none
     analysed(engine, sid, assets=(), steps=("scenes",))
     got = client.get(f"/api/sources/{sid}/scenes").json()
     first, second = got["scenes"]
-    assert [f["url"].rsplit("/", 1)[1] for f in first["frames"]] == ["000049.jpg", "000174.jpg"]
+    assert [f["url"].rsplit("/", 1)[1].split("?")[0] for f in first["frames"]] == ["000049.jpg", "000174.jpg"]
     assert first["frames"][0]["time"] == pytest.approx(49 / 25)
     assert all(f["url"].startswith(f"/api/sources/{sid}/keyframes/") for f in second["frames"])
     assert (first["description"], first["faces"], first["speech"]) == (None, None, None)
@@ -157,7 +161,7 @@ def test_files_are_served_by_their_names_in_a_result_and_nothing_else(
     analysed(engine, sid, assets=("proxy", "thumbnails"), steps=())
     got = client.get(f"/api/sources/{sid}/proxy")
     assert (got.content, got.headers["content-type"]) == (b"mp4", "video/mp4")
-    assert "immutable" in got.headers["cache-control"]
+    assert got.headers["cache-control"] == "no-cache"  # the same URL for whichever proxy is current
     part = client.get(f"/api/sources/{sid}/proxy", headers={"Range": "bytes=1-2"})
     assert (part.status_code, part.content) == (206, b"p4")  # the player seeks with ranges
     assert client.get(f"/api/sources/{sid}/thumbnails/000001.jpg").content == b"jpg"
