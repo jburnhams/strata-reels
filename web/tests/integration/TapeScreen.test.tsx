@@ -160,6 +160,7 @@ describe('a tape', () => {
     await user.click(within(faces).getByRole('button', { name: /Try again/ }))
     await waitFor(() => expect(mock.runs[5].job?.state).toBe('queued'))
     expect(await screen.findByText('Analysing')).toBeInTheDocument() // the job's progress while it runs again
+    expect(screen.getByText('Trying the failed step again shortly')).toBeInTheDocument() // the same job, retrying
     expect(screen.queryByText(/failed: the Steps tab says why/)).toBeNull()
   })
 

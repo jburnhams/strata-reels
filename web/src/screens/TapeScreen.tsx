@@ -89,6 +89,12 @@ export function describeFailed(run: Pick<WorkflowRun, 'stages'>): string | null 
   return `${names} failed: the Steps tab says why.`
 }
 
+/** The tape's job in a few words: the step it is on, or that it waits to try a failed step again, or for its turn. */
+export function describeJobNow(job: Pick<NonNullable<WorkflowRun['job']>, 'state' | 'attempts' | 'progress'>): string {
+  if (job.state === 'running') return job.progress?.text ?? 'Starting'
+  return job.attempts > 0 ? 'Trying the failed step again shortly' : 'Waiting for its turn'
+}
+
 /** "Up to 4 faces", "No faces", or null before the faces step. A scene's count is the most on one keyframe: a floor. */
 export function describeFaces(n: number | null): string | null {
   if (n === null) return null
@@ -198,7 +204,7 @@ function TapeSteps({ id, run }: { id: number; run: Job<WorkflowRun> }) {
               label="Analysis"
               running
               words={{ running: 'Analysing', finished: 'Analysed', failed: 'Stopped' }}
-              summary={r.job.progress?.text ?? 'Waiting for its turn'}
+              summary={describeJobNow(r.job)}
               current={r.job.progress?.done}
               total={r.job.progress?.total ?? undefined}
             />
