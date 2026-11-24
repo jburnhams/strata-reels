@@ -439,7 +439,7 @@ export interface components {
         };
         /**
          * Description
-         * @description strata-models' description of a scene (preset `scene-describe-v1`): what is seen kept apart from what is
+         * @description strata-models' description of a scene (preset `scene-describe-v2`): what is seen kept apart from what is
          *     guessed, each guess with its evidence.
          */
         Description: {

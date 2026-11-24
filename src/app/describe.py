@@ -1,6 +1,6 @@
 """What each scene shows, and how many people are in it (R1 step 3, spec S4).
 
-- **A description per scene** from strata-models (role `scene-describe`, preset `scene-describe-v1`: a vision-language
+- **A description per scene** from strata-models (role `scene-describe`, preset `scene-describe-v2`: a vision-language
   model, Qwen3.5-9B today). It is given up to `FRAMES` of the scene's keyframes, spread through it, and its length,
   shot count and speech (`speech.said_in`). The preset keeps what is seen (`observed`) apart from what is guessed
   (`inferred`, each guess with its evidence), as spec S4 asks, counts people and children without naming anyone, and
@@ -9,8 +9,8 @@
   this app's: a better prompt is a new preset there, and its name is in this result's parameters.
 - **Faces** (role `faces`, insightface today) on every keyframe, boxes and scores only: no embeddings, so no one can be
   recognised until the person has said who may be (R2, with consent). One result of kind `faces` for the keyframes; a
-  scene's count (`people_in`) is the most faces on any one of its keyframes, a floor rather than a count, since a
-  keyframe is one frame of a shot.
+  scene's count (`people_in`) is the most faces on any one of its keyframes, a floor rather than a count: faces turned
+  away are not found, and not everyone is in one picture.
 - Both are keyed on what they read (the scenes and the transcript, the keyframes), so a regrouping or a new transcript
   asks again, and `current_descriptions` gives only those of the current scenes."""
 
@@ -26,9 +26,9 @@ from app import derived, results, scenes, shots, speech
 from app.models import Result, Source
 
 ROLE = "scene-describe"
-PRESET = "scene-describe-v1"
+PRESET = "scene-describe-v2"
 FACES_ROLE = "faces"
-FRAMES = 3  # keyframes shown to the describer: enough to see the scene move on, few enough for a 9B model's context
+FRAMES = 6  # keyframes shown to the describer: enough to see a long shot move on, few enough for a 9B model's context
 FACE_FIELDS = ["bbox", "det_score"]  # never the embedding: recognition waits for consent (R2)
 
 
@@ -40,10 +40,9 @@ def pick(frames: list[int], n: int = FRAMES) -> list[int]:
 
 
 def scene_frames(shots_payload: dict[str, Any], scene: dict[str, Any], kept: set[int]) -> list[int]:
-    """The keyframes of a scene's shots, in time order (a shot's keyframe is its middle frame, `shots.middles`)."""
-    every = shots_payload["shots"]
-    mids = [(every[i]["start_frame"] + every[i]["end_frame"] - 1) // 2 for i in scene["shots"]]
-    return [f for f in mids if f in kept]
+    """The keyframes of a scene's shots, in time order."""
+    frames = sorted(kept)
+    return [f for i in scene["shots"] for f in shots.frames_in(shots_payload["shots"][i], frames)]
 
 
 def _keyframes(db: Session, source: Source, found: Result) -> Result:

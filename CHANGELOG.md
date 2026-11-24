@@ -4,6 +4,16 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-24
 
+**Tuned on the first real tape: several keyframes a shot, scene numbers, doubtful speech (branch `real-tape`)**
+The pipeline ran on a real 21-minute VHS family tape on the GPU machine; what it showed is in `docs/progress.md`.
+- `src/app/shots.py`: a keyframe about every six seconds of a shot instead of one (`KEYFRAMES["every_s"]`, `frames_of`, `keyframe_frames`, `frames_in`; `middles` is gone).
+- `src/app/scenes.py`: neighbouring shots compared by the mean similarity of all their keyframes (`alike`); `similar` 0.82 to 0.67 and `spread` 0.04 to 0.05, fitted to 36 boundaries of that tape marked by eye (23 right before, 31 now); `VERSION` 2. Corrects the entry below that called the old numbers guesses: they were, and wrong.
+- `src/app/describe.py`: `FRAMES` 3 to 6, preset `scene-describe-v2`; a scene's frames are all the keyframes of its shots.
+- `src/app/speech.py`: also doubtful: text that repeats itself (`repetition`, `_said_again`), words faster than anyone speaks, words of little probability. What says doubtful is part of the cache key (`PARAMETERS`), so a change of it marks a stored transcript anew; before, the stage ran again and found the old one.
+- `src/app/jobs.py`, `web/src/mocks/tape.ts`: the keyframes stage is "Take pictures of each shot". `src/app/browse.py`, `web/openapi.json`, `web/src/api.generated.ts`: the preset's name.
+- `tests/integration/conftest.py`: no strata-models in the integration tests, also where the real one runs. `tests/unit/test_scenes.py`, `test_describe.py`: the above.
+- `docs/implementation-plan.md`, `docs/progress.md`.
+
 **The tape's analysis as one strata-python pipeline, with its steps on the tape page (branch `claude/project-thread-5wm5fj`)**
 Jonathan asked to update to the latest strata-python and strata-react and make full use of their changes, and chose to move the job chain onto strata-python's new `workflow` pipeline now. One job per tape replaces eleven kinds of job that queued each other; the tape page shows the steps with strata-react's `WorkflowSteps`.
 - `pyproject.toml`, `uv.lock`: strata-python `>=0.2.17`, the release with `workflow` and `request_key`.

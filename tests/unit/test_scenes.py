@@ -107,6 +107,17 @@ def test_shots_need_the_hash(engine, tmp_path):
             scenes.find_scenes(s, src)
 
 
+def test_a_shot_has_a_keyframe_for_about_every_six_seconds_and_at_least_one():
+    assert shots.frames_of(shot(4, 5), RATE) == [4]
+    assert shots.frames_of(shot(0, 224), RATE) == [111]  # under nine seconds: its middle
+    assert shots.frames_of(shot(0, 225), RATE) == [55, 168]  # nine: the middle of each half
+    assert len(shots.frames_of(shot(0, 25 * 134), RATE)) == 22
+    found = {"rate": "25", "shots": [shot(0, 300), shot(300, 310, black=True), shot(310, 320)]}
+    assert shots.keyframe_frames(found) == [74, 224, 314]
+    assert shots.frames_in(found["shots"][0], [74, 224, 314]) == [74, 224]
+    assert shots.frames_in(found["shots"][1], [74, 224, 314]) == []
+
+
 def test_keyframes_are_the_middle_of_each_shot_shown_and_follow_the_shots(engine, tmp_path, tape_models, made):
     source = hashed(engine, tmp_path)
     with Session(engine) as s:
@@ -126,7 +137,6 @@ def test_keyframes_are_the_middle_of_each_shot_shown_and_follow_the_shots(engine
         os.rmdir(derived.path_of(keys))
         assert shots.keyframes(s, src) == (keys, True)  # a cleared folder is made again under the same row
         assert made == [("tape.mkv", "keyframes"), ("tape.mkv", "keyframes")]
-        assert shots.middles({"shots": [{"start_frame": 4, "end_frame": 5, "black": False}]}) == [4]
 
 
 def test_scenes_group_alike_shots_and_split_at_black(engine, tmp_path, tape_models):
@@ -178,6 +188,14 @@ def shot(a: int, b: int, black: bool = False) -> dict:
         "start_frame": a, "end_frame": b, "start": mediatime.text(RATE.time_of(a)), "end": mediatime.text(RATE.time_of(b)),
         "score": None if a == 0 else 0.5, "black": black,
     }  # fmt: skip
+
+
+def test_shots_are_compared_by_all_their_pictures():
+    """A shot that moves from one room to another is as like the next as its pictures are on the whole."""
+    found = {"rate": "25", "black": [], "shots": [shot(0, 300), shot(300, 400)]}
+    b = scenes.group(found, {74: [1.0, 0.0], 224: [0.0, 1.0], 349: [0.0, 1.0]})["boundaries"][0]
+    assert (b["similarity"], b["level"]) == (0.5, "scene")
+    assert scenes.alike([], [[1.0]]) is None
 
 
 def test_a_black_shot_is_a_gap_and_a_missing_picture_is_said():

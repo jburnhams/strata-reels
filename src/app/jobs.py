@@ -27,7 +27,7 @@ Stages (each finds its result stored, and makes nothing, when the same request r
   changed or replaced under the same path is refused rather than hashed as the source.
 - `proxy`, `thumbnails`, `peaks`: the derived assets (`derived`), each a result with a file; their version is their
   recipe, so a changed recipe makes them again. Peaks only for a source with sound (the stage says it skipped).
-- `shots`, then `keyframes` (a picture of each shot), then `scenes` (the shots grouped), then `faces` (on the
+- `shots`, then `keyframes` (pictures of each shot), then `scenes` (the shots grouped), then `faces` (on the
   keyframes): strata-models' `shot-boundaries`, `image-embed` and `face-detect`.
 - `transcript`: the whole source's speech from strata-models' `transcribe`, for a source with sound.
 - `describe`: a description of each scene, which needs the scenes and the transcript, so every description has its
@@ -213,10 +213,10 @@ TAPE = Pipeline(
         step("thumbnails", _asset("thumbnails"), needs=("hash",), version=_recipe("thumbnails"), resources=("disk",), label="Make thumbnails"),
         step("peaks", _asset("peaks"), needs=("hash",), version=_recipe("peaks"), resources=("disk",), label="Draw the sound"),
         step("shots", _shots, needs=("hash",), version=_version(shots.ASK, str(shots.BLACK_SHARE)), label="Find the shots"),
-        step("keyframes", _keyframes, needs=("shots",), version=_version(shots.KEYFRAMES), resources=("disk",), label="Take a picture of each shot"),
+        step("keyframes", _keyframes, needs=("shots",), version=_version(shots.KEYFRAMES), resources=("disk",), label="Take pictures of each shot"),
         step("scenes", _scenes, needs=("shots", "keyframes"), version=scenes.VERSION, label="Group the shots into scenes"),
         step("faces", _faces, needs=("keyframes",), version=_version(describe.FACE_FIELDS), label="Find the faces"),
-        step("transcript", _transcript, needs=("hash",), version=_version(speech.ASK, speech.NO_SPEECH, speech.LOW_LOGPROB), label="Write down what is said"),
+        step("transcript", _transcript, needs=("hash",), version=_version(speech.PARAMETERS), label="Write down what is said"),
         step("describe", _describe, needs=("scenes", "transcript"), version=_version(describe.PRESET, describe.FRAMES, speech.SAID_CHARS), label="Describe the scenes"),
     ],
 )  # fmt: skip

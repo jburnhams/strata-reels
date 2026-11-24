@@ -10,11 +10,16 @@
 - **Doubtful segments are kept and marked**, not dropped: a segment Whisper itself thinks is probably not speech
   (`no_speech_prob` at least 0.6) or decoded with a low average log-probability (below -1.0) is `doubtful`. Those are
   Whisper's own thresholds for the same two signals (its `no_speech_threshold` and `logprob_threshold`); a tape's hiss
-  and music pass the filter often enough that what reads the transcript has to know. `said_in` leaves them out.
+  and music pass the filter often enough that what reads the transcript has to know. `said_in` leaves them out. On a
+  real tape (2026-11-24) neither signal fired on what Whisper had invented, so three more say doubtful: text that
+  repeats itself, in one segment or in the same words segment after segment (its compression ratio over 2.4, Whisper's
+  third threshold; of the same segment said again, the first is kept), words said faster than anyone speaks, and words
+  Whisper gave little probability.
 - Times are Whisper's seconds (to the hundredth), from the start of the file, as the thumbnails' and shots' are."""
 
 import dataclasses
 import os
+import zlib
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -30,11 +35,58 @@ APP = "strata-reels"
 ASK: dict[str, Any] = {"word_timestamps": True, "vad_filter": True}
 NO_SPEECH = 0.6  # Whisper's no_speech_threshold
 LOW_LOGPROB = -1.0  # Whisper's logprob_threshold
+LOW_WORDS = (
+    0.3  # the mean probability of a segment's words: on the real tape the wrong ones were under 0.24, the rest over 0.3
+)
+REPEATS = 2.4  # Whisper's compression_ratio_threshold: text that zlib shrinks more than this is the same words again and again
+FASTEST = 10.0  # words a second: a fast talker manages 5 or 6, and Whisper's word times are rough
+# What says doubtful is part of the cache key too: a change here asks again, as the stored transcript has the old marks.
+DOUBT = {
+    "no_speech": NO_SPEECH,
+    "low_logprob": LOW_LOGPROB,
+    "low_words": LOW_WORDS,
+    "repeats": REPEATS,
+    "fastest": FASTEST,
+}
+PARAMETERS: dict[str, Any] = {**ASK, "doubt": DOUBT}
 SAID_CHARS = 1500  # the most of a scene's speech given to the describer: a few minutes of talk
 
 
 def has_sound(source: Source) -> bool:
     return media.Probe.from_json(source.path, source.probe).audio is not None
+
+
+def repetition(text: str) -> float:
+    """How many times smaller zlib makes the text: Whisper's compression ratio."""
+    raw = text.encode()
+    return len(raw) / len(zlib.compress(raw)) if raw else 0.0
+
+
+def _doubtful(s: sm.Segment) -> bool:
+    if s.no_speech_prob is not None and s.no_speech_prob >= NO_SPEECH:
+        return True
+    if s.avg_logprob is not None and s.avg_logprob < LOW_LOGPROB:
+        return True
+    if repetition(s.text.strip()) > REPEATS:
+        return True
+    sure = [w.probability for w in s.words if w.probability is not None]
+    if sure and sum(sure) / len(sure) < LOW_WORDS:
+        return True
+    return len(s.words) > FASTEST * max(s.end - s.start, 0.0)
+
+
+def _said_again(segments: list[dict[str, Any]]) -> None:
+    """Marks every segment but the first of a run that says the same words so often that Whisper was stuck. Twice or
+    three times is how people talk to a child ("Look at that."), and stays."""
+    i = 0
+    while i < len(segments):
+        j = i + 1
+        while j < len(segments) and segments[j]["text"].casefold() == segments[i]["text"].casefold():
+            j += 1
+        if repetition(" ".join(s["text"] for s in segments[i:j])) > REPEATS:
+            for s in segments[i + 1 : j]:
+                s["doubtful"] = True
+        i = j
 
 
 def payload_of(answer: dict[str, Any]) -> dict[str, Any]:
@@ -43,15 +95,12 @@ def payload_of(answer: dict[str, Any]) -> dict[str, Any]:
     t = sm.Transcript.from_json(answer)
     segments: list[dict[str, Any]] = []
     for s in sorted(t.segments, key=lambda s: s.start):
-        doubtful = (s.no_speech_prob is not None and s.no_speech_prob >= NO_SPEECH) or (
-            s.avg_logprob is not None and s.avg_logprob < LOW_LOGPROB
-        )
         segments.append(
             {
                 "start": round(s.start, 3),
                 "end": round(s.end, 3),
                 "text": s.text.strip(),
-                "doubtful": doubtful,
+                "doubtful": _doubtful(s),
                 "words": [
                     {
                         "start": round(w.start, 3),
@@ -63,6 +112,7 @@ def payload_of(answer: dict[str, Any]) -> dict[str, Any]:
                 ],
             }
         )
+    _said_again(segments)
     return {
         "language": t.language,
         "language_probability": None if t.language_probability is None else round(t.language_probability, 3),
@@ -82,7 +132,7 @@ def transcribe(db: Session, source: Source, *, job_id: int | None = None) -> tup
     now = sm.role_settings(ROLE)
     if now is not None:
         planned = results.Provenance(role=ROLE, model=now.model, settings_hash=now.settings_hash)
-        found = results.find(db, results.cache_key("transcript", [source.sha256], planned, ASK))
+        found = results.find(db, results.cache_key("transcript", [source.sha256], planned, PARAMETERS))
         if found is not None:
             return found, False
     answer, served = sm.run_with_provenance(ROLE, {"path": os.path.abspath(source.path), **ASK}, APP, priority="low")
@@ -92,7 +142,7 @@ def transcribe(db: Session, source: Source, *, job_id: int | None = None) -> tup
         "transcript",
         results.Provenance.of(ROLE, dataclasses.asdict(served)),
         inputs=[source.sha256],
-        parameters=ASK,
+        parameters=PARAMETERS,
         payload=payload_of(answer),
         job_id=job_id,
     )
