@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-24: speech, faces and descriptions (R1 step 3)
+
+- Asked for: carry on with the plan after step 2: transcription, descriptions and who is in each scene, and the real-tape run if the GPU machine can be reached. It could not (offline all day), so everything here is checked against strata-models stood in for.
+- The prompt that describes a scene lives in strata-models, not here: a new role `scene-describe` with preset `scene-describe-v1` and a strict JSON schema (strata-models #120), served by Qwen3.5-9B like `vision-language`, with Claude Haiku as the other candidate. It keeps what is seen (`observed`) apart from guesses (`inferred`, each with its evidence: spec S4), counts people and children, never names anyone, and lists the picture's faults (dark, blurry, shaky, noisy, tracking lines, colour cast, overexposed), which step 5 can score on. A better prompt is a new preset there and shows here as a new parameter, so the old descriptions are superseded rather than mixed in.
+- Speech: one transcript per tape, not per scene, so Whisper hears whole sentences and a regrouping of scenes does not ask again. Its voice activity filter is on; segments Whisper itself doubts (its own `no_speech_threshold` 0.6 and `logprob_threshold` -1.0) are kept and marked, and a scene is told only the rest. A tape's hiss is where Whisper invents "Thank you." and the like.
+- Descriptions: one result per scene, spanning it, so a long tape is described scene by scene and a job that stops keeps what it finished. Each sees up to three keyframes spread through the scene, its length, shot count and up to 1,500 characters of its speech. On a tape with sound the describe job waits for the transcript.
+- Faces: boxes and detection scores on every keyframe; no embeddings, so nobody can be recognised before R2 asks who may be. A scene's count is the most faces on one of its keyframes, a floor: a keyframe is one frame of a shot.
+- Not done: the run on a real tape; an eval of the describer on tape scenes (the `scene-describe` role has none yet); an API (with step 4's chapters screen, the first reader).
+
 ## 2026-11-24: shots and scenes (R1 step 2)
 
 - Asked for: start the next step of the plan, turning a tape into scenes.

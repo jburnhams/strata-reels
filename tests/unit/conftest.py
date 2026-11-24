@@ -5,7 +5,7 @@ import os
 
 import pytest
 from hypothesis import HealthCheck, settings
-from probes import SHOTS, embeddings
+from probes import FACES, SHOTS, SPEECH, describe_scene, embeddings
 from strata_python import derive, media, mediatime
 
 settings.register_profile(
@@ -83,10 +83,26 @@ PROXY_PROBE = {
 
 @pytest.fixture
 def tape_models(fake_models):
-    """strata-models, stood in for over real HTTP (strata-python's `fake_models`), answering shots and vectors for the
-    tape. Its settings are set, so each result's provenance has a model and a settings hash."""
-    fake_models.results["shot-boundaries"] = SHOTS
-    fake_models.results["image-embed"] = embeddings
-    fake_models.models.update({"shot-boundaries": "ffmpeg-scene-score", "image-embed": "clip-vit-b-32"})
+    """strata-models, stood in for over real HTTP (strata-python's `fake_models`), answering shots, vectors, speech,
+    faces and descriptions for the tape. Its settings are set, so each result's provenance has a model and a settings
+    hash."""
+    fake_models.results.update(
+        {
+            "shot-boundaries": SHOTS,
+            "image-embed": embeddings,
+            "transcribe": SPEECH,
+            "faces": FACES,
+            "scene-describe": describe_scene,
+        }
+    )
+    fake_models.models.update(
+        {
+            "shot-boundaries": "ffmpeg-scene-score",
+            "image-embed": "clip-vit-b-32",
+            "transcribe": "whisper-large-v3-turbo",
+            "faces": "buffalo_l",
+            "scene-describe": "qwen3.5-9b-vl",
+        }
+    )
     fake_models.options.update({"shot-boundaries": {"threshold": 0.3}, "image-embed": {"half": True}})
     return fake_models

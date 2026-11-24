@@ -48,11 +48,11 @@ def test_a_new_source_is_hashed_once_by_a_queued_job(engine: Engine, tmp_path, t
     assert jobs.hash_later(q, source) == jid  # asked again while queued: the same job
     done, *derived = jobs.work(q)
     assert (done.id, done.state, done.domain) == (jid, "done", f"source:{source.id}")
-    # the hash queues the derived assets and the shots, which run next (the tape has sound, so peaks too); the shots
-    # queue the keyframes, and they the scenes
+    # the hash queues the derived assets, the shots and the speech, which run next (the tape has sound, so peaks and a
+    # transcript too); the shots queue the keyframes, they the scenes, and the scenes the faces and descriptions
     assert [(j.kind, j.state) for j in derived] == [
-        ("proxy", "done"), ("thumbnails", "done"), ("peaks", "done"),
-        ("shots", "done"), ("keyframes", "done"), ("scenes", "done"),
+        ("proxy", "done"), ("thumbnails", "done"), ("peaks", "done"), ("shots", "done"), ("transcript", "done"),
+        ("keyframes", "done"), ("scenes", "done"), ("faces", "done"), ("describe", "done"),
     ]  # fmt: skip
     digest = hashlib.sha256(content).hexdigest()
     assert done.result == {"sha256": digest}
@@ -72,8 +72,12 @@ def test_a_new_source_is_hashed_once_by_a_queued_job(engine: Engine, tmp_path, t
         ("thumbnails", False),
         ("peaks", False),
         ("shots", False),
+        ("transcript", False),
         ("keyframes", False),
+        ("describe", False),  # the transcript queues it when the scenes are there
         ("scenes", False),
+        ("faces", False),
+        ("describe", False),
     ]
 
 
@@ -115,7 +119,7 @@ def test_the_server_queues_the_hash_and_runs_it_while_it_is_up(db_env: str, tmp_
         assert client.post("/api/sources", json={"path": str(f)}).status_code == 200
         deadline = time.monotonic() + 20
         while (
-            len(q.page().items) < 6 or any(t.state != "done" for t in q.page().items)
+            len(q.page().items) < 8 or any(t.state != "done" for t in q.page().items)
         ) and time.monotonic() < deadline:
             time.sleep(0.05)
     # newest first: the hash, then the assets and shots it queued (no audio stream, so no peaks), then what they queued
@@ -126,6 +130,8 @@ def test_the_server_queues_the_hash_and_runs_it_while_it_is_up(db_env: str, tmp_
         ("shots", "done"),
         ("keyframes", "done"),
         ("scenes", "done"),
+        ("faces", "done"),
+        ("describe", "done"),  # at once: there is no sound to wait for
     ]
     assert sha256_of(engine, 1) == hashlib.sha256(content).hexdigest()
 

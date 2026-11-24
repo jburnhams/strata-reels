@@ -27,6 +27,10 @@ Kinds:
   `keyframes`, a picture of each shot (`disk`), then `scenes`, which asks strata-models for the keyframes' vectors and
   groups the shots (`scenes.find_scenes`). Each queues the next when it is done; each finds its result stored and
   makes nothing when the same request ran before.
+- `transcript` (step 3): the whole source's speech from strata-models' `transcribe` (`speech.transcribe`), queued by
+  the `hash` job beside the shots, for a source with sound. When the scenes are done they queue `faces` (`describe.
+  find_faces`, on the keyframes) and `describe` (`describe.describe`, a description of each scene); `describe` waits
+  for the transcript on a source with sound, and the `transcript` job queues it again when it ends.
 
 Ingest is the first four. Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
 
@@ -42,7 +46,7 @@ from strata_python.db import url_for
 from strata_python.db.web import Database
 from strata_python.tasks.queue import Handler, Job, Queue, Worker
 
-from app import db, derived, scenes, shots
+from app import db, derived, describe, scenes, shots, speech
 from app.models import JOBS, Source
 
 log = logging.getLogger(__name__)
@@ -73,11 +77,15 @@ def derive_later(q: Queue, source: Source) -> list[int]:
         q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=["disk"])
         for kind in derived.wanted(source)
     ]
-    return [*made, later(q, "shots", source)]
+    made.append(later(q, "shots", source))
+    if speech.has_sound(source):
+        made.append(later(q, "transcript", source))
+    return made
 
 
 def later(q: Queue, kind: str, source: Source) -> int:
-    """Queue one of the analysis jobs (`shots`, `keyframes`, `scenes`) for a source."""
+    """Queue one of the analysis jobs (`shots`, `keyframes`, `scenes`, `transcript`, `faces`, `describe`) for a
+    source."""
     resources = ["disk"] if kind == "keyframes" else []
     return q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=resources)
 
@@ -150,8 +158,43 @@ def make_keyframes(job: Job) -> dict[str, Any]:
 def group_scenes(job: Job) -> dict[str, Any]:
     """The `scenes` job: the keyframes' vectors from strata-models, then the shots grouped into scenes."""
     with Session(_records(), expire_on_commit=False) as s:
-        r, new = scenes.find_scenes(s, _source(s, job), job_id=job.id)
+        source = _source(s, job)
+        r, new = scenes.find_scenes(s, source, job_id=job.id)
+        q = queue(_records())
+        later(q, "faces", source)
+        later(q, "describe", source)
         return {"result": r.id, "scenes": len(r.payload["scenes"]), "new": new}
+
+
+def transcribe(job: Job) -> dict[str, Any]:
+    """The `transcript` job: the whole source's speech from strata-models, then the descriptions queued if the scenes
+    are already there (they wait for the speech)."""
+    with Session(_records(), expire_on_commit=False) as s:
+        source = _source(s, job)
+        _same_footage(source.path, source.fingerprint)
+        r, new = speech.transcribe(s, source, job_id=job.id)
+        if scenes.current(s, source) is not None:
+            later(queue(_records()), "describe", source)
+        return {"result": r.id, "segments": len(r.payload["segments"]), "new": new}
+
+
+def find_faces(job: Job) -> dict[str, Any]:
+    """The `faces` job: the faces on every keyframe, from strata-models."""
+    with Session(_records(), expire_on_commit=False) as s:
+        r, new = describe.find_faces(s, _source(s, job), job_id=job.id)
+        return {"result": r.id, "faces": sum(len(f["faces"]) for f in r.payload["frames"]), "new": new}
+
+
+def describe_scenes(job: Job) -> dict[str, Any]:
+    """The `describe` job: a description of each scene from strata-models. On a source with sound it waits for the
+    transcript (ending at once, done: the `transcript` job queues it again), so every description has its speech."""
+    with Session(_records(), expire_on_commit=False) as s:
+        source = _source(s, job)
+        if speech.has_sound(source) and speech.current(s, source) is None:
+            return {"waiting": "transcript", "new": False}
+        made = describe.describe(s, source, job_id=job.id)
+        described = sum(new for _, new in made)
+        return {"scenes": len(made), "described": described, "new": described > 0}
 
 
 def _source(s: Session, job: Job) -> Source:
@@ -168,6 +211,9 @@ HANDLERS: dict[str, Handler] = {
     "shots": find_shots,
     "keyframes": make_keyframes,
     "scenes": group_scenes,
+    "transcript": transcribe,
+    "faces": find_faces,
+    "describe": describe_scenes,
 }
 
 

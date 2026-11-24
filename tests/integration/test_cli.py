@@ -119,7 +119,8 @@ def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp
     """Step 2 end to end with the real ffmpeg: red for 4 s, dark red for 3 s, black for 1 s, blue for 4 s. strata-models
     is stood in for (it is another service) and answers the cuts at their known frames; the keyframes are cut from the
     real file, and their stand-in vectors are their real average colours, so the grouping sees what the pictures show:
-    red and dark red are one scene, the black is the gap, blue is another."""
+    red and dark red are one scene, the black is the gap, blue is another. Step 3 on top: the speech, the faces and a
+    description of each scene, whose stand-ins read the real keyframes (a description names its first frame's colour)."""
     import subprocess
 
     from app import db, results, scenes, shots
@@ -128,9 +129,13 @@ def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp
     tape = tmp_path / "tape.mkv"
     parts = [("red", 4), ("darkred", 3), ("black", 1), ("blue", 4)]
     inputs = [a for c, d in parts for a in ("-f", "lavfi", "-i", f"color=c={c}:size=320x240:rate=25:duration={d}")]
-    joined = "".join(f"[{i}:v]" for i in range(len(parts))) + f"concat=n={len(parts)}:v=1:a=0"
+    joined = "".join(f"[{i}:v]" for i in range(len(parts))) + f"concat=n={len(parts)}:v=1:a=0[v]"
+    sound = ("-f", "lavfi", "-i", "sine=frequency=440:sample_rate=16000:duration=12")
     subprocess.run(
-        ["ffmpeg", "-nostdin", "-v", "error", "-y", *inputs, "-filter_complex", joined, "-c:v", "ffv1", str(tape)],
+        [
+            *("ffmpeg", "-nostdin", "-v", "error", "-y", *inputs, *sound, "-filter_complex", joined),
+            *("-map", "[v]", "-map", f"{len(parts)}:a", "-c:v", "ffv1", "-c:a", "pcm_s16le", str(tape)),
+        ],
         check=True,
     )
     fake_models.results["shot-boundaries"] = {
@@ -139,9 +144,24 @@ def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp
         "black": [{"start": 7.0, "end": 8.0}], "fps": 25.0, "frames": 300, "threshold": 0.3, "min_shot_s": 0.6,
     }  # fmt: skip
     fake_models.results["image-embed"] = lambda p: {"images": [_colour(x) for x in p["paths"]], "dim": 3}
+    fake_models.results["transcribe"] = {
+        "language": "en", "duration": 12.0,
+        "segments": [{"start": 1.0, "end": 2.5, "text": " Look at the red wall.", "no_speech_prob": 0.1},
+                     {"start": 9.0, "end": 10.0, "text": " And now blue.", "no_speech_prob": 0.1}],
+    }  # fmt: skip
+
+    def described(p):
+        _, u, v = _colour(p["images"][0])
+        colour = "red" if v > 0.2 else "blue" if u > 0.2 else "grey"
+        return {"text": "{}", "json": {"summary": f"a {colour} picture", "heard": p["context"]["speech"]}}
+
+    fake_models.results["scene-describe"] = described
+    fake_models.results["faces"] = lambda p: {
+        "images": [{"width": 320, "height": 240, "faces": [] if os.path.isfile(x) else None} for x in p["paths"]]
+    }
     cli("add", str(tape))
     out = cli("work").stdout
-    for kind in ("shots", "keyframes", "scenes"):
+    for kind in ("shots", "keyframes", "scenes", "transcript", "faces", "describe"):
         assert f"{kind:10} done" in out
     with db.session() as s:
         source = s.get(Source, 1)
@@ -161,5 +181,7 @@ def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp
             ("0", "7", [0, 1]), ("8", "12", [3]),
         ]  # fmt: skip
     listed = cli("scenes", "1").stdout
-    assert "0.00 to      7.00 s    2 shots" in listed
-    assert "8.00 to     12.00 s    1 shots  (boundary 100%)" in listed
+    assert "0.00 to      7.00 s    2 shots  0 faces\n       a red picture\n" in listed
+    assert "8.00 to     12.00 s    1 shots  (boundary 100%)  0 faces\n       a blue picture\n" in listed
+    told = json.loads(cli("scenes", "1", "--json").stdout)["scenes"]
+    assert [sc["description"]["heard"] for sc in told] == ["Look at the red wall.", "And now blue."]
