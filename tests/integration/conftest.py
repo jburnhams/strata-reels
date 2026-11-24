@@ -12,6 +12,13 @@ SRC = str(Path(__file__).parents[2] / "src")
 Cli = Callable[..., CliResult]
 
 
+@pytest.fixture(autouse=True)
+def _no_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No strata-models, also on the machine that runs the real one on its usual port: there these tests asked it for
+    real work (nothing listens on port 9)."""
+    monkeypatch.setenv("STRATA_MODELS_URL", "http://127.0.0.1:9")
+
+
 @pytest.fixture
 def cli() -> Cli:
     """`cli("hello", "World", "--json")` -> CliResult(stdout, stderr, code); AssertionError on a non-zero exit unless `check=False`."""

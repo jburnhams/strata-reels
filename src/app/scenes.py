@@ -3,9 +3,9 @@
 On a family tape a shot ends wherever the camcorder was stopped; a scene (the birthday, the beach) is the run of shots
 of one event. What says two neighbouring shots belong together:
 
-- **They look alike.** Each shot's keyframe (`shots.keyframes`) is embedded by strata-models (role `image-embed`, CLIP),
-  and neighbouring shots are compared by cosine similarity. The same room or garden from a restarted camcorder scores
-  high; another place scores low. Stored as a result of kind `embeddings` (a file of the vectors, kept for search and
+- **They look alike.** The keyframes (`shots.keyframes`) are embedded by strata-models (role `image-embed`, CLIP), and
+  neighbouring shots are compared by the mean cosine similarity of every keyframe of one with every one of the other.
+  The same room or garden from a restarted camcorder scores high; another place scores low. Stored as a result of kind `embeddings` (a file of the vectors, kept for search and
   near-duplicates later), with the model and settings that made it.
 - **Black between them** (a shot that is black nearly all through, or a black stretch at the cut): the tape was
   stopped, faded or left unrecorded, which on a home tape usually means another day.
@@ -19,8 +19,10 @@ reasons in words. The planner and the chapters screen read the levels; a person'
 result (step 4), never an edit of it.
 
 The confidence from similarity is a logistic around `similar` (cosine where a boundary is as likely as not), `spread`
-wide. Both are first guesses for CLIP ViT-B/32 on home video, not measured: the measurement is a tape whose scenes a
-person has marked, which step 4's chapters screen makes possible (its corrections are the marks)."""
+wide. Both are fitted to one real family tape (2026-11-24, CLIP ViT-B/32): 36 of its 47 boundaries marked by eye as a
+new scene or not, the rest left out as arguable. They put 31 of the 36 on the right side, as does any cosine from 0.66
+to 0.70 (the first guess, 0.82 on one picture a shot, put 23: it split nearly every shot into a scene). Thirty-six boundaries of one house's rooms are few: what would
+measure it better is more tapes, whose corrections on step 4's chapters screen are the marks."""
 
 import dataclasses
 import json
@@ -38,10 +40,10 @@ from app.models import Result, Source
 
 EMBED_ROLE = "image-embed"
 PRODUCER = results.Provenance(role="reels-scenes")
-VERSION = 1  # raise when `group` changes what it gives for the same inputs
+VERSION = 2  # raise when `group` changes what it gives for the same inputs
 PARAMETERS: dict[str, Any] = {
-    "similar": 0.82,  # cosine at which a boundary is as likely as not
-    "spread": 0.04,  # how quickly the confidence moves away from one half
+    "similar": 0.67,  # cosine at which a boundary is as likely as not
+    "spread": 0.05,  # how quickly the confidence moves away from one half
     "black": 0.9,  # the confidence of a boundary with black at it
     "black_near_s": "1",  # a black stretch this close before or after a cut is at it
 }
@@ -54,15 +56,22 @@ def cosine(a: Sequence[float], b: Sequence[float]) -> float:
     return 0.0 if na == 0 or nb == 0 else dot / (na * nb)
 
 
+def alike(a: Sequence[Sequence[float]], b: Sequence[Sequence[float]]) -> float | None:
+    """The mean cosine similarity of every picture of one shot with every picture of another; None when either has none."""
+    pairs = [cosine(x, y) for x in a for y in b]
+    return sum(pairs) / len(pairs) if pairs else None
+
+
 def group(
     found: dict[str, Any], vectors: Mapping[int, Sequence[float]], parameters: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Scenes from a shots payload (`shots.payload_of`) and each shot's keyframe vector by the keyframe's frame number.
+    """Scenes from a shots payload (`shots.payload_of`) and the keyframes' vectors by the keyframe's frame number.
     Pure: the same arguments give the same answer. Black shots are in no scene: they are the gaps between them."""
     p = {**PARAMETERS, **(parameters or {})}
     rate = mediatime.Rate.parse(found["rate"])
     near = rate.frame_at(mediatime.rational(p["black_near_s"]))
     black = [(int(b["start_frame"]), int(b["end_frame"])) for b in found["black"]]
+    taken = sorted(vectors)
     boundaries: list[dict[str, Any]] = []
     scenes: list[dict[str, Any]] = []
     prev: dict[str, Any] | None = None
@@ -72,17 +81,16 @@ def group(
         if shot["black"]:
             gap = True
             continue
-        mid = (shot["start_frame"] + shot["end_frame"] - 1) // 2
         if prev is None:
             scenes.append(_scene(shot, i, None))
         else:
             at = int(shot["start_frame"])
             reasons: list[str] = []
-            similarity = None
             confidence = 0.5
-            a, b = vectors.get((prev["start_frame"] + prev["end_frame"] - 1) // 2), vectors.get(mid)
-            if a is not None and b is not None:
-                similarity = cosine(a, b)
+            similarity = alike(
+                [vectors[f] for f in shots.frames_in(prev, taken)], [vectors[f] for f in shots.frames_in(shot, taken)]
+            )
+            if similarity is not None:
                 confidence = 1 / (1 + math.exp((similarity - float(p["similar"])) / float(p["spread"])))
                 reasons.append(
                     f"{'pictures alike' if similarity >= float(p['similar']) else 'pictures differ'} ({similarity:.2f})"

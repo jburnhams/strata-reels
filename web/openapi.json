@@ -129,7 +129,7 @@
     "type": "object"
    },
    "Description": {
-    "description": "strata-models' description of a scene (preset `scene-describe-v1`): what is seen kept apart from what is\nguessed, each guess with its evidence.",
+    "description": "strata-models' description of a scene (preset `scene-describe-v2`): what is seen kept apart from what is\nguessed, each guess with its evidence.",
     "properties": {
      "activity": {
       "title": "Activity",

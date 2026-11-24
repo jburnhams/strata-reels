@@ -10,17 +10,22 @@
 - **Every shot keeps its cut's score** (how unlike the frame before it is, 0 to 1): the shot level of the boundary
   hierarchy spec S5 asks for. A shot that is black nearly all through (`BLACK_SHARE`) is marked: it is the gap between
   two recordings, not footage to show.
-- **Keyframes**: the middle frame of each shot that is not black, as a JPEG (strata-python's `derive.frames`), a
-  derived asset like the proxy (kind `keyframes`, a folder under `derived/<cache key>/`). One per shot, however short
-  the shot (a camcorder restart on tape is often a second or two, under the thumbnails' 10 s step); they are what the
-  scenes compare, and what step 3 describes and looks for faces in. Keyed on the shots result, so new shots make new
-  keyframes.
+- **Keyframes**: pictures of each shot that is not black, as JPEGs (strata-python's `derive.frames`), a derived asset
+  like the proxy (kind `keyframes`, a folder under `derived/<cache key>/`). One for about every `every_s` of the shot,
+  the middle frames of that many equal parts (`frames_of`), and one however short the shot (a camcorder restart on tape
+  is often a second or two, under the thumbnails' 10 s step). One a shot was too few: on a real tape (2026-11-24) most
+  scenes are a single shot, up to 134 s long and moving through a room, and its middle frame alone gave wrong
+  descriptions and one face. They are what the scenes compare, and what step 3 describes and looks for faces in. Keyed
+  on the shots result, so new shots make new keyframes.
 
 The model's answer and the stored payload use the same words (cuts, shots, black) so one can be read against the other."""
 
 import dataclasses
 import os
+from bisect import bisect_left
+from collections.abc import Sequence
 from fractions import Fraction
+from itertools import pairwise
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -35,7 +40,7 @@ APP = "strata-reels"  # how strata-models names who asked
 BLACK_SHARE = Fraction(9, 10)  # a shot this much inside black stretches is a gap, not footage
 # Asked of strata-models with every job; part of the cache key, so a change here is a new request.
 ASK = {"black": True}
-KEYFRAMES = {"height": 360}
+KEYFRAMES = {"height": 360, "every_s": "6"}
 
 
 def rate_of(source: Source) -> mediatime.Rate:
@@ -135,9 +140,24 @@ def current(db: Session, source: Source) -> Result | None:
     return next((r for r in results.current(db, source, "shots") if r.span_start is None), None)
 
 
-def middles(shots: dict[str, Any]) -> list[int]:
-    """The frame each keyframe is taken at: the middle of every shot that is not black."""
-    return [(s["start_frame"] + s["end_frame"] - 1) // 2 for s in shots["shots"] if not s["black"]]
+def frames_of(shot: dict[str, Any], rate: mediatime.Rate) -> list[int]:
+    """The frames a shot's keyframes are taken at: the middle frame of each of its equal parts, about `every_s` long (at
+    least one part)."""
+    a, b = int(shot["start_frame"]), int(shot["end_frame"])
+    n = max(1, round(rate.time_of(b - a) / mediatime.rational(str(KEYFRAMES["every_s"]))))
+    edges = [a + (b - a) * i // n for i in range(n + 1)]
+    return [(x + y - 1) // 2 for x, y in pairwise(edges)]
+
+
+def keyframe_frames(shots: dict[str, Any]) -> list[int]:
+    """The frame of every keyframe of the tape, in time order: none in a black shot."""
+    rate = mediatime.Rate.parse(shots["rate"])
+    return [f for s in shots["shots"] if not s["black"] for f in frames_of(s, rate)]
+
+
+def frames_in(shot: dict[str, Any], frames: Sequence[int]) -> list[int]:
+    """Those of `frames` (in time order) that are in the shot."""
+    return list(frames[bisect_left(frames, int(shot["start_frame"])) : bisect_left(frames, int(shot["end_frame"]))])
 
 
 def keyframe_parameters(shots: Result) -> dict[str, Any]:
@@ -161,7 +181,7 @@ def keyframes(db: Session, source: Source, *, job_id: int | None = None) -> tupl
     made = derive.frames(
         source.path,
         os.path.join(settings.SETTINGS.home(), rel),
-        middles(shots.payload),
+        keyframe_frames(shots.payload),
         height=int(KEYFRAMES["height"]),
         info=media.Probe.from_json(source.path, source.probe),
     )

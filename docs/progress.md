@@ -1,5 +1,19 @@
 # Progress log
 
+## 2026-11-24: the first real tape
+
+- Asked for: run the whole tape pipeline on a real VHS family tape on the GPU machine, evaluate its shot and scene boundaries, check the transcript, descriptions and faces, and tune.
+- The run: a 21-minute PAL tape (interlaced, torn restarts, the signal lost at the end), every step done, no failure, 16 min 52 s while the machine was busy with other work: shots 151 s, faces 5 s, transcript 23 s, 47 descriptions at about 6 s each; most of the rest is ffmpeg.
+- **Shots.** 50 cuts marked by eye. strata-models' 0.3 found 46 and made 7 false ones, all in the lost signal at the end; its 0.2 with lost signal found as black finds 49 and makes none (strata-models, branch `shots-vhs`, eval `shots-vhs`). The one left is six frames after another. Head-switching noise, chroma flashes and fast pans made no false cut.
+- **Scenes.** 47 scenes, nearly one a shot, 7 of them black flashes. 36 boundaries marked as a new scene or not (11 left out as arguable): 23 right at 0.82. A shot is now compared by all its keyframes and `similar` is 0.67, `spread` 0.05: 31 right and 23 scenes. What is still wrong: portraits of people in one room are split (little but the furniture is alike), and two rooms with the same people are joined. Better needs more than a picture: the speech, or the describer asked whether two neighbours are one event.
+- **Keyframes.** One a shot was the weakest part: 40 of the 47 scenes were a single shot, so a scene of up to 134 s was described from one frame, some of them wrongly, and counted from one (1 face where there were 3). Now one about every six seconds, and six to the describer.
+- **Descriptions.** Right about what is in the frames, from the local model, in plain words; but the preset's own talk of tape faults made it call all 40 scenes noisy with tracking lines and 32 poor, and it counted people in photographs. Preset `scene-describe-v2` (strata-models) fixes both. Quality is "fair" nearly everywhere with v2: an honest word for VHS, not yet something step 5 can rank on.
+- **Transcript.** English, 173 segments; most read as sense and fit the pictures (not checked by ear), though the talk is far from the camera and names come out several ways. Whisper's own two signals marked none doubtful, while one question came five times running and one word seventeen: text that repeats itself, words too fast to say and words of little probability are now doubtful too. Asked again with the same settings Whisper answered differently in a noisy minute (178 segments, and there its own signals did mark about ten): a stored transcript is one reading, not the reading. Singing is left out by the voice filter.
+- **Faces.** 140 on 159 sample frames at 360 lines and 138 at 540, so 360 is enough. Looked at on a sheet, none is on something that is not a face; a few are faces in photographs on a wall, and faces turned away or bent over are missed.
+- **derive.frames** failed past 100 keyframes on this machine's ffmpeg 9: fixed in strata-python #77. A tape of over 100 shots would have stopped there.
+- The integration tests asked the real strata-models on the machine that runs it; they no longer can.
+- Not done: other tapes (this is the one digitised so far), and recordings with blue-screen or snow between them, which are only generated in strata-models' tests.
+
 ## 2026-11-24: the tape's analysis as one pipeline
 
 - Asked for: update to the latest strata-python and strata-react and make full use of what they gained. strata-python 0.2.17 added `workflow` (a `Pipeline` of named, versioned stages over one subject, its records in an append-only table, one queue job per subject, shared routes) and `request_key`; strata-react added `useWorkflowRun` and `WorkflowSteps` to draw it. Jonathan chose to move the job chain onto the pipeline now rather than later.

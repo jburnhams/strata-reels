@@ -1,7 +1,7 @@
 // Stand-in results for one tape (christmas-1996.mkv, source 5) as the server would answer them once
 // every job has run: its scenes with thumbnails, descriptions and faces, its transcript, its waveform
 // and its job queue. Written by hand to read like a real family tape (the descriptions keep what is
-// seen apart from what is guessed, as strata-models' scene-describe-v1 does), and fixed, so the
+// seen apart from what is guessed, as strata-models' scene-describe-v2 does), and fixed, so the
 // screenshots do not change. Pictures are SVG drawings of each scene (the colours are the picture's
 // content, not interface colour); the browser copy is a two-second blank WebM, enough for the player
 // to load (the poster, the scene's first thumbnail, is what shows).
@@ -326,7 +326,7 @@ const STAGES: [string, string, string[]][] = [
   ['thumbnails', 'Make thumbnails', ['hash']],
   ['peaks', 'Draw the sound', ['hash']],
   ['shots', 'Find the shots', ['hash']],
-  ['keyframes', 'Take a picture of each shot', ['shots']],
+  ['keyframes', 'Take pictures of each shot', ['shots']],
   ['scenes', 'Group the shots into scenes', ['shots', 'keyframes']],
   ['faces', 'Find the faces', ['keyframes']],
   ['transcript', 'Write down what is said', ['hash']],
