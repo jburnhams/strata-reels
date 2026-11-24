@@ -53,3 +53,58 @@ def embeddings(params):
         "images": [[1.0, 0.0] if int(os.path.basename(p)[:-4]) < 200 else [0.0, 1.0] for p in params["paths"]],
         "dim": 2,
     }
+
+
+# What Whisper says on the tape: a greeting in the first scene, a song in the second, and a stretch of hiss in the
+# first that Whisper itself doubts (no_speech_prob 0.8), which no scene is told about.
+SPEECH = {
+    "language": "en",
+    "language_probability": 0.97,
+    "duration": 16.0,
+    "segments": [
+        {"start": 6.0, "end": 7.5, "text": " Say hello to Grandma!", "avg_logprob": -0.3, "no_speech_prob": 0.05,
+         "words": [{"start": 6.0, "end": 6.3, "word": " Say", "probability": 0.9}]},
+        {"start": 1.0, "end": 2.0, "text": " Thank you.", "avg_logprob": -0.9, "no_speech_prob": 0.8, "words": []},
+        {"start": 11.0, "end": 13.0, "text": " Happy birthday to you", "avg_logprob": -0.2, "no_speech_prob": 0.01,
+         "words": []},
+    ],
+}  # fmt: skip
+
+
+def FACES(params):  # a role's answer, named like the others
+    """Faces on each keyframe: two before frame 200, none after."""
+    return {
+        "images": [
+            {
+                "width": 640,
+                "height": 480,
+                "faces": [{"bbox": [10.0, 20.0, 60.0, 80.0], "det_score": 0.91}] * (2 if _frame(p) < 200 else 0),
+            }
+            for p in params["paths"]
+        ]
+    }
+
+
+def describe_scene(params):
+    """A description that says which frames and speech it was given, so a test can read them back."""
+    frames = [_frame(p) for p in params["images"]]
+    return {
+        "text": "{}",
+        "json": {
+            "summary": f"frames {frames}",
+            "observed": [params["context"]["speech"] or "no speech"],
+            "inferred": [{"guess": "a birthday", "because": "a cake"}],
+            "setting": "indoor",
+            "people": 2,
+            "children": 1,
+            "activity": "talking",
+            "tags": ["birthday"],
+            "picture": {"quality": "fair", "problems": ["noisy"]},
+        },
+        "tokens_in": 900,
+        "tokens_out": 120,
+    }
+
+
+def _frame(path):
+    return int(os.path.basename(path)[:-4])

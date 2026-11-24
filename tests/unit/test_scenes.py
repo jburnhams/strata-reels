@@ -225,10 +225,12 @@ def test_the_scenes_command(capsys, engine, tmp_path, tape_models):
     jobs.work(jobs.queue(engine))
     assert cli.main(["scenes", str(source.id)]) == 0
     out = capsys.readouterr().out
-    assert "    1       0.00 to     10.00 s    2 shots\n" in out
-    assert "    2      10.00 to     16.00 s    1 shots  (boundary 100%)" in out
+    # each with the most faces on one of its keyframes and its description's summary (the stand-in's: its frames)
+    assert "    1       0.00 to     10.00 s    2 shots  2 faces\n       frames [49, 174]\n" in out
+    assert "    2      10.00 to     16.00 s    1 shots  (boundary 100%)  0 faces\n" in out
     assert cli.main(["scenes", str(source.id), "--json"]) == 0
-    assert len(json.loads(capsys.readouterr().out)["scenes"]) == 2
+    listed = json.loads(capsys.readouterr().out)["scenes"]
+    assert [(sc["faces"], sc["description"]["setting"]) for sc in listed] == [(2, "indoor"), (0, "indoor")]
 
 
 def test_an_analysis_job_for_a_source_that_is_not_there_fails(engine):

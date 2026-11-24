@@ -1,20 +1,21 @@
 """Command line. From strata-python: `doctor` (versions and imports), `set` (a setting), `serve` (the web server) and
 `openapi` (the schema file the web app's types are generated from). The app's own: `add` adds footage as sources (and
-queues each one's ingest: the content hash, then the proxy, thumbnails, peaks and shots), `sources` lists them,
-`scenes` lists a source's scenes (from its shots, once the jobs have run), `jobs` lists the job queue and `work` runs what is queued, here,
-until nothing is (the server runs the queue itself while it is up)."""
+queues each one's ingest: the content hash, then the proxy, thumbnails, peaks, shots and speech), `sources` lists
+them, `scenes` lists a source's scenes (from its shots, once the jobs have run, with each one's description and
+faces), `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
+itself while it is up)."""
 
 import argparse
 import json
 import sys
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 from strata_python import cli as shared
 from strata_python import mediatime
 
-from app import __version__, db, jobs, scenes, settings, sources
+from app import __version__, db, describe, jobs, scenes, settings, shots, sources
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -77,13 +78,25 @@ def cmd_scenes(args: argparse.Namespace) -> int:
             print(f"  {source.name} has no scenes yet: ./app jobs shows what is queued, ./app work runs it")
             return 1
         grouped = found.payload
+        told = describe.current_descriptions(s, source)
+        faces = describe.current_faces(s, source)
+        cut = shots.current(s, source)
+    # each scene with what step 3 found about it, where it has run: its description and the most faces in a frame
+    listed: list[dict[str, Any]] = []
+    for sc in grouped["scenes"]:
+        d = told.get(sc["start"])
+        people = None if faces is None or cut is None else describe.people_in(faces.payload, cut.payload, sc)
+        listed.append({**sc, "description": None if d is None else d.payload["description"], "faces": people})
     if args.json:
-        print(json.dumps(grouped, indent=1))
+        print(json.dumps({**grouped, "scenes": listed}, indent=1))
         return 0
-    for i, sc in enumerate(grouped["scenes"]):
+    for i, sc in enumerate(listed):
         start, end = float(mediatime.rational(sc["start"])), float(mediatime.rational(sc["end"]))
         sure = "" if sc["confidence"] is None else f"  (boundary {sc['confidence']:.0%})"
-        print(f"  {i + 1:>3}  {start:9.2f} to {end:9.2f} s  {len(sc['shots']):3} shots{sure}")
+        faces_seen = "" if sc["faces"] is None else f"  {sc['faces']} faces"
+        print(f"  {i + 1:>3}  {start:9.2f} to {end:9.2f} s  {len(sc['shots']):3} shots{sure}{faces_seen}")
+        if sc["description"] is not None:
+            print(f"       {sc['description'].get('summary', '')}")
     return 0
 
 
@@ -122,7 +135,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     so = sub.add_parser("sources", help="list the sources")
     so.add_argument("--json", action="store_true")
     so.set_defaults(fn=cmd_sources)
-    sc = sub.add_parser("scenes", help="list a source's scenes, with how sure each boundary is")
+    sc = sub.add_parser(
+        "scenes", help="list a source's scenes: how sure each boundary is, what it shows, how many faces"
+    )
     sc.add_argument("source", type=int)
     sc.add_argument("--json", action="store_true")
     sc.set_defaults(fn=cmd_scenes)

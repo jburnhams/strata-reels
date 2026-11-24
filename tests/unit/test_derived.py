@@ -114,19 +114,22 @@ def test_a_tape_added_again_queues_its_assets_at_once(engine, tmp_path, made, ta
     source = hashed(engine, tmp_path)
     q = jobs.queue(engine)
     ids = jobs.ingest_later(q, source)
-    assert len(ids) == 4  # the three assets and the shots
+    assert len(ids) == 5  # the three assets, the shots and the speech
     assert jobs.ingest_later(q, source) == ids  # while queued: the same jobs
     ran = jobs.work(q)
     assert [(j.kind, j.state) for j in ran] == [
-        ("proxy", "done"), ("thumbnails", "done"), ("peaks", "done"),
-        ("shots", "done"), ("keyframes", "done"), ("scenes", "done"),
+        ("proxy", "done"), ("thumbnails", "done"), ("peaks", "done"), ("shots", "done"), ("transcript", "done"),
+        ("keyframes", "done"), ("scenes", "done"), ("faces", "done"), ("describe", "done"),
     ]  # fmt: skip
     assert ran[0].result is not None
     assert ran[0].result["new"] is True
     jobs.ingest_later(q, source)  # done once: the jobs run again and find what is stored
     assert all(j.result is not None and j.result["new"] is False for j in jobs.work(q))
     assert len(made) == 4
-    assert [j["role"] for j in tape_models.jobs] == ["shot-boundaries", "image-embed"]  # asked once each
+    # asked once each (a description per scene)
+    assert [j["role"] for j in tape_models.jobs] == [
+        "shot-boundaries", "transcribe", "image-embed", "faces", "scene-describe", "scene-describe",
+    ]  # fmt: skip
 
 
 def test_an_asset_job_refuses_a_changed_file_and_a_missing_source(engine, tmp_path, made):
