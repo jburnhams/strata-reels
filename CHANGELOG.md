@@ -2,6 +2,13 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-24
+
+**strata-python from PyPI again (branch `claude/project-thread-42bdk4`)**
+PR #10 merged with strata-python pinned to strata-python#56's commit through git, since `derive` was not released yet. It is in 0.2.12 (0.2.10 went out without it and 0.2.11 was not uploaded), so reels takes it from PyPI. A correction to #10's entry, which named 0.2.10.
+- `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.12,<0.3`; the `[tool.uv.sources]` git line is removed.
+- `AGENTS.md`: the floor it names.
+
 ## 2026-11-23
 
 **Ingest from the raw footage: proxy, thumbnails and peaks (branch `claude/project-thread-42bdk4`)**
