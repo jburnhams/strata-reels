@@ -4,7 +4,7 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-24
 
-**The scene browser and the jobs page (R1 step 4, first half; branch `claude/project-thread-5wm5fj`)**
+**The scene browser and the jobs page (R1 step 4, first half; branch `claude/project-thread-5wm5fj`, PR #14)**
 Jonathan asked for the web view of a tape's scenes (thumbnail strips, transcripts, descriptions, face counts) and the jobs screen deferred from step 1b, built while the GPU machine is offline, so it is checked on stand-in data. Two parts it needed were missing from strata-react and went there first (`FilmStrip`, `Waveform normalise`, strata-react PR for this thread); this app takes them from strata-react's release after it.
 - `src/app/browse.py`: **new**. `scenes_of` puts a source's results together for the page: each scene's place, shot count, how sure its start is and why, its thumbnails (its keyframes when no thumbnail falls inside it), description (with the model), face count and speech, each `None` while its job has not run, plus which results exist (`Analysis`) and, before there are scenes, a `waiting` sentence naming the job. `transcript_of`, `peaks_of` (reduced to `buckets` slices, each keeping its lowest and highest), `reduce`, `file_of` (a file only by its name in a result's payload).
 - `src/app/server/app.py`: `GET /api/sources/{id}`, `.../scenes`, `.../transcript`, `.../peaks?buckets=`, `.../proxy` (range requests, so the player seeks), `.../thumbnails/{name}`, `.../keyframes/{name}` (cached as immutable); strata-python's `add_jobs` routes (`GET /api/jobs`, counts, cancel, retry). `web/openapi.json`, `web/src/api.generated.ts` regenerated.
