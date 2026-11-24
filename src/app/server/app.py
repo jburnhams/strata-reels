@@ -9,6 +9,17 @@ error answers ({detail, payload}) and the web app's pages. This app's own routes
     POST /api/sources {path}          add footage: 201 when new, 200 when it is already a source, 400 when it cannot be one;
                                       a source is queued for ingest (its `hash`
                                       job, which queues the proxy, thumbnails and peaks)
+    GET /api/sources/{id}             one source (404 when there is none)
+    GET /api/sources/{id}/scenes      its scenes with their pictures, speech, descriptions and faces, as far as the
+                                      jobs have got (`browse.Scenes`; `waiting` says what for while there are none)
+    GET /api/sources/{id}/transcript  its speech, segment by segment with word timings
+    GET /api/sources/{id}/peaks?buckets=4000   its waveform, reduced to that many slices (404 before it is made)
+    GET /api/sources/{id}/proxy       the browser copy, with range requests so the player can seek
+    GET /api/sources/{id}/thumbnails/{name}, .../keyframes/{name}   a picture named in its result
+
+From strata-python's `add_jobs`: GET /api/jobs (newest first, filtered by state, kind or domain), GET
+/api/jobs/counts, GET /api/jobs/{id}, POST /api/jobs/{id}/cancel and POST /api/jobs/{id}/retry, which strata-react's
+`JobsTable` reads.
 
 The server runs the job queue (`app.jobs.Runner`) while it is up: jobs start once the database is open.
 
@@ -20,15 +31,20 @@ types are generated from it."""
 import contextlib
 import os
 from collections.abc import AsyncGenerator, Sequence
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Query, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from strata_python import web
 from strata_python.db.web import DbSession, add_database
+from strata_python.tasks.web import add_jobs
 
-from app import __version__, db, jobs, settings, sources, system
+from app import __version__, browse, db, jobs, settings, sources, system
+
+# A derived file never changes under its name (a new recipe is a new folder), so the browser may keep it.
+IMMUTABLE = "public, max-age=31536000, immutable"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
@@ -70,6 +86,50 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
             response.status_code = 200
         return sources.Described.of(source)
 
+    def one(s: Session, source_id: int) -> sources.Source:
+        found = s.get(sources.Source, source_id)
+        if found is None:
+            raise KeyError(f"there is no source {source_id}")
+        return found
+
+    @app.get("/api/sources/{source_id}")
+    def get_source(source_id: int, s: DbSession) -> sources.Described:
+        return sources.Described.of(one(s, source_id))
+
+    @app.get("/api/sources/{source_id}/scenes")
+    def get_scenes(source_id: int, s: DbSession) -> browse.Scenes:
+        return browse.scenes_of(s, one(s, source_id))
+
+    @app.get("/api/sources/{source_id}/transcript")
+    def get_transcript(source_id: int, s: DbSession) -> browse.Transcript:
+        return browse.transcript_of(s, one(s, source_id))
+
+    @app.get("/api/sources/{source_id}/peaks")
+    def get_peaks(
+        source_id: int,
+        s: DbSession,
+        buckets: Annotated[int, Query(ge=1, le=browse.MAX_BUCKETS)] = browse.PEAK_BUCKETS,
+    ) -> browse.Peaks:
+        return browse.peaks_of(s, one(s, source_id), buckets)
+
+    @app.get("/api/sources/{source_id}/proxy", response_class=FileResponse)
+    def get_proxy(source_id: int, s: DbSession) -> FileResponse:
+        # Starlette answers Range requests from the file, which the <video> needs to seek.
+        return FileResponse(
+            browse.file_of(s, one(s, source_id), "proxy"), media_type="video/mp4", headers={"Cache-Control": IMMUTABLE}
+        )
+
+    @app.get("/api/sources/{source_id}/thumbnails/{name}", response_class=FileResponse)
+    def get_thumbnail(source_id: int, name: str, s: DbSession) -> FileResponse:
+        path = browse.file_of(s, one(s, source_id), "thumbnails", name)
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": IMMUTABLE})
+
+    @app.get("/api/sources/{source_id}/keyframes/{name}", response_class=FileResponse)
+    def get_keyframe(source_id: int, name: str, s: DbSession) -> FileResponse:
+        path = browse.file_of(s, one(s, source_id), "keyframes", name)
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": IMMUTABLE})
+
+    add_jobs(app, lambda: jobs.queue(records.engine()))
     web.add_web(app, STATIC, LANDING)  # last: its catch-all serves the web app at every other path
     return app
 

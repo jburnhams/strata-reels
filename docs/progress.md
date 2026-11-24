@@ -1,5 +1,15 @@
 # Progress log
 
+## 2026-11-24: the scene browser (R1 step 4, first half)
+
+- Asked for: while the GPU machine is offline, a web view of a tape's scenes (thumbnail strips, transcript, descriptions, face counts) and the jobs screen deferred from step 1b, with the reusable parts in strata-react.
+- One read for the page (`GET /api/sources/<id>/scenes`, `browse.py`) puts the results together and says, per step, what exists: a step that has not run is `null`, never an empty list, so a tape part way through its jobs reads as "not described yet", not "nothing said". Before there are scenes, `waiting` names the job they wait for. The transcript and the waveform are reads of their own.
+- Pictures of a scene are the 10 s thumbnails inside it; a scene shorter than the step gets its shots' keyframes. Files are served by the names in their result's payload only, so a name from the request never becomes a path.
+- The waveform is reduced on the server (each slice keeps its lowest and highest), since a three-hour tape at 50 slices a second is half a million pairs. It is drawn normalised: camcorder sound peaks near a tenth of full scale and was a flat line. The scaling is strata-react's (`Waveform normalise`, a 99.5th percentile with a ceiling of 16× so hiss stays small) and the plot says by how much.
+- strata-react gained `FilmStrip` (a row of frames that fits its width, each with its time, a press to play from it, the frame being watched marked) and `Waveform normalise`, both in strata-react's PR for this thread; this app takes them from the release after it.
+- The jobs page is strata-react's `JobsTable` over strata-python's `add_jobs` routes, which reels now mounts; each job is named by what it does to which tape ("Find the shots in christmas-1996.mkv"). It refreshes every 3 s while anything is waiting or running.
+- Not done: corrections (a boundary moved, a description rewritten) stored as overrides, the rest of step 4; a look at a real tape's page on the GPU machine.
+
 ## 2026-11-24: speech, faces and descriptions (R1 step 3)
 
 - Asked for: carry on with the plan after step 2: transcription, descriptions and who is in each scene, and the real-tape run if the GPU machine can be reached. It could not (offline all day), so everything here is checked against strata-models stood in for.

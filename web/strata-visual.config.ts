@@ -35,6 +35,8 @@ export default defineVisualConfig({
           },
         },
       },
+      { name: 'tape', path: '/sources/5' },
+      { name: 'jobs', path: '/jobs' },
       { name: 'system', path: '/system' },
       { name: 'settings', path: '/settings' },
     ],
