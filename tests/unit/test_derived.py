@@ -119,7 +119,7 @@ def test_a_tape_added_again_makes_nothing_again(engine, tmp_path, made, tape_mod
     assert records["proxy"].metrics == {"new": True}
     proxy = records["proxy"].data  # the result it stands on, so what reads it runs again only for another one
     assert sorted(proxy) == ["file", "key", "result"]
-    assert proxy["file"].endswith("/proxy.mp4")
+    assert os.path.basename(proxy["file"]) == "proxy.mp4"  # under the result's folder, in the OS's separators
     jobs.ingest_later(q, source)  # done for the same inputs: the job runs no stage
     jobs.work(q)
     assert len(made) == 4
