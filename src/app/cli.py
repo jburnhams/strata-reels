@@ -1,6 +1,7 @@
 """Command line. From strata-python: `doctor` (versions and imports), `set` (a setting), `serve` (the web server) and
 `openapi` (the schema file the web app's types are generated from). The app's own: `add` adds footage as sources (and
-queues each one's ingest: the content hash, then the proxy, thumbnails and peaks), `sources` lists them, `jobs` lists the job queue and `work` runs what is queued, here,
+queues each one's ingest: the content hash, then the proxy, thumbnails, peaks and shots), `sources` lists them,
+`scenes` lists a source's scenes (from its shots, once the jobs have run), `jobs` lists the job queue and `work` runs what is queued, here,
 until nothing is (the server runs the queue itself while it is up)."""
 
 import argparse
@@ -11,8 +12,9 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 from strata_python import cli as shared
+from strata_python import mediatime
 
-from app import __version__, db, jobs, settings, sources
+from app import __version__, db, jobs, scenes, settings, sources
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -64,6 +66,27 @@ def cmd_sources(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_scenes(args: argparse.Namespace) -> int:
+    with db.session() as s:
+        source = s.get(sources.Source, args.source)
+        if source is None:
+            print(f"  there is no source {args.source} (./app sources lists them)", file=sys.stderr)
+            return 1
+        found = scenes.current(s, source)
+        if found is None:
+            print(f"  {source.name} has no scenes yet: ./app jobs shows what is queued, ./app work runs it")
+            return 1
+        grouped = found.payload
+    if args.json:
+        print(json.dumps(grouped, indent=1))
+        return 0
+    for i, sc in enumerate(grouped["scenes"]):
+        start, end = float(mediatime.rational(sc["start"])), float(mediatime.rational(sc["end"]))
+        sure = "" if sc["confidence"] is None else f"  (boundary {sc['confidence']:.0%})"
+        print(f"  {i + 1:>3}  {start:9.2f} to {end:9.2f} s  {len(sc['shots']):3} shots{sure}")
+    return 0
+
+
 def cmd_jobs(args: argparse.Namespace) -> int:
     with db.opened() as engine:
         page = jobs.queue(engine).page(limit=args.limit)
@@ -99,6 +122,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     so = sub.add_parser("sources", help="list the sources")
     so.add_argument("--json", action="store_true")
     so.set_defaults(fn=cmd_sources)
+    sc = sub.add_parser("scenes", help="list a source's scenes, with how sure each boundary is")
+    sc.add_argument("source", type=int)
+    sc.add_argument("--json", action="store_true")
+    sc.set_defaults(fn=cmd_scenes)
     jo = sub.add_parser("jobs", help="list the job queue, newest first")
     jo.add_argument("--limit", type=int, default=50)
     jo.add_argument("--json", action="store_true")

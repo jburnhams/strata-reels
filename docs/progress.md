@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-24: shots and scenes (R1 step 2)
+
+- Asked for: start the next step of the plan, turning a tape into scenes.
+- Shots come from strata-models' `shot-boundaries` (ffmpeg's scene score after yadif, the role's baseline since strata-models #102). Its answer gives each cut's frame, so the frame is what is stored and every time is frame over the stream's rate, exact. Black stretches are snapped to frames, and a shot that is 90 % black is marked as a gap.
+- Grouping: what says two neighbouring shots on a home tape belong to one event is that they look alike (the same room after the camcorder was restarted) and that there is no black between them. Each shot gets one keyframe, its middle frame, made with strata-python's new `derive.frames` (strata-python #69), because a VHS shot is often shorter than the thumbnails' 10 s step. strata-models' `image-embed` (CLIP ViT-B/32) gives each keyframe a vector, and neighbouring shots are compared by cosine. The confidence that a cut starts a scene is a logistic around a cosine of 0.82, 0.04 wide; black at or between the shots raises it to at least 0.9. These numbers are guesses, not measurements.
+- Spec S5 asks for a hierarchy of boundaries with a confidence and a reason, not a flat partition. So every cut is kept with its level (`scene` at a confidence of one half or more, else `shot`), its confidence, the similarity and its reasons in words ("pictures alike (0.91)", "black at the cut"). The grouping is a pure function stored as a result (role `reels-scenes`, version 1) keyed on the shots and embeddings it read.
+- Checked: the unit suite with strata-models stood in for over real HTTP, and an integration test that cuts real keyframes from a real file (red, dark red, black, blue) and compares their real average colours in place of CLIP. Red and dark red come out as one scene, black as the gap, and blue as another.
+- Not done: no run on a real tape yet. The plan's other prerequisites also wait for the GPU machine: `shots-spliced` on the real race footage, and a check of the shot detector on tape faults. The thresholds need a tape whose scenes a person has marked, and step 4's chapters screen makes such corrections. No API for scenes yet; it comes with the chapters screen, its first reader. A shot under a second between two shots of one place (a glitch at a record-pause) ends up as a scene of its own; whether that happens on real tapes is to be seen.
+
 ## 2026-11-23: ingest from the raw footage (R1 step 1)
 
 - Asked for: finish step 1 with browser proxies, thumbnails and audio peaks, made by general helpers in strata-python and run as jobs here, stored with the provenance tables of step 1b. Jonathan then set that ingest starts from the raw footage and restoration comes later in the pipeline; it is now part of step 7 (restore, render, export), for the spans the reel uses.

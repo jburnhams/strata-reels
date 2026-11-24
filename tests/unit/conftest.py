@@ -5,6 +5,7 @@ import os
 
 import pytest
 from hypothesis import HealthCheck, settings
+from probes import SHOTS, embeddings
 from strata_python import derive, media, mediatime
 
 settings.register_profile(
@@ -45,11 +46,28 @@ def made(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
             out.append(derive.Thumb(i * step, path))
         return out
 
+    def frames(src, folder, numbers, **_):
+        calls.append((os.path.basename(src), "keyframes"))
+        os.makedirs(folder, exist_ok=True)
+        out = []
+        for n in sorted(set(numbers)):
+            path = os.path.join(folder, f"{n:06d}.jpg")
+            with open(path, "wb") as f:
+                f.write(b"jpg")
+            out.append(derive.Frame(n, path))
+        return out
+
     def peaks(src, *, per_second=50, **_):
         calls.append((os.path.basename(src), "peaks"))
         return derive.Peaks(per_second, [-0.5, -0.25], [0.5, 0.25])
 
-    for name, fn in [("interlacing", interlacing), ("proxy", proxy), ("thumbnails", thumbnails), ("peaks", peaks)]:
+    for name, fn in [
+        ("interlacing", interlacing),
+        ("proxy", proxy),
+        ("thumbnails", thumbnails),
+        ("peaks", peaks),
+        ("frames", frames),
+    ]:
         monkeypatch.setattr(derive, name, fn)
     return calls
 
@@ -61,3 +79,14 @@ PROXY_PROBE = {
         {"codec_type": "audio", "codec_name": "aac", "channels": 2},
     ],
 }
+
+
+@pytest.fixture
+def tape_models(fake_models):
+    """strata-models, stood in for over real HTTP (strata-python's `fake_models`), answering shots and vectors for the
+    tape. Its settings are set, so each result's provenance has a model and a settings hash."""
+    fake_models.results["shot-boundaries"] = SHOTS
+    fake_models.results["image-embed"] = embeddings
+    fake_models.models.update({"shot-boundaries": "ffmpeg-scene-score", "image-embed": "clip-vit-b-32"})
+    fake_models.options.update({"shot-boundaries": {"threshold": 0.3}, "image-embed": {"half": True}})
+    return fake_models

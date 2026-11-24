@@ -22,7 +22,13 @@ Kinds:
   file. Queued by the `hash` job (they are keyed on the hash), or by `ingest_later` for a source already hashed. Each
   checks the file is still the source's footage first. Peaks only for a source with sound. They hold `disk` too.
 
-Ingest is these four. Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
+- `shots` (step 2): the source's shots, asked of strata-models' `shot-boundaries` (`shots.detect`), queued by the
+  `hash` job beside the assets. It holds no resource here: strata-models queues the work on its own CPU lane. Then
+  `keyframes`, a picture of each shot (`disk`), then `scenes`, which asks strata-models for the keyframes' vectors and
+  groups the shots (`scenes.find_scenes`). Each queues the next when it is done; each finds its result stored and
+  makes nothing when the same request ran before.
+
+Ingest is the first four. Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
 
 import logging
 import os
@@ -36,7 +42,7 @@ from strata_python.db import url_for
 from strata_python.db.web import Database
 from strata_python.tasks.queue import Handler, Job, Queue, Worker
 
-from app import db, derived
+from app import db, derived, scenes, shots
 from app.models import JOBS, Source
 
 log = logging.getLogger(__name__)
@@ -59,13 +65,21 @@ def hash_later(q: Queue, source: Source) -> int | None:
 
 
 def derive_later(q: Queue, source: Source) -> list[int]:
-    """Queue the derived assets of a hashed source; the jobs' ids (the same ones while they are queued or running)."""
+    """Queue what a hashed source gets next: its derived assets and its shots; the jobs' ids (the same ones while they
+    are queued or running)."""
     if source.sha256 is None:
         return []
-    return [
+    made = [
         q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=["disk"])
         for kind in derived.wanted(source)
     ]
+    return [*made, later(q, "shots", source)]
+
+
+def later(q: Queue, kind: str, source: Source) -> int:
+    """Queue one of the analysis jobs (`shots`, `keyframes`, `scenes`) for a source."""
+    resources = ["disk"] if kind == "keyframes" else []
+    return q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=resources)
 
 
 def ingest_later(q: Queue, source: Source) -> list[int]:
@@ -113,7 +127,48 @@ def derive_asset(job: Job) -> dict[str, Any]:
         return {"result": r.id, "file": r.file, "new": new}
 
 
-HANDLERS: dict[str, Handler] = {"hash": hash_source, **dict.fromkeys(derived.KINDS, derive_asset)}
+def find_shots(job: Job) -> dict[str, Any]:
+    """The `shots` job: the source's shots from strata-models, then its keyframes queued."""
+    with Session(_records(), expire_on_commit=False) as s:
+        source = _source(s, job)
+        _same_footage(source.path, source.fingerprint)
+        r, new = shots.detect(s, source, job_id=job.id)
+        later(queue(_records()), "keyframes", source)
+        return {"result": r.id, "shots": len(r.payload["shots"]), "new": new}
+
+
+def make_keyframes(job: Job) -> dict[str, Any]:
+    """The `keyframes` job: a picture of each shot, then the scenes queued."""
+    with Session(_records(), expire_on_commit=False) as s:
+        source = _source(s, job)
+        _same_footage(source.path, source.fingerprint)
+        r, new = shots.keyframes(s, source, job_id=job.id)
+        later(queue(_records()), "scenes", source)
+        return {"result": r.id, "file": r.file, "new": new}
+
+
+def group_scenes(job: Job) -> dict[str, Any]:
+    """The `scenes` job: the keyframes' vectors from strata-models, then the shots grouped into scenes."""
+    with Session(_records(), expire_on_commit=False) as s:
+        r, new = scenes.find_scenes(s, _source(s, job), job_id=job.id)
+        return {"result": r.id, "scenes": len(r.payload["scenes"]), "new": new}
+
+
+def _source(s: Session, job: Job) -> Source:
+    source_id = int(job.options["source"])
+    source = s.get(Source, source_id)
+    if source is None:
+        raise KeyError(f"there is no source {source_id}")
+    return source
+
+
+HANDLERS: dict[str, Handler] = {
+    "hash": hash_source,
+    **dict.fromkeys(derived.KINDS, derive_asset),
+    "shots": find_shots,
+    "keyframes": make_keyframes,
+    "scenes": group_scenes,
+}
 
 
 def work(q: Queue) -> list[Job]:
