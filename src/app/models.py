@@ -18,6 +18,7 @@ from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, Index, Int
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from strata_python.db import NAMING_CONVENTION
 from strata_python.tasks.queue import jobs_table
+from strata_python.workflow.store import workflow_table
 
 
 class Base(MappedAsDataclass, DeclarativeBase):
@@ -46,7 +47,7 @@ class Source(Base):
     probe: Mapped[dict[str, Any]] = mapped_column(JSON)
     added: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default_factory=_now)
     # The full SHA-256 of the content, its identity in every cache key and render manifest (spec §3 MediaAsset). Reading
-    # a tape of several GB takes a while, so it is filled in by a `hash` job after the source is added (`jobs`), and is
+    # a tape of several GB takes a while, so it is filled in by the `hash` stage of the tape's pipeline after the source is added (`jobs`), and is
     # None until then: nothing that needs it may run before it.
     sha256: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
 
@@ -54,6 +55,10 @@ class Source(Base):
 # The job queue's table (strata_python.tasks.queue): part of these models, so the app's migrations create it, and in the
 # app's own schema on the shared Postgres. Analysis and hashing run as its jobs (`jobs`).
 JOBS = jobs_table(Base.metadata)
+
+# The records of each tape's pipeline (strata_python.workflow, `jobs.TAPE`): one append-only row per attempt, approval
+# or clear of a stage, the evidence the tape page shows. What a stage found stays in `results`.
+STAGES = workflow_table(Base.metadata)
 
 
 class Result(Base):

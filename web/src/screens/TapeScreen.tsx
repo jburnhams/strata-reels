@@ -1,5 +1,5 @@
 // The one question: "What happens on this tape, and where?" (R1 step 4, the tape's chapters). A
-// family tape is hours of footage nobody has watched since it was recorded; the analysis jobs split
+// family tape is hours of footage nobody has watched since it was recorded; the analysis steps split
 // it into scenes (src/app/scenes.py) and say what each shows (describe.py), who is in it (faces) and
 // what is said (speech.py). The finding counts the scenes and says what is still to come; then the
 // player, the tape's sound, and the scenes in order, each a strip of its thumbnails to recognise it
@@ -7,14 +7,17 @@
 //
 // - Every read is useLoad -> DataView. The scenes are one read (`GET /api/sources/{id}/scenes`,
 //   src/app/browse.py), which says what each step has found so far, so a tape part way through its
-//   jobs shows what is done and names what is not, never an empty answer that reads as "nothing".
+//   steps shows what is done and names what is not, never an empty answer that reads as "nothing".
 //   The waveform and the transcript are reads of their own, so a slow one never holds the scenes.
-// - The page follows the tape's jobs while any is waiting or running (`useJob` over this source's
-//   queued and running jobs): the scenes are read again every few seconds then, and everything once
-//   the last finishes, so a tape opened part way fills in without a reload. The transcript's key
+// - The tape's analysis is one strata-python pipeline (src/app/jobs.py `TAPE`), advanced by one queued
+//   job. The page follows it with `useWorkflowRun` over the shared workflow route: while the job is
+//   waiting or running the scenes are read again every few seconds, and everything once it ends, so a
+//   tape opened part way fills in without a reload. The Steps tab is strata-react's `WorkflowSteps`
+//   (each step's state as a word, a failure in the server's words with Try again) under the job's
+//   `JobStatus` while it runs, and the finding names a failed step, so a stuck tape says why. The transcript's key
 //   carries whether there is one, so it is read again when it arrives; the waveform is read when the
 //   scenes first say it is there.
-// - Playback is Strata's MediaPlayer over the browser copy (the proxy job's file), driven from the
+// - Playback is Strata's MediaPlayer over the browser copy (the proxy step's file), driven from the
 //   page through `mediaRef`: a frame of a strip, a scene's Play button, a word of the transcript and
 //   the waveform all seek it. The scenes are the player's spans and the waveform's chapter marks.
 // - Only the scene being played is given the time, so the playhead re-draws one strip, not all of
@@ -35,6 +38,8 @@ import {
   EmptyState,
   FilmStrip,
   format,
+  type Job,
+  JobStatus,
   type MediaElementState,
   MediaPlayer,
   type MediaSpanData,
@@ -46,11 +51,12 @@ import {
   type TranscriptGroup,
   TranscriptView,
   useExpanded,
-  useJob,
   useLoad,
+  useWorkflowRun,
   Waveform,
+  WorkflowSteps,
 } from 'strata-react'
-import { api, keys, type Scene, type Scenes, type Source, type Transcript } from '../api'
+import { api, keys, type Scene, type Scenes, type Source, subjectOf, type Transcript, type WorkflowRun } from '../api'
 
 /** Under this the cut before a scene is as likely a shot change as a new scene: say so. */
 export const UNSURE = 0.65
@@ -72,7 +78,18 @@ export function describeScenes(d: Scenes): string {
   return `${parts.join('; ')}.`
 }
 
-/** "Up to 4 faces", "No faces", or null before the faces job. A scene's count is the most on one keyframe: a floor. */
+/** The task states that mean a job has ended (strata-python's queue). */
+const FINISHED = ['done', 'failed', 'cancelled']
+
+/** The finding's last sentence when a step failed: which, and where to read why. */
+export function describeFailed(run: Pick<WorkflowRun, 'stages'>): string | null {
+  const failed = run.stages.filter(s => s.state === 'failed')
+  if (!failed.length) return null
+  const names = failed.map(s => `"${s.title}"`).join(' and ')
+  return `${names} failed: the Steps tab says why.`
+}
+
+/** "Up to 4 faces", "No faces", or null before the faces step. A scene's count is the most on one keyframe: a floor. */
 export function describeFaces(n: number | null): string | null {
   if (n === null) return null
   return n === 0 ? 'No faces' : `Up to ${format.count(n, 'face')}`
@@ -116,36 +133,40 @@ const FOLLOW = 5000
 
 export function TapeScreen() {
   const id = Number(useParams().id)
-  const work = useJob({
-    queryKey: [...keys.jobs, 'source', id],
-    queryFn: () => api.get('/api/jobs', { query: { domain: `source:${String(id)}`, state: ['queued', 'running'], limit: 1 } }),
-    isRunning: p => p.items.length > 0,
+  const run = useWorkflowRun({
+    queryKey: keys.run(id),
+    queryFn: () => api.get('/api/workflows/tape/subjects/{subject}', { path: { subject: subjectOf(id) } }),
+    finished: FINISHED,
     every: FOLLOW,
     invalidates: [keys.scenes(id), keys.transcript(id), keys.peaks(id)],
   })
   const load = useLoad({
     queryKey: keys.scenes(id),
     queryFn: () => api.get('/api/sources/{source_id}/scenes', { path: { source_id: id } }),
-    refetchInterval: work.running ? FOLLOW : false,
+    refetchInterval: run.running ? FOLLOW : false,
   })
+  const failed = run.status === 'ready' ? describeFailed(run.data) : null
   return (
     <>
       <PageHeader
         title={load.status === 'ready' ? load.data.source.name : 'Tape'}
         scope="Scenes found on the tape, with what each shows"
-        finding={load.status === 'ready' ? { text: describeScenes(load.data) } : undefined}
+        finding={load.status === 'ready' ? { text: [describeScenes(load.data), failed].filter(Boolean).join(' ') } : undefined}
       />
       <DataView
         state={load}
         isEmpty={d => d.scenes.length === 0}
         skeleton={<TapeSkeleton />}
         empty={
-          <EmptyState title="No scenes yet">
-            The scenes appear here as the jobs finish; the <TextLink to="/jobs">jobs page</TextLink> shows how far they have got.
-          </EmptyState>
+          <div className="grid gap-6">
+            <EmptyState title="No scenes yet">
+              The scenes appear here as the steps below finish; the <TextLink to="/jobs">jobs page</TextLink> shows every tape's.
+            </EmptyState>
+            <TapeSteps id={id} run={run} />
+          </div>
         }
       >
-        {d => <Tape data={d} />}
+        {d => <Tape data={d} run={run} />}
       </DataView>
     </>
   )
@@ -166,7 +187,34 @@ function TapeSkeleton() {
   )
 }
 
-function Tape({ data }: { data: Scenes }) {
+/** The tape's steps (`WorkflowSteps`), under the job's progress while it runs. Try again queues the tape's job, which starts at the failed step. */
+function TapeSteps({ id, run }: { id: number; run: Job<WorkflowRun> }) {
+  return (
+    <DataView state={run} isEmpty={() => false} empty={null} skeleton={<Skeleton className="h-64 w-full max-w-xl" />}>
+      {r => (
+        <div className="grid max-w-xl gap-4">
+          {r.job && run.running && (
+            <JobStatus
+              label="Analysis"
+              running
+              words={{ running: 'Analysing', finished: 'Analysed', failed: 'Stopped' }}
+              summary={r.job.progress?.text ?? 'Waiting for its turn'}
+              current={r.job.progress?.done}
+              total={r.job.progress?.total ?? undefined}
+            />
+          )}
+          <WorkflowSteps
+            label="Steps of the analysis"
+            stages={r.stages}
+            onRetry={() => api.post('/api/workflows/tape/subjects/{subject}/run', { path: { subject: subjectOf(id) } }).then(run.poll)}
+          />
+        </div>
+      )}
+    </DataView>
+  )
+}
+
+function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
   const { source, scenes, analysis } = data
   const player = useRef<MediaElementState | null>(null)
   // A quarter second is finer than any frame strip or transcript word needs, and React skips a render for the same value.
@@ -200,7 +248,7 @@ function Tape({ data }: { data: Scenes }) {
           />
         ) : (
           <EmptyState title="The browser copy is still being made">
-            The tape plays here once the proxy job has made a copy the browser can seek in. The scenes below are ready to read.
+            The tape plays here once the proxy step has made a copy the browser can seek in. The scenes below are ready to read.
           </EmptyState>
         )}
         {analysis.peaks && <TapeSound sourceId={source.id} time={time} onSeek={seek} marks={marks} />}
@@ -211,10 +259,13 @@ function Tape({ data }: { data: Scenes }) {
         items={[
           { value: 'scenes', label: 'Scenes' },
           { value: 'transcript', label: 'Transcript' },
+          { value: 'steps', label: 'Steps' },
         ]}
       >
         {view =>
-          view === 'transcript' ? (
+          view === 'steps' ? (
+            <TapeSteps id={source.id} run={run} />
+          ) : view === 'transcript' ? (
             <TapeTranscript sourceId={source.id} ready={analysis.transcript} scenes={scenes} time={time} onSeek={seek} />
           ) : (
             <SceneList scenes={scenes} playing={playing} time={time} onSeek={seek} />

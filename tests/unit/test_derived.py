@@ -97,7 +97,6 @@ def test_nothing_is_made_before_the_hash_or_of_an_unknown_kind(engine, tmp_path)
             derived.make(s, src, "proxy")
         with pytest.raises(ValueError, match="makes no 'restored'"):
             derived.make(s, src, "restored")
-        assert jobs.derive_later(jobs.queue(engine), src) == []
 
 
 def test_path_of_needs_a_file(engine, tmp_path):
@@ -110,37 +109,33 @@ def test_path_of_needs_a_file(engine, tmp_path):
             derived.path_of(r)
 
 
-def test_a_tape_added_again_queues_its_assets_at_once(engine, tmp_path, made, tape_models):
+def test_a_tape_added_again_makes_nothing_again(engine, tmp_path, made, tape_models):
     source = hashed(engine, tmp_path)
     q = jobs.queue(engine)
-    ids = jobs.ingest_later(q, source)
-    assert len(ids) == 5  # the three assets, the shots and the speech
-    assert jobs.ingest_later(q, source) == ids  # while queued: the same jobs
-    ran = jobs.work(q)
-    assert [(j.kind, j.state) for j in ran] == [
-        ("proxy", "done"), ("thumbnails", "done"), ("peaks", "done"), ("shots", "done"), ("transcript", "done"),
-        ("keyframes", "done"), ("scenes", "done"), ("faces", "done"), ("describe", "done"),
-    ]  # fmt: skip
-    assert ran[0].result is not None
-    assert ran[0].result["new"] is True
-    jobs.ingest_later(q, source)  # done once: the jobs run again and find what is stored
-    assert all(j.result is not None and j.result["new"] is False for j in jobs.work(q))
+    (ran,) = jobs.work(q) if jobs.ingest_later(q, source) else []
+    assert ran.result is not None
+    assert ran.result["state"] == "done"
+    records = jobs.store().load(jobs.subject_of(source))
+    assert records["proxy"].metrics == {"new": True}
+    proxy = records["proxy"].data  # the result it stands on, so what reads it runs again only for another one
+    assert sorted(proxy) == ["file", "key", "result"]
+    assert proxy["file"].endswith("/proxy.mp4")
+    jobs.ingest_later(q, source)  # done for the same inputs: the job runs no stage
+    jobs.work(q)
     assert len(made) == 4
     # asked once each (a description per scene)
     assert [j["role"] for j in tape_models.jobs] == [
-        "shot-boundaries", "transcribe", "image-embed", "faces", "scene-describe", "scene-describe",
+        "shot-boundaries", "image-embed", "faces", "transcribe", "scene-describe", "scene-describe",
     ]  # fmt: skip
 
 
-def test_an_asset_job_refuses_a_changed_file_and_a_missing_source(engine, tmp_path, made):
+def test_nothing_is_made_of_a_changed_file(engine, tmp_path, made):
     source = hashed(engine, tmp_path)
     (tmp_path / "tape.mkv").write_bytes(b"other footage" * 500)
     q = jobs.queue(engine)
-    jobs.derive_later(q, source)
-    q.enqueue("proxy", {"source": 404})
-    ran = jobs.work(q)
-    assert "tape.mkv has changed since it was added" in (ran[0].error or "")
-    assert "there is no source 404" in (ran[-1].error or "")
+    jobs.ingest_later(q, source)
+    (ran,) = jobs.work(q)
+    assert "tape.mkv has changed since it was added" in (ran.error or "")
     assert made == []
 
 

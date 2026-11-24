@@ -78,7 +78,7 @@ class Scene(ApiModel):
     reasons: list[str] = Field(description="why the cut before it is a boundary, in words")
     frames: list[Frame]
     description: Description | None
-    faces: int | None = Field(description="the most faces on any one of its keyframes; None before the faces job")
+    faces: int | None = Field(description="the most faces on any one of its keyframes; None before the faces step")
     speech: str | None = Field(
         description="what is said in it (doubtful segments left out); None before the transcript"
     )
@@ -122,7 +122,7 @@ class Segment(ApiModel):
 
 
 class Transcript(ApiModel):
-    """The whole source's speech, or no segments with `waiting` set before the transcript job has run."""
+    """The whole source's speech, or no segments with `waiting` set before the transcript step has run."""
 
     language: str | None
     model: str | None
@@ -234,8 +234,8 @@ def _waiting(source: Source, cut: Result | None) -> str:
     if source.sha256 is None:
         return "Reading the whole file first, to know it by its content."
     if cut is None:
-        return "Finding where the camera stopped and started (the shots job)."
-    return "Grouping the shots into scenes (the keyframes and scenes jobs)."
+        return "Finding where the camera stopped and started (the shots step)."
+    return "Grouping the shots into scenes (the keyframes and scenes steps)."
 
 
 def transcript_of(db: Session, source: Source) -> Transcript:
@@ -243,7 +243,7 @@ def transcript_of(db: Session, source: Source) -> Transcript:
         return Transcript(language=None, model=None, waiting=None, segments=[])
     said = speech.current(db, source)
     if said is None:
-        return Transcript(language=None, model=None, waiting="Listening for speech (the transcript job).", segments=[])
+        return Transcript(language=None, model=None, waiting="Listening for speech (the transcript step).", segments=[])
     p = said.payload
     return Transcript(
         language=p["language"],
@@ -269,7 +269,7 @@ def reduce(lo: list[float], hi: list[float], buckets: int) -> tuple[list[float],
 
 
 def peaks_of(db: Session, source: Source, buckets: int = PEAK_BUCKETS) -> Peaks:
-    """The source's waveform in `buckets` slices. KeyError before the peaks job has made it (or for a source with no
+    """The source's waveform in `buckets` slices. KeyError before the peaks step has made it (or for a source with no
     sound, which gets none)."""
     found = _asset(db, source, "peaks")
     if found is None:
@@ -290,7 +290,7 @@ def file_of(
     if what == "proxy":
         found = _asset(db, source, "proxy")
         if found is None:
-            raise KeyError(f"{source.name} has no browser copy yet: the proxy job makes it")
+            raise KeyError(f"{source.name} has no browser copy yet: the proxy step makes it")
         return derived.path_of(found)
     r = _asset(db, source, "thumbnails") if what == "thumbnails" else _keyframes(db, source, shots.current(db, source))
     listed = (

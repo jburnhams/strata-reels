@@ -64,7 +64,7 @@ describe('the tape page', () => {
     expect(describeScenes(tapeScenes)).toBe(
       `${format.count(6, 'scene')} over 2:59:48; ${format.count(1, 'scene')} not described yet; 2 starts to check.`,
     )
-    expect(describeScenes(waitingScenes(4))).toBe('Grouping the shots into scenes (the keyframes and scenes jobs).')
+    expect(describeScenes(waitingScenes(4))).toBe('Grouping the shots into scenes (the keyframes and scenes steps).')
     const one = { ...tapeScenes, scenes: [{ ...tapeScenes.scenes[0] }], analysis: { ...tapeScenes.analysis, transcript: false } }
     expect(describeScenes(one)).toBe(`${format.count(1, 'scene')} over 6:52; speech still to come.`)
     expect(describeScenes({ ...one, scenes: [], waiting: null })).toBe('No scenes found.')
@@ -112,10 +112,10 @@ describe('the tape page', () => {
 
 describe('the jobs page', () => {
   it('names a job by what it does to which source', () => {
-    expect(describeJob({ kind: 'shots', domain: 'source:5' }, initialSources)).toBe('Find the shots in christmas-1996.mkv')
-    expect(describeJob({ kind: 'hash', domain: 'source:77' }, initialSources)).toBe('Read all of source 77')
-    expect(describeJob({ kind: 'hash', domain: null }, initialSources)).toBe('Read all of a source')
-    expect(describeJob({ kind: 'restore', domain: 'source:5' }, initialSources)).toBe('restore (christmas-1996.mkv)')
+    expect(describeJob({ kind: 'workflow:tape', domain: 'tape:source:5' }, initialSources)).toBe('Analyse christmas-1996.mkv')
+    expect(describeJob({ kind: 'workflow:tape', domain: 'tape:source:77' }, initialSources)).toBe('Analyse source 77')
+    expect(describeJob({ kind: 'workflow:tape', domain: null }, initialSources)).toBe('Analyse a source')
+    expect(describeJob({ kind: 'restore', domain: 'tape:source:5' }, initialSources)).toBe('restore (christmas-1996.mkv)')
     expect(describeJob({ kind: 'restore', domain: null }, [])).toBe('restore')
   })
   it('says what the queue is doing', () => {

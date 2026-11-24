@@ -8,24 +8,24 @@ describe('Jobs', () => {
     openApp('/jobs')
     const table = await screen.findByRole('grid', { name: /Jobs, newest first/ })
     expect(screen.getByText('1 running, 1 waiting, 1 failed.')).toBeInTheDocument()
-    expect(within(table).getByRole('row', { name: /Describe the scenes in christmas-1996\.mkv/ })).toHaveTextContent('Scene 4 of 6')
-    expect(within(table).getByRole('row', { name: /Find the faces in christmas-1996\.mkv/ })).toHaveTextContent(
-      'strata-models is not answering',
-    )
-    expect(within(table).getByRole('row', { name: /Read all of beach\.mp4/ })).toHaveTextContent('Cancelled')
+    // one job per tape, its progress the step it is on
+    const [running, cancelled] = within(table).getAllByRole('row', { name: /Analyse beach\.mp4/ })
+    expect(running).toHaveTextContent('Find the shots')
+    expect(cancelled).toHaveTextContent('Cancelled')
+    expect(within(table).getByRole('row', { name: /Analyse wedding-1994-side-b\.mkv/ })).toHaveTextContent('strata-models is not answering')
   })
 
   it('runs a failed job again', async () => {
     const { user } = openApp('/jobs')
-    await user.click(await screen.findByRole('button', { name: 'Run again Find the faces in christmas-1996.mkv' }))
-    await waitFor(() => expect(mock.jobs.find(j => j.id === 13)?.state).toBe('queued'))
+    await user.click(await screen.findByRole('button', { name: 'Run again Analyse wedding-1994-side-b.mkv' }))
+    await waitFor(() => expect(mock.jobs.find(j => j.id === 7)?.state).toBe('queued'))
     expect(await screen.findByText('1 running, 2 waiting.')).toBeInTheDocument()
   })
 
   it('cancels a waiting job', async () => {
     const { user } = openApp('/jobs')
-    await user.click(await screen.findByRole('button', { name: 'Cancel Write down what is said in christmas-1996.mkv' }))
-    await waitFor(() => expect(mock.jobs.find(j => j.id === 10)?.state).toBe('cancelled'))
+    await user.click(await screen.findByRole('button', { name: 'Cancel Analyse interview.wav' }))
+    await waitFor(() => expect(mock.jobs.find(j => j.id === 8)?.state).toBe('cancelled'))
   })
 
   it('shows only the failed jobs, with the filter in the URL', async () => {
@@ -39,7 +39,7 @@ describe('Jobs', () => {
   it('counts the whole queue, not the page, and says when the list is cut', async () => {
     server.use(jobsMore)
     const { user } = openApp('/jobs')
-    expect(await screen.findByText(/Showing the newest 11 of 1,340\sjobs\./)).toBeInTheDocument()
+    expect(await screen.findByText(/Showing the newest 6 of 1,340\sjobs\./)).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: 'Failed' }))
     // the finding is the queue's, whichever state the list shows
     expect(await screen.findByText('1 running, 1 waiting, 1 failed.')).toBeInTheDocument()

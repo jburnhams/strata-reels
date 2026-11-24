@@ -99,7 +99,7 @@ def transcribe(db: Session, source: Source, *, job_id: int | None = None) -> tup
 
 
 def current(db: Session, source: Source) -> Result | None:
-    """The source's transcript now, or None before the transcript job has run."""
+    """The source's transcript now, or None before the transcript step has run."""
     return next((r for r in results.current(db, source, "transcript") if r.span_start is None), None)
 
 

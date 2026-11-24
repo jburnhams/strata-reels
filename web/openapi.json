@@ -60,6 +60,16 @@
     "title": "Analysis",
     "type": "object"
    },
+   "Approval": {
+    "description": "The body of an approval: `value` is kept with it (the choice made, the policy judged by). A request body, so a\nplain BaseModel (`contracts.ApiModel` would give the schema an -Input and an -Output twin).",
+    "properties": {
+     "value": {
+      "title": "Value"
+     }
+    },
+    "title": "Approval",
+    "type": "object"
+   },
    "Described": {
     "description": "A source as the API and the CLI show it.",
     "properties": {
@@ -331,6 +341,46 @@
     "title": "Page[Task]",
     "type": "object"
    },
+   "Page_WorkflowRun_": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/WorkflowRun"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "next": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next"
+     },
+     "total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total"
+     }
+    },
+    "required": [
+     "items",
+     "next",
+     "total"
+    ],
+    "title": "Page[WorkflowRun]",
+    "type": "object"
+   },
    "Peaks": {
     "description": "The source's sound as the lowest and highest sample of each slice, -1 to 1, over `seconds`.",
     "properties": {
@@ -488,7 +538,7 @@
         "type": "null"
        }
       ],
-      "description": "the most faces on any one of its keyframes; None before the faces job",
+      "description": "the most faces on any one of its keyframes; None before the faces step",
       "title": "Faces"
      },
      "frames": {
@@ -682,6 +732,127 @@
     "title": "SourceIn",
     "type": "object"
    },
+   "StageEvent": {
+    "description": "One record of a stage: `status` done, failed or cleared; `by` who approved a gate or cleared it; `data` the\nstage's answer (or a gate's value), sent only where one stage's history is asked for.",
+    "properties": {
+     "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+     },
+     "by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "By"
+     },
+     "data": {
+      "title": "Data"
+     },
+     "elapsed_s": {
+      "default": 0.0,
+      "title": "Elapsed S",
+      "type": "number"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "metrics": {
+      "additionalProperties": true,
+      "title": "Metrics",
+      "type": "object"
+     },
+     "stage": {
+      "title": "Stage",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "stage",
+     "status",
+     "at",
+     "elapsed_s",
+     "metrics",
+     "error",
+     "by",
+     "data"
+    ],
+    "title": "StageEvent",
+    "type": "object"
+   },
+   "StageRun": {
+    "description": "A stage of a pipeline as one subject stands: what a step list on screen draws, a row per stage.",
+    "properties": {
+     "gate": {
+      "title": "Gate",
+      "type": "boolean"
+     },
+     "last": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/StageEvent"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "needs": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Needs",
+      "type": "array"
+     },
+     "state": {
+      "enum": [
+       "done",
+       "ready",
+       "stale",
+       "failed",
+       "waiting",
+       "blocked"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "title",
+     "gate",
+     "needs",
+     "state",
+     "last"
+    ],
+    "title": "StageRun",
+    "type": "object"
+   },
    "SystemInfo": {
     "additionalProperties": true,
     "description": "What `GET /api/system` answers: what is running, where its data is, and whether its services answer.",
@@ -857,7 +1028,7 @@
     "type": "object"
    },
    "Transcript": {
-    "description": "The whole source's speech, or no segments with `waiting` set before the transcript job has run.",
+    "description": "The whole source's speech, or no segments with `waiting` set before the transcript step has run.",
     "properties": {
      "language": {
       "anyOf": [
@@ -1051,6 +1222,72 @@
      "probability"
     ],
     "title": "Word",
+    "type": "object"
+   },
+   "WorkflowRun": {
+    "description": "One subject's way through one pipeline, and the queue job advancing it now (or the last one), if any.",
+    "properties": {
+     "failed": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Failed",
+      "type": "array"
+     },
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Task"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "pipeline": {
+      "title": "Pipeline",
+      "type": "string"
+     },
+     "stages": {
+      "items": {
+       "$ref": "#/components/schemas/StageRun"
+      },
+      "title": "Stages",
+      "type": "array"
+     },
+     "state": {
+      "enum": [
+       "done",
+       "failed",
+       "waiting",
+       "blocked",
+       "stopped"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "subject": {
+      "title": "Subject",
+      "type": "string"
+     },
+     "waiting": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Waiting",
+      "type": "array"
+     }
+    },
+    "required": [
+     "pipeline",
+     "subject",
+     "state",
+     "waiting",
+     "failed",
+     "stages",
+     "job"
+    ],
+    "title": "WorkflowRun",
     "type": "object"
    }
   }
@@ -1784,6 +2021,344 @@
      }
     },
     "summary": "Get System"
+   }
+  },
+  "/api/workflows/tape/subjects": {
+   "get": {
+    "operationId": "list_runs_api_workflows_tape_subjects_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "state",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "State"
+      }
+     },
+     {
+      "in": "query",
+      "name": "after",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "After"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Page_WorkflowRun_"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "List Runs",
+    "tags": [
+     "workflows"
+    ]
+   }
+  },
+  "/api/workflows/tape/subjects/{subject}": {
+   "get": {
+    "operationId": "get_run_api_workflows_tape_subjects__subject__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "subject",
+      "required": true,
+      "schema": {
+       "title": "Subject",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkflowRun"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Run",
+    "tags": [
+     "workflows"
+    ]
+   }
+  },
+  "/api/workflows/tape/subjects/{subject}/run": {
+   "post": {
+    "operationId": "run_subject_api_workflows_tape_subjects__subject__run_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "subject",
+      "required": true,
+      "schema": {
+       "title": "Subject",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkflowRun"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Run Subject",
+    "tags": [
+     "workflows"
+    ]
+   }
+  },
+  "/api/workflows/tape/subjects/{subject}/stages/{stage}": {
+   "get": {
+    "operationId": "stage_history_api_workflows_tape_subjects__subject__stages__stage__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "subject",
+      "required": true,
+      "schema": {
+       "title": "Subject",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "stage",
+      "required": true,
+      "schema": {
+       "title": "Stage",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/StageEvent"
+         },
+         "title": "Response Stage History Api Workflows Tape Subjects  Subject  Stages  Stage  Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Stage History",
+    "tags": [
+     "workflows"
+    ]
+   }
+  },
+  "/api/workflows/tape/subjects/{subject}/stages/{stage}/approve": {
+   "post": {
+    "operationId": "approve_stage_api_workflows_tape_subjects__subject__stages__stage__approve_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "subject",
+      "required": true,
+      "schema": {
+       "title": "Subject",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "stage",
+      "required": true,
+      "schema": {
+       "title": "Stage",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/Approval"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkflowRun"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Approve Stage",
+    "tags": [
+     "workflows"
+    ]
+   }
+  },
+  "/api/workflows/tape/subjects/{subject}/stages/{stage}/clear": {
+   "post": {
+    "operationId": "clear_stage_api_workflows_tape_subjects__subject__stages__stage__clear_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "subject",
+      "required": true,
+      "schema": {
+       "title": "Subject",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "stage",
+      "required": true,
+      "schema": {
+       "title": "Stage",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkflowRun"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Clear Stage",
+    "tags": [
+     "workflows"
+    ]
    }
   }
  }

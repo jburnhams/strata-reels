@@ -64,7 +64,7 @@ def test_add_and_sources_commands(capsys: pytest.CaptureFixture[str], db_env: st
     assert [s["name"] for s in json.loads(capsys.readouterr().out)] == ["tape.mkv"]
 
 
-def test_jobs_and_work_commands(capsys: pytest.CaptureFixture[str], db_env: str, tmp_path: Path):
+def test_jobs_and_work_commands(capsys: pytest.CaptureFixture[str], db_env: str, tmp_path: Path, tape_models):
     from probes import TAPE, answer
     from sqlalchemy.orm import Session
 
@@ -80,18 +80,18 @@ def test_jobs_and_work_commands(capsys: pytest.CaptureFixture[str], db_env: str,
     engine = jobs._records()  # pyright: ignore[reportPrivateUsage]
     with Session(engine) as s:
         source, _ = sources.add(s, str(tape), probe=answer(TAPE))
-        jobs.hash_later(jobs.queue(engine), source)
+        jobs.ingest_later(jobs.queue(engine), source)
     assert cli.main(["sources"]) == 0
     assert "(hashing)" in capsys.readouterr().out
     assert cli.main(["jobs", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["items"][0]["state"] == "queued"
     assert cli.main(["work"]) == 0
-    assert "hash       done" in capsys.readouterr().out
+    assert "workflow:tape  done       tape:source:1" in capsys.readouterr().out
     assert cli.main(["sources"]) == 0
     assert "(hashing)" not in capsys.readouterr().out
 
-    jobs.queue(engine).enqueue("hash", {"source": None})  # a bug, not an outside failure: it fails at once
+    jobs.queue(engine).enqueue(jobs.TAPE.kind, {"subject": None})  # a bug, not an outside failure: it fails at once
     assert cli.main(["work"]) == 1
-    assert "hash       failed" in capsys.readouterr().out
+    assert "workflow:tape  failed" in capsys.readouterr().out
     assert cli.main(["jobs"]) == 0
     assert "failed" in capsys.readouterr().out

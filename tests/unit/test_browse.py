@@ -69,7 +69,7 @@ def test_after_the_shots_the_scenes_wait_for_their_grouping(client: TestClient, 
         assert src is not None
         shots.detect(s, src)
     got = client.get(f"/api/sources/{sid}/scenes").json()
-    assert got["waiting"] == "Grouping the shots into scenes (the keyframes and scenes jobs)."
+    assert got["waiting"] == "Grouping the shots into scenes (the keyframes and scenes steps)."
     assert got["analysis"]["shots"] == 3
 
 
@@ -132,7 +132,7 @@ def test_a_silent_source_has_no_speech_to_wait_for(client: TestClient, engine, t
 def test_the_transcript_keeps_its_doubtful_segments_and_words(client: TestClient, engine, tmp_path, tape_models):
     sid = added(engine, tmp_path)
     assert (
-        client.get(f"/api/sources/{sid}/transcript").json()["waiting"] == "Listening for speech (the transcript job)."
+        client.get(f"/api/sources/{sid}/transcript").json()["waiting"] == "Listening for speech (the transcript step)."
     )
     analysed(engine, sid, assets=(), steps=("speech",))
     t = client.get(f"/api/sources/{sid}/transcript").json()
@@ -157,7 +157,7 @@ def test_files_are_served_by_their_names_in_a_result_and_nothing_else(
     client: TestClient, engine, tmp_path, tape_models
 ):
     sid = added(engine, tmp_path)
-    assert client.get(f"/api/sources/{sid}/proxy").json()["detail"].endswith("the proxy job makes it")
+    assert client.get(f"/api/sources/{sid}/proxy").json()["detail"].endswith("the proxy step makes it")
     analysed(engine, sid, assets=("proxy", "thumbnails"), steps=())
     got = client.get(f"/api/sources/{sid}/proxy")
     assert (got.content, got.headers["content-type"]) == (b"mp4", "video/mp4")
@@ -177,7 +177,9 @@ def test_the_shared_jobs_routes_list_the_queue(client: TestClient, engine, tmp_p
         assert src is not None
         jobs.ingest_later(jobs.queue(engine), src)
     page = client.get("/api/jobs").json()
-    assert [(j["kind"], j["state"], j["domain"]) for j in page["items"]] == [("hash", "queued", f"source:{sid}")]
+    assert [(j["kind"], j["state"], j["domain"]) for j in page["items"]] == [
+        ("workflow:tape", "queued", f"tape:source:{sid}")
+    ]
     assert client.get("/api/jobs/counts").json()["queued"] == 1
     job = page["items"][0]["id"]
     assert client.post(f"/api/jobs/{job}/cancel").json()["state"] == "cancelled"

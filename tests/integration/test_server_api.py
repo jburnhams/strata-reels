@@ -91,16 +91,18 @@ def test_the_server_hashes_a_new_tape_and_derives_its_assets_in_job_processes(se
         time.sleep(0.2)
     assert digest[:12] in cli("sources").stdout
 
-    def states() -> list[tuple[str, str, bool]]:
-        items = reversed(json.loads(cli("jobs", "--json").stdout)["items"])
-        return [(j["kind"], j["state"], "strata-models" in (j["error"] or "")) for j in items]
+    def run() -> dict[str, str]:
+        _, body = call(server, "GET", "/api/workflows/tape/subjects/source:1")
+        return {s["name"]: s["state"] for s in body["stages"]}
 
-    # then the derived assets the hash queued, in job processes too (the clip has no sound: no peaks), and the shots,
-    # which wait for strata-models: it is not running here, so that job fails, saying so, and is queued to try again
-    done, waiting = ("done", False), ("queued", True)
-    seen = states()
-    while [x[1:] for x in seen] != [done, done, done, waiting] and time.monotonic() < deadline:
+    # then the derived assets, in the same job process (the clip has no sound: no peaks), and the shots, which wait for
+    # strata-models: it is not running here, so the stage fails, saying so, and the tape's job is queued to try again
+    want = {"hash": "done", "proxy": "done", "thumbnails": "done", "shots": "failed"}
+    seen = run()
+    while {k: seen[k] for k in want} != want and time.monotonic() < deadline:
         time.sleep(0.2)
-        seen = states()  # one reading: the shots job is tried again after its pause, so a second could see it running
-    assert seen == [("hash", *done), ("proxy", *done), ("thumbnails", *done), ("shots", *waiting)]
-    assert json.loads(cli("jobs", "--json").stdout)["items"][-1]["domain"] == "source:1"
+        seen = run()
+    assert {k: seen[k] for k in want} == want
+    (job,) = json.loads(cli("jobs", "--json").stdout)["items"]
+    assert (job["kind"], job["domain"]) == ("workflow:tape", "tape:source:1")
+    assert "strata-models" in (job["error"] or "")

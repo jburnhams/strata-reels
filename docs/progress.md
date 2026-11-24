@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-24: the tape's analysis as one pipeline
+
+- Asked for: update to the latest strata-python and strata-react and make full use of what they gained. strata-python 0.2.17 added `workflow` (a `Pipeline` of named, versioned stages over one subject, its records in an append-only table, one queue job per subject, shared routes) and `request_key`; strata-react added `useWorkflowRun` and `WorkflowSteps` to draw it. Jonathan chose to move the job chain onto the pipeline now rather than later.
+- Before: eleven kinds of job, each queueing the next (the hash queued the assets, the shots and the speech; the shots the keyframes; they the scenes; the scenes the faces and descriptions), and the describe job had to wait for the transcript by queueing itself again, with a race fixed by not deduping. After: one `tape` pipeline (`jobs.TAPE`), one job per tape that runs each stage not done for the tape's inputs. A stage names what it needs, so describe simply needs the transcript and the race is gone; a failed stage blocks only what needs it, the job fails, and the queue's retry starts at the failed stage.
+- The results table stays the cache (spec §6): a stage's record holds the id and key of the result it stood on, so the stage after it runs again only when that is another result. A derived stage's version is its recipe's key, so a changed recipe makes it again.
+- One job per tape holds the `disk` resource for the whole run, so two tapes are never read from one drive at once, but a tape's GPU stages no longer overlap its ffmpeg ones. Fine for a home queue; worth looking at when a tape's analysis is long enough that the order matters.
+- The tape page gained a Steps tab (`WorkflowSteps`: each step's state in words, a failure in the server's words, Try again) with the job's progress over it while it runs, and the finding names a failed step. The jobs page names each job "Analyse <tape>", its progress the step it is on.
+- Not done: gates (a person approving a step) have no use yet; they come with corrections.
+
 ## 2026-11-24: the scene browser (R1 step 4, first half)
 
 - Asked for: while the GPU machine is offline, a web view of a tape's scenes (thumbnail strips, transcript, descriptions, face counts) and the jobs screen deferred from step 1b, with the reusable parts in strata-react.

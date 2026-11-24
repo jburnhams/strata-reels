@@ -1,9 +1,10 @@
-// The one question: "What is the app working on, and did anything fail?" Every step after adding a
-// tape runs as a queued job (src/app/jobs.py): the hash, the browser copy, thumbnails, sound, shots,
-// keyframes, scenes, speech, faces and descriptions. The finding answers in a sentence (how many are
-// running, waiting and failed); the table is strata-react's JobsTable over strata-python's shared
-// queue routes (`GET /api/jobs`, cancel and retry), with each job named in the person's words
-// ("Find the scenes in christmas-1996.mkv"), not by its kind and domain.
+// The one question: "What is the app working on, and did anything fail?" Adding a tape queues one job
+// (src/app/jobs.py) that takes it through every step of its analysis in turn: the hash, the browser
+// copy, thumbnails, sound, shots, keyframes, scenes, faces, speech and descriptions. The finding
+// answers in a sentence (how many are running, waiting and failed); the table is strata-react's
+// JobsTable over strata-python's shared queue routes (`GET /api/jobs`, cancel and retry), with each
+// job named in the person's words ("Analyse christmas-1996.mkv"), not by its kind and domain, and
+// the step it is on as its progress. Which step failed, and why, is on the tape's own page.
 //
 // - The state filter is in the URL (?state=failed), so "what failed" can be linked.
 // - The finding and the refreshing come from the whole queue's counts (`GET /api/jobs/counts`), not from
@@ -17,23 +18,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { DataView, EmptyState, format, JobsTable, PageHeader, TableSkeleton, ToggleGroup, useLoad, useSearchParam } from 'strata-react'
 import { api, type Job, type JobsPage, keys, type Source } from '../api'
 
-/** What each kind of job does, as a verb phrase about its source. */
+/** What each kind of job does, as a verb about its source: the tape pipeline's job (`workflow:tape`). */
 const DOES: Record<string, string> = {
-  hash: 'Read all of',
-  proxy: 'Make a browser copy of',
-  thumbnails: 'Make thumbnails of',
-  peaks: 'Draw the sound of',
-  shots: 'Find the shots in',
-  keyframes: 'Take a picture of each shot in',
-  scenes: 'Group the scenes in',
-  transcript: 'Write down what is said in',
-  faces: 'Find the faces in',
-  describe: 'Describe the scenes in',
+  'workflow:tape': 'Analyse',
 }
 
-/** A job in the person's words: "Find the shots in christmas-1996.mkv". */
+/** A job in the person's words: "Analyse christmas-1996.mkv". Its domain is `tape:source:<id>`. */
 export function describeJob(job: Pick<Job, 'kind' | 'domain'>, sources: readonly Pick<Source, 'id' | 'name'>[]): string {
-  const id = /^source:(\d+)$/.exec(job.domain ?? '')?.[1]
+  const id = /^tape:source:(\d+)$/.exec(job.domain ?? '')?.[1]
   const name = id === undefined ? null : (sources.find(s => s.id === Number(id))?.name ?? `source ${id}`)
   const does = DOES[job.kind]
   if (!does) return name ? `${job.kind} (${name})` : job.kind

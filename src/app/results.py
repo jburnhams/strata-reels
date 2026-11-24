@@ -15,8 +15,6 @@ proposal names the results it used, so a row must mean the same thing for ever. 
 
 What the person corrects is not here: it is an override (`overrides`), kept apart and laid over these at read time."""
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -24,6 +22,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from strata_python import mediatime
+from strata_python.workflow import request_key
 
 from app.models import Result, Source
 
@@ -65,8 +64,9 @@ def cache_key(
     canonical JSON; the span is exact text."""
     p = provenance
     where = None if span is None else span.to_json()
-    body = [kind, sorted(inputs), p.role, p.model, p.settings_hash, dict(parameters), where]
-    return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    # strata-python's canonical key: the same JSON (sorted keys, no spaces) this module hashed before it existed, so
+    # every key already stored is still the key of its request.
+    return request_key(kind, sorted(inputs), p.role, p.model, p.settings_hash, dict(parameters), where)
 
 
 def record(

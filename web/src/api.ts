@@ -21,6 +21,8 @@ export type Transcript = Schema<'Transcript'>
 export type Peaks = Schema<'Peaks'>
 export type Job = Schema<'Task'>
 export type JobsPage = Schema<'Page_Task_'>
+/** A tape's way through its pipeline (`jobs.TAPE`), from strata-python's shared workflow routes. */
+export type WorkflowRun = Schema<'WorkflowRun'>
 /** `GET /api/system`: strata-python's SystemInfo plus this app's own numbers (src/app/system.py
  *  AppNumbers). Those are extra fields on the shared model, so the schema does not name them. */
 export type SystemStatus = Schema<'SystemInfo'> & { sources: number; home_bytes: number }
@@ -35,4 +37,8 @@ export const keys = {
   transcript: (id: number) => ['sources', id, 'transcript'] as const,
   peaks: (id: number) => ['sources', id, 'peaks'] as const,
   jobs: ['jobs'],
+  run: (id: number) => ['sources', id, 'run'] as const,
 } as const
+
+/** The tape pipeline's name for a source (src/app/jobs.py `subject_of`). */
+export const subjectOf = (id: number) => `source:${String(id)}`

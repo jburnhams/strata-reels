@@ -7,8 +7,8 @@ error answers ({detail, payload}) and the web app's pages. This app's own routes
 
     GET /api/sources                  every source, oldest first
     POST /api/sources {path}          add footage: 201 when new, 200 when it is already a source, 400 when it cannot be one;
-                                      a source is queued for ingest (its `hash`
-                                      job, which queues the proxy, thumbnails and peaks)
+                                      its tape's analysis is queued (`jobs.TAPE`, one job
+                                      that runs every stage not yet done)
     GET /api/sources/{id}             one source (404 when there is none)
     GET /api/sources/{id}/scenes      its scenes with their pictures, speech, descriptions and faces, as far as the
                                       jobs have got (`browse.Scenes`; `waiting` says what for while there are none)
@@ -20,6 +20,15 @@ error answers ({detail, payload}) and the web app's pages. This app's own routes
 From strata-python's `add_jobs`: GET /api/jobs (newest first, filtered by state, kind or domain), GET
 /api/jobs/counts, GET /api/jobs/{id}, POST /api/jobs/{id}/cancel and POST /api/jobs/{id}/retry, which strata-react's
 `JobsTable` reads.
+
+From strata-python's `add_workflow`, the tape pipeline's steps (subject `source:<id>`), which strata-react's
+`WorkflowSteps` draws:
+
+    GET /api/workflows/tape/subjects                    every tape's run (`?state=failed` for the failed ones)
+    GET /api/workflows/tape/subjects/{subject}          each stage's state and last record, and the job advancing it
+    GET /api/workflows/tape/subjects/{subject}/stages/{stage}   that stage's history
+    POST /api/workflows/tape/subjects/{subject}/run     queue the tape's job again (a retry after a failure)
+    POST .../stages/{stage}/clear                       forget a stage and what follows it, then run
 
 The server runs the job queue (`app.jobs.Runner`) while it is up: jobs start once the database is open.
 
@@ -40,6 +49,8 @@ from sqlalchemy.orm import Session
 from strata_python import web
 from strata_python.db.web import DbSession, add_database
 from strata_python.tasks.web import add_jobs
+from strata_python.workflow.store import DbStore
+from strata_python.workflow.web import add_workflow
 
 from app import __version__, browse, db, jobs, settings, sources, system
 
@@ -132,6 +143,13 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
         return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": IMMUTABLE})
 
     add_jobs(app, lambda: jobs.queue(records.engine()))
+    add_workflow(
+        app,
+        jobs.TAPE,
+        store=lambda: DbStore(records.engine(), jobs.STAGES, jobs.TAPE),
+        inputs=lambda subject: jobs.inputs_in(records.engine(), subject),
+        queue=lambda: jobs.queue(records.engine()),
+    )
     web.add_web(app, STATIC, LANDING)  # last: its catch-all serves the web app at every other path
     return app
 

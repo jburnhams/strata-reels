@@ -221,7 +221,7 @@ def test_the_scenes_command(capsys, engine, tmp_path, tape_models):
     source = hashed(engine, tmp_path)
     assert cli.main(["scenes", str(source.id)]) == 1
     assert "has no scenes yet" in capsys.readouterr().out
-    jobs.derive_later(jobs.queue(engine), source)
+    jobs.ingest_later(jobs.queue(engine), source)
     jobs.work(jobs.queue(engine))
     assert cli.main(["scenes", str(source.id)]) == 0
     out = capsys.readouterr().out
@@ -231,10 +231,3 @@ def test_the_scenes_command(capsys, engine, tmp_path, tape_models):
     assert cli.main(["scenes", str(source.id), "--json"]) == 0
     listed = json.loads(capsys.readouterr().out)["scenes"]
     assert [(sc["faces"], sc["description"]["setting"]) for sc in listed] == [(2, "indoor"), (0, "indoor")]
-
-
-def test_an_analysis_job_for_a_source_that_is_not_there_fails(engine):
-    q = jobs.queue(engine)
-    for kind in ("shots", "keyframes", "scenes"):
-        q.enqueue(kind, {"source": 404})
-    assert all("there is no source 404" in (j.error or "") for j in jobs.work(q))

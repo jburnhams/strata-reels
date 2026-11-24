@@ -1,43 +1,46 @@
-"""Work that runs in the background: the durable queue of strata_python.tasks.queue in this app's database (overview §6).
+"""Work that runs in the background: each tape's analysis as one strata-python workflow `Pipeline`, advanced by a job on
+the durable queue of `strata_python.tasks.queue` in this app's database (overview §6).
 
-Hashing a tape and, from step 2, every analysis run as queued jobs, so they survive a restart, retry an outside failure
-with a backoff, can be cancelled, and never block a request. The queue, its retries, crash recovery and the job
-processes are strata-python's; this module names the app's kinds and what each does.
+A tape's steps are the stages of the `tape` pipeline, one run per source (subject `source:<id>`). Each stage names
+what it reads (`needs`), so the pipeline knows the order, what a failure blocks and what a change makes run again;
+its records (every attempt, with its answer, metrics, error and time) go in the `workflow_events` table
+(`models.STAGES`, `DbStore`). What a stage found stays in reels' own `results` table (spec §6: the cache, keyed on the
+request, that the browser reads); a stage's record holds that result's id and cache key, so a stage after it runs
+again only when the result it read is another one.
 
+- **One job per tape** (`workflow:tape`, domain `tape:source:<id>`; `ingest_later` queues it, deduped while one is
+  queued or running). It runs every stage not done for the tape's current inputs, in order; a stage that fails is
+  recorded and the stages that do not need it still run, then the job fails and the queue retries it with its
+  backoff, starting at the failed stage. It holds the `disk` resource for the whole run (the hash, the assets and the
+  keyframes read the footage), so two tapes are never read from one drive at once; a tape's steps run one after
+  another (Jonathan chose this over a job per step, 2026-11-24).
 - **The server runs them**: `Runner` starts a `Worker` once the database opens and stops it with the server. Each job
   runs in a job process of its own (strata-python's default), so a cancel ends it and every tool it started.
-- **The CLI can too**: `./app work` runs what is queued, in its own process, until the queue is empty: what a checkout
-  with no server running uses, and what the integration tests drive.
-- **Handlers are module-level functions** (a job process imports them by name) and open the database themselves
-  (`_records`, once per process), since a job process is not the server.
+- **The CLI can too**: `./app work` runs what is queued, in its own process, until the queue is empty.
+- **Handlers and stages are module-level functions** (a job process imports them by name) and open the database
+  themselves (`_records`, once per process), since a job process is not the server.
 
-Kinds:
+Stages (each finds its result stored, and makes nothing, when the same request ran before):
 
-- `hash`: the full SHA-256 of a source's content (`Source.sha256`), its identity in every cache key. Queued when a source
-  is added (`hash_later`). The file is checked against the source's quick fingerprint before and after reading, so a
-  file changed or replaced under the same path is refused rather than hashed as the source. Holds the `disk` resource:
-  two tapes read at once from one drive are slower than one after the other. When it is done it queues the source's
-  derived assets.
-- `proxy`, `thumbnails`, `peaks`: the source's derived assets from the raw footage (`derived`), each a result with a
-  file. Queued by the `hash` job (they are keyed on the hash), or by `ingest_later` for a source already hashed. Each
-  checks the file is still the source's footage first. Peaks only for a source with sound. They hold `disk` too.
+- `hash`: the full SHA-256 of the source's content (`Source.sha256`), its identity in every cache key. Keyed on the
+  quick fingerprint the source was added with; the file is checked against it before and after reading, so a file
+  changed or replaced under the same path is refused rather than hashed as the source.
+- `proxy`, `thumbnails`, `peaks`: the derived assets (`derived`), each a result with a file; their version is their
+  recipe, so a changed recipe makes them again. Peaks only for a source with sound (the stage says it skipped).
+- `shots`, then `keyframes` (a picture of each shot), then `scenes` (the shots grouped), then `faces` (on the
+  keyframes): strata-models' `shot-boundaries`, `image-embed` and `face-detect`.
+- `transcript`: the whole source's speech from strata-models' `transcribe`, for a source with sound.
+- `describe`: a description of each scene, which needs the scenes and the transcript, so every description has its
+  speech.
 
-- `shots` (step 2): the source's shots, asked of strata-models' `shot-boundaries` (`shots.detect`), queued by the
-  `hash` job beside the assets. It holds no resource here: strata-models queues the work on its own CPU lane. Then
-  `keyframes`, a picture of each shot (`disk`), then `scenes`, which asks strata-models for the keyframes' vectors and
-  groups the shots (`scenes.find_scenes`). Each queues the next when it is done; each finds its result stored and
-  makes nothing when the same request ran before.
-- `transcript` (step 3): the whole source's speech from strata-models' `transcribe` (`speech.transcribe`), queued by
-  the `hash` job beside the shots, for a source with sound. When the scenes are done they queue `faces` (`describe.
-  find_faces`, on the keyframes) and `describe` (`describe.describe`, a description of each scene); `describe` waits
-  for the transcript on a source with sound, and the `transcript` job queues another when it ends
-  (not deduped, so a describe job that looked just before the transcript was stored cannot swallow it).
-
-Ingest is the first four. Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
+Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
 
 import logging
 import os
+import re
 import threading
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import Engine
@@ -46,9 +49,11 @@ from strata_python import files
 from strata_python.db import url_for
 from strata_python.db.web import Database
 from strata_python.tasks.queue import Handler, Job, Queue, Worker
+from strata_python.workflow import Context, Pipeline, request_key, step
+from strata_python.workflow.store import DbStore, enqueue
 
 from app import db, derived, describe, scenes, shots, speech
-from app.models import JOBS, Source
+from app.models import JOBS, STAGES, Result, Source
 
 log = logging.getLogger(__name__)
 
@@ -61,163 +66,187 @@ def queue(engine: Engine) -> Queue:
     return Queue(engine, JOBS)
 
 
-def hash_later(q: Queue, source: Source) -> int | None:
-    """Queue the content hash of a source that has none yet; the job's id, or None when it is already known. Asking
-    again while one is queued or running returns that one."""
-    if source.sha256 is not None:
-        return None
-    return q.enqueue("hash", {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=["disk"])
+@dataclass(frozen=True)
+class Tape:
+    """What a stage is given (`Context.app`): the source it is about and the job running it (for the results'
+    provenance)."""
+
+    source_id: int
+    job_id: int | None = None
 
 
-def derive_later(q: Queue, source: Source) -> list[int]:
-    """Queue what a hashed source gets next: its derived assets and its shots; the jobs' ids (the same ones while they
-    are queued or running)."""
-    if source.sha256 is None:
-        return []
-    made = [
-        q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=["disk"])
-        for kind in derived.wanted(source)
-    ]
-    made.append(later(q, "shots", source))
-    if speech.has_sound(source):
-        made.append(later(q, "transcript", source))
-    return made
+def subject_of(source: Source | int) -> str:
+    return f"source:{source if isinstance(source, int) else source.id}"
 
 
-def later(q: Queue, kind: str, source: Source, *, dedupe: bool = True) -> int:
-    """Queue one of the analysis jobs (`shots`, `keyframes`, `scenes`, `transcript`, `faces`, `describe`) for a
-    source; with `dedupe`, a job of the kind already queued or running is the answer instead."""
-    resources = ["disk"] if kind == "keyframes" else []
-    return q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=dedupe, resources=resources)
+def source_id_of(subject: str) -> int:
+    m = re.fullmatch(r"source:(\d+)", subject)
+    if m is None:
+        raise KeyError(f"{subject!r} is not a tape: a subject is source:<id>")
+    return int(m.group(1))
 
 
-def ingest_later(q: Queue, source: Source) -> list[int]:
-    """Everything a source added needs: its hash, which then queues the derived assets, or those at once when the
-    hash is known (a tape added again). A job whose asset is already stored finds it and makes nothing."""
-    jid = hash_later(q, source)
-    return [jid] if jid is not None else derive_later(q, source)
+def inputs_of(subject: str) -> dict[str, Any]:
+    """A tape's inputs now: what the `hash` stage is keyed on. KeyError (404) for a source there is not."""
+    return inputs_in(_records(), subject)
 
 
-def hash_source(job: Job) -> dict[str, Any]:
-    """The `hash` job: read the whole file and store its SHA-256 on the source."""
-    source_id = int(job.options["source"])
-    with Session(_records()) as s:
+def inputs_in(engine: Engine, subject: str) -> dict[str, Any]:
+    """`inputs_of` on a given database (the server's, which it opened itself)."""
+    source_id = source_id_of(subject)
+    with Session(engine) as s:
         source = s.get(Source, source_id)
         if source is None:
             raise KeyError(f"there is no source {source_id}")
-        if source.sha256 is not None:
-            # a retry after the hash was stored but before its assets were all queued: queue them now (deduped, and
-            # a job whose asset is stored finds it)
-            derive_later(queue(_records()), source)
-            return {"sha256": source.sha256}
+        return {"fingerprint": source.fingerprint}
+
+
+def _source(s: Session, ctx: Context) -> Source:
+    tape: Tape = ctx.app
+    source = s.get(Source, tape.source_id)
+    if source is None:
+        raise KeyError(f"there is no source {tape.source_id}")
+    return source
+
+
+def _found(ctx: Context, r: Result, new: bool, **more: Any) -> dict[str, Any]:
+    """A stage's answer: the result it stands on (id and cache key, so a stage after it runs again only when this is
+    another result) and what it says in brief; whether it was made now is a metric, not part of the answer."""
+    ctx.measure(new=new)
+    return {"result": r.id, "key": r.cache_key, **more}
+
+
+def _hash(ctx: Context) -> dict[str, Any]:
+    with Session(_records()) as s:
+        source = _source(s, ctx)
         path, expected = source.path, source.fingerprint
     _same_footage(path, expected)
     digest = files.sha256_hex(path)
     _same_footage(path, expected)  # and still: a file rewritten while it was read is not the source either
     with Session(_records()) as s:
-        source = s.get(Source, source_id)
-        if source is None:
-            raise KeyError(f"there is no source {source_id}")
+        source = _source(s, ctx)
         source.sha256 = digest
         s.commit()
-        derive_later(queue(_records()), source)
     return {"sha256": digest}
 
 
-def derive_asset(job: Job) -> dict[str, Any]:
-    """The `proxy`, `thumbnails` and `peaks` jobs: make the asset (or find it made) and store it as a result."""
-    source_id = int(job.options["source"])
+def _asset(kind: str) -> Callable[[Context], dict[str, Any]]:
+    def make(ctx: Context) -> dict[str, Any]:
+        with Session(_records(), expire_on_commit=False) as s:
+            source = _source(s, ctx)
+            if kind not in derived.wanted(source):
+                return {"result": None, "skipped": "no sound"}
+            _same_footage(source.path, source.fingerprint)
+            r, new = derived.make(s, source, kind, job_id=ctx.app.job_id)
+            return _found(ctx, r, new, file=r.file)
+
+    make.__name__ = make.__qualname__ = f"make_{kind}"
+    return make
+
+
+def _shots(ctx: Context) -> dict[str, Any]:
     with Session(_records(), expire_on_commit=False) as s:
-        source = s.get(Source, source_id)
-        if source is None:
-            raise KeyError(f"there is no source {source_id}")
+        source = _source(s, ctx)
         _same_footage(source.path, source.fingerprint)
-        r, new = derived.make(s, source, job.kind, job_id=job.id)
-        return {"result": r.id, "file": r.file, "new": new}
+        r, new = shots.detect(s, source, job_id=ctx.app.job_id)
+        return _found(ctx, r, new, shots=len(r.payload["shots"]))
 
 
-def find_shots(job: Job) -> dict[str, Any]:
-    """The `shots` job: the source's shots from strata-models, then its keyframes queued."""
+def _keyframes(ctx: Context) -> dict[str, Any]:
     with Session(_records(), expire_on_commit=False) as s:
-        source = _source(s, job)
+        source = _source(s, ctx)
         _same_footage(source.path, source.fingerprint)
-        r, new = shots.detect(s, source, job_id=job.id)
-        later(queue(_records()), "keyframes", source)
-        return {"result": r.id, "shots": len(r.payload["shots"]), "new": new}
+        r, new = shots.keyframes(s, source, job_id=ctx.app.job_id)
+        return _found(ctx, r, new, file=r.file)
 
 
-def make_keyframes(job: Job) -> dict[str, Any]:
-    """The `keyframes` job: a picture of each shot, then the scenes queued."""
+def _scenes(ctx: Context) -> dict[str, Any]:
     with Session(_records(), expire_on_commit=False) as s:
-        source = _source(s, job)
+        r, new = scenes.find_scenes(s, _source(s, ctx), job_id=ctx.app.job_id)
+        return _found(ctx, r, new, scenes=len(r.payload["scenes"]))
+
+
+def _faces(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        r, new = describe.find_faces(s, _source(s, ctx), job_id=ctx.app.job_id)
+        return _found(ctx, r, new, faces=sum(len(f["faces"]) for f in r.payload["frames"]))
+
+
+def _transcript(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        source = _source(s, ctx)
+        if not speech.has_sound(source):
+            return {"result": None, "skipped": "no sound"}
         _same_footage(source.path, source.fingerprint)
-        r, new = shots.keyframes(s, source, job_id=job.id)
-        later(queue(_records()), "scenes", source)
-        return {"result": r.id, "file": r.file, "new": new}
+        r, new = speech.transcribe(s, source, job_id=ctx.app.job_id)
+        return _found(ctx, r, new, segments=len(r.payload["segments"]))
 
 
-def group_scenes(job: Job) -> dict[str, Any]:
-    """The `scenes` job: the keyframes' vectors from strata-models, then the shots grouped into scenes."""
+def _describe(ctx: Context) -> dict[str, Any]:
     with Session(_records(), expire_on_commit=False) as s:
-        source = _source(s, job)
-        r, new = scenes.find_scenes(s, source, job_id=job.id)
-        q = queue(_records())
-        later(q, "faces", source)
-        later(q, "describe", source)
-        return {"result": r.id, "scenes": len(r.payload["scenes"]), "new": new}
-
-
-def transcribe(job: Job) -> dict[str, Any]:
-    """The `transcript` job: the whole source's speech from strata-models, then the descriptions queued if the scenes
-    are already there (they wait for the speech)."""
-    with Session(_records(), expire_on_commit=False) as s:
-        source = _source(s, job)
-        _same_footage(source.path, source.fingerprint)
-        r, new = speech.transcribe(s, source, job_id=job.id)
-        if scenes.current(s, source) is not None:
-            # never deduped: a describe job running now may have looked for the transcript just before it was stored,
-            # and will end waiting; a second one finds the scenes it described stored and asks only for the rest
-            later(queue(_records()), "describe", source, dedupe=False)
-        return {"result": r.id, "segments": len(r.payload["segments"]), "new": new}
-
-
-def find_faces(job: Job) -> dict[str, Any]:
-    """The `faces` job: the faces on every keyframe, from strata-models."""
-    with Session(_records(), expire_on_commit=False) as s:
-        r, new = describe.find_faces(s, _source(s, job), job_id=job.id)
-        return {"result": r.id, "faces": sum(len(f["faces"]) for f in r.payload["frames"]), "new": new}
-
-
-def describe_scenes(job: Job) -> dict[str, Any]:
-    """The `describe` job: a description of each scene from strata-models. On a source with sound it waits for the
-    transcript (ending at once, done: the `transcript` job queues another), so every description has its speech."""
-    with Session(_records(), expire_on_commit=False) as s:
-        source = _source(s, job)
-        if speech.has_sound(source) and speech.current(s, source) is None:
-            return {"waiting": "transcript", "new": False}
-        made = describe.describe(s, source, job_id=job.id)
+        made = describe.describe(s, _source(s, ctx), job_id=ctx.app.job_id)
         described = sum(new for _, new in made)
-        return {"scenes": len(made), "described": described, "new": described > 0}
+        ctx.measure(new=described)
+        # each scene's result, so a stage after this one would run again when any description is another
+        return {"results": [r.id for r, _ in made], "key": request_key(*(r.cache_key for r, _ in made))}
 
 
-def _source(s: Session, job: Job) -> Source:
-    source_id = int(job.options["source"])
-    source = s.get(Source, source_id)
-    if source is None:
-        raise KeyError(f"there is no source {source_id}")
-    return source
+def _recipe(kind: str) -> str:
+    """A derived stage's version: its recipe (reels' parameters and strata-python's), so a changed one runs it again."""
+    return request_key(derived.parameters(kind))[:12]
 
 
-HANDLERS: dict[str, Handler] = {
-    "hash": hash_source,
-    **dict.fromkeys(derived.KINDS, derive_asset),
-    "shots": find_shots,
-    "keyframes": make_keyframes,
-    "scenes": group_scenes,
-    "transcript": transcribe,
-    "faces": find_faces,
-    "describe": describe_scenes,
-}
+TAPE = Pipeline(
+    "tape",
+    [
+        step("hash", _hash, keys=("fingerprint",), resources=("disk",), label="Read the whole file"),
+        step("proxy", _asset("proxy"), needs=("hash",), version=_recipe("proxy"), resources=("disk",), label="Make a browser copy"),
+        step("thumbnails", _asset("thumbnails"), needs=("hash",), version=_recipe("thumbnails"), resources=("disk",), label="Make thumbnails"),
+        step("peaks", _asset("peaks"), needs=("hash",), version=_recipe("peaks"), resources=("disk",), label="Draw the sound"),
+        step("shots", _shots, needs=("hash",), label="Find the shots"),
+        step("keyframes", _keyframes, needs=("shots",), resources=("disk",), label="Take a picture of each shot"),
+        step("scenes", _scenes, needs=("shots", "keyframes"), label="Group the shots into scenes"),
+        step("faces", _faces, needs=("keyframes",), label="Find the faces"),
+        step("transcript", _transcript, needs=("hash",), label="Write down what is said"),
+        step("describe", _describe, needs=("scenes", "transcript"), label="Describe the scenes"),
+    ],
+)  # fmt: skip
+
+
+def store() -> DbStore:
+    """The tape pipeline's records in this process's database."""
+    return DbStore(_records(), STAGES, TAPE)
+
+
+def ingest_later(q: Queue, source: Source | int) -> int:
+    """Queue the job that advances a tape through every stage not done; its id (the one already queued or running for
+    the tape, if there is one). A tape whose stages are all done for its inputs runs nothing."""
+    return enqueue(q, TAPE, subject_of(source))
+
+
+def advance_tape(job: Job) -> dict[str, Any]:
+    """The `workflow:tape` job: advance one tape as far as it goes. Raises the first stage's error after the stages
+    that do not need it have run, so the queue retries it and the next attempt starts there."""
+    subject: str = job.options["subject"]  # not str(): a job without one is a bug, failed at once
+    inputs = inputs_of(subject)
+    tape = Tape(source_id_of(subject), job.id)
+    return TAPE.advance(store(), subject, inputs, tape, stopping=lambda: job.stopping).as_json()
+
+
+HANDLERS: dict[str, Handler] = {TAPE.kind: advance_tape}
+
+
+def stages_of(job: Job) -> dict[str, str]:
+    """Each stage's state now for the tape a `workflow:tape` job advances (what `./app work` prints under it); empty
+    for any other job, or one whose source is gone."""
+    subject = job.options.get("subject")
+    if job.kind != TAPE.kind or not isinstance(subject, str):
+        return {}
+    try:
+        inputs = inputs_of(subject)
+    except KeyError:
+        return {}
+    return dict(TAPE.status(store(), subject, inputs).states)
 
 
 def work(q: Queue) -> list[Job]:

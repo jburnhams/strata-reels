@@ -1,6 +1,9 @@
 """Analysis results (app/results.py) on a real migrated database: written once, found again by cache key, superseded by a
 different request for the same slot, never overwritten."""
 
+import hashlib
+import json
+
 import pytest
 from probes import TAPE, answer
 from sqlalchemy.orm import Session
@@ -33,7 +36,9 @@ def test_provenance_from_strata_models_answer_and_the_cache_key():
     )
     assert results.Provenance.of("x", {}).model_job is None
     key = results.cache_key("shots", [TAPE_HASH, RESTORED_HASH], p, {"step": 2})
-    assert len(key) == 64
+    # strata-python's request_key hashes the same canonical JSON this module did by hand, so stored keys still match
+    body = ["shots", sorted([TAPE_HASH, RESTORED_HASH]), p.role, p.model, p.settings_hash, {"step": 2}, None]
+    assert key == hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     # the order inputs are named in is not part of the question, and the strata-models job id is not either
     again = results.Provenance.of("shot-boundaries", {**SERVED, "job_id": 99})
     assert results.cache_key("shots", [RESTORED_HASH, TAPE_HASH], again, {"step": 2}) == key

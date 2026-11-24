@@ -109,16 +109,19 @@ def cmd_jobs(args: argparse.Namespace) -> int:
     if not page.items:
         print("  (no jobs)")
     for t in page.items:
-        print(f"  #{t.id:<5} {t.kind:10} {t.state:10} {t.domain or '':14} {t.error or ''}")
+        print(f"  #{t.id:<5} {t.kind:14} {t.state:10} {t.domain or '':16} {t.error or ''}")
     return 0
 
 
 def cmd_work(args: argparse.Namespace) -> int:
     with db.opened() as engine:
         ran = jobs.work(jobs.queue(engine))
+        shown = {j.id: jobs.stages_of(j) for j in ran}
     jobs.close_records()
     for j in ran:
-        print(f"  #{j.id:<5} {j.kind:10} {j.state:10} {j.domain or '':14} {j.error or ''}")
+        print(f"  #{j.id:<5} {j.kind:14} {j.state:10} {j.domain or '':16} {j.error or ''}")
+        for name, state in shown[j.id].items():  # where the tape stands now, stage by stage
+            print(f"         {name:10} {state}")
     if not ran:
         print("  (nothing queued)")
     return 1 if any(j.state == "failed" for j in ran) else 0

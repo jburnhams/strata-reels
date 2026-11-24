@@ -5,7 +5,7 @@
 // screenshots do not change. Pictures are SVG drawings of each scene (the colours are the picture's
 // content, not interface colour); the browser copy is a two-second blank WebM, enough for the player
 // to load (the poster, the scene's first thumbnail, is what shows).
-import type { Job, JobsPage, Peaks, Scene, Scenes, Transcript } from '../api'
+import type { Job, JobsPage, Peaks, Scene, Scenes, Transcript, WorkflowRun } from '../api'
 import { initialSources } from './fixtures'
 
 const THUMB_STEP = 10
@@ -220,7 +220,7 @@ export const tapeScenesPartWay: Scenes = {
 export const waitingScenes = (id: number): Scenes => ({
   source: initialSources.find(s => s.id === id) ?? source,
   analysis: { proxy: true, thumbnails: true, peaks: true, shots: 12, transcript: false, faces: false, described: 0 },
-  waiting: 'Grouping the shots into scenes (the keyframes and scenes jobs).',
+  waiting: 'Grouping the shots into scenes (the keyframes and scenes steps).',
   scenes: [],
 })
 
@@ -274,13 +274,13 @@ export const tapePeaks: Peaks = (() => {
 
 // Times before now, so "20 minutes ago" reads the same in every run of the screenshots.
 const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString()
-const job = (id: number, kind: string, state: Job['state'], more: Partial<Job> = {}): Job => ({
+/** A tape's job (`workflow:tape`, src/app/jobs.py): one per tape, advancing it through every stage. */
+const job = (id: number, source: number, state: Job['state'], more: Partial<Job> = {}): Job => ({
   // the newest (highest id) was made last
-
   id,
-  kind,
+  kind: 'workflow:tape',
   state,
-  domain: `source:${tapeId}`,
+  domain: `tape:source:${source}`,
   created_at: at(60 - id * 3),
   started_at: state === 'queued' ? null : at(59 - id * 3),
   finished_at: state === 'done' || state === 'failed' || state === 'cancelled' ? at(58 - id * 3) : null,
@@ -291,24 +291,94 @@ const job = (id: number, kind: string, state: Job['state'], more: Partial<Job> =
   ...more,
 })
 
-/** `GET /api/jobs`: the tape's ingest and analysis, newest first, one running, one failed. */
+const modelsDown = 'strata-models is not answering at its address: is the service running?'
+
+/** `GET /api/jobs`: a job per tape, newest first: one running, one waiting, one failed. */
 export const jobsPage = {
   items: [
-    job(14, 'describe', 'running', { progress: { done: 3, total: 6, text: 'Scene 4 of 6', stage: null, at: null } }),
-    job(13, 'faces', 'failed', { error: 'strata-models is not answering at its address: is the service running?', attempts: 3 }),
-    job(12, 'scenes', 'done'),
-    job(11, 'keyframes', 'done'),
-    job(10, 'transcript', 'queued'),
-    job(9, 'shots', 'done'),
-    job(8, 'peaks', 'done'),
-    job(7, 'thumbnails', 'done'),
-    job(6, 'proxy', 'done'),
-    job(5, 'hash', 'done'),
-    job(4, 'hash', 'cancelled', { domain: 'source:4' }),
+    job(9, 4, 'running', { progress: { done: 5, total: 10, text: 'Find the shots', stage: 'shots', at: null } }),
+    job(8, 3, 'queued'),
+    job(7, 2, 'failed', { error: modelsDown, attempts: 5 }),
+    job(6, 1, 'done'),
+    job(5, tapeId, 'done'),
+    job(4, 4, 'cancelled'),
   ],
   next: null,
-  total: 11,
+  total: 6,
 } satisfies JobsPage
+
+/** The tape pipeline's stages (src/app/jobs.py `TAPE`): name, title, what it needs. */
+const STAGES: [string, string, string[]][] = [
+  ['hash', 'Read the whole file', []],
+  ['proxy', 'Make a browser copy', ['hash']],
+  ['thumbnails', 'Make thumbnails', ['hash']],
+  ['peaks', 'Draw the sound', ['hash']],
+  ['shots', 'Find the shots', ['hash']],
+  ['keyframes', 'Take a picture of each shot', ['shots']],
+  ['scenes', 'Group the shots into scenes', ['shots', 'keyframes']],
+  ['faces', 'Find the faces', ['keyframes']],
+  ['transcript', 'Write down what is said', ['hash']],
+  ['describe', 'Describe the scenes', ['scenes', 'transcript']],
+]
+
+type StageState = WorkflowRun['stages'][number]['state']
+
+/** A tape's `WorkflowRun` with each stage done unless `states` says otherwise; `errors` are the failed stages' sentences. */
+export function tapeRun(
+  source: number,
+  states: Partial<Record<string, StageState>> = {},
+  { job: running = null, errors = {} }: { job?: Job | null; errors?: Record<string, string> } = {},
+): WorkflowRun {
+  const stages = STAGES.map(([name, title, needs], i) => {
+    const state = states[name] ?? 'done'
+    const ran = state === 'done' || state === 'failed' || state === 'stale'
+    return {
+      name,
+      title,
+      gate: false,
+      needs,
+      state,
+      last: ran
+        ? {
+            stage: name,
+            status: state === 'failed' ? 'failed' : 'done',
+            at: at(40 - i),
+            elapsed_s: [212, 1480, 96, 31, 640, 75, 4, 58, 2210, 380][i] ?? 0,
+            metrics: {},
+            error: errors[name] ?? null,
+            by: null,
+            data: null,
+          }
+        : null,
+    }
+  })
+  const failed = stages.filter(s => s.state === 'failed').map(s => s.name)
+  const done = stages.every(s => s.state === 'done')
+  return {
+    pipeline: 'tape',
+    subject: `source:${source}`,
+    state: failed.length ? 'failed' : done ? 'done' : 'blocked',
+    waiting: [],
+    failed,
+    stages,
+    job: running,
+  }
+}
+
+/** `GET /api/workflows/tape/subjects/source:5`: every stage done, by the tape's job. */
+export const tapeRunDone = tapeRun(tapeId, {}, { job: job(5, tapeId, 'done') })
+/** Part way: the browser copy, the sound and the descriptions still to come, the job on the copy. */
+export const tapeRunPartWay = tapeRun(
+  tapeId,
+  { proxy: 'ready', thumbnails: 'blocked', peaks: 'blocked', transcript: 'blocked', describe: 'blocked' },
+  { job: job(10, tapeId, 'running', { progress: { done: 1, total: 10, text: 'Make a browser copy', stage: 'proxy', at: null } }) },
+)
+/** The faces stage failed (strata-models down) and the job is waiting to try again; what does not need it went on. */
+export const tapeRunFailed = tapeRun(
+  tapeId,
+  { faces: 'failed' },
+  { job: job(10, tapeId, 'queued', { error: modelsDown, attempts: 2 }), errors: { faces: modelsDown } },
+)
 
 /** The browser copy: a two-second blank WebM, base64. */
 export const proxyWebm = Uint8Array.from(

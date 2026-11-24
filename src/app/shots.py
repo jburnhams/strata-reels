@@ -131,7 +131,7 @@ def detect(db: Session, source: Source, *, job_id: int | None = None) -> tuple[R
 
 
 def current(db: Session, source: Source) -> Result | None:
-    """The source's shots result now (the whole-source one), or None before the shots job has run."""
+    """The source's shots result now (the whole-source one), or None before the shots step has run."""
     return next((r for r in results.current(db, source, "shots") if r.span_start is None), None)
 
 
@@ -151,7 +151,7 @@ def keyframes(db: Session, source: Source, *, job_id: int | None = None) -> tupl
         raise ValueError(f"{source.name} has no content hash yet")
     shots = current(db, source)
     if shots is None:
-        raise KeyError(f"{source.name} has no shots yet: its keyframes wait for the shots job")
+        raise KeyError(f"{source.name} has no shots yet: its keyframes wait for the shots step")
     params = keyframe_parameters(shots)
     key = results.cache_key("keyframes", [source.sha256], derived.PRODUCER, params)
     found = results.find(db, key)

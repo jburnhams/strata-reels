@@ -51,12 +51,15 @@ def test_added_footage_is_hashed_by_work(cli: Cli, tmp_path):
     )
     assert "added #1 tape.mp4" in cli("add", str(tape)).stdout
     assert "(hashing)" in cli("sources").stdout
-    assert "hash       queued" in cli("jobs").stdout
-    assert "hash       done" in cli("work").stdout  # and the proxy and thumbnails it queued (no sound, no peaks)
-    assert "(nothing queued)" in cli("work").stdout
+    assert "workflow:tape  queued     tape:source:1" in cli("jobs").stdout
+    out = cli("work").stdout
+    # the shots wait for strata-models (not running here: the job is queued to try again, and work() ends)
+    assert "workflow:tape  queued     tape:source:1    Unavailable: strata-models is not reachable" in out
+    for stage, state in [("hash", "done"), ("proxy", "done"), ("thumbnails", "done"), ("shots", "failed")]:
+        assert f"         {stage:10} {state}\n" in out
+    assert "(nothing queued)" in cli("work").stdout  # the retry waits for its backoff
     assert hashlib.sha256(tape.read_bytes()).hexdigest()[:12] in cli("sources").stdout
-    # and the shots, which wait for strata-models (not running here: the job is queued to try again)
-    assert len(json.loads(cli("jobs", "--json").stdout)["items"]) == 4
+    assert len(json.loads(cli("jobs", "--json").stdout)["items"]) == 1  # one job for the whole tape
 
 
 def test_work_makes_the_proxy_thumbnails_and_peaks_from_the_raw_tape(cli: Cli, tmp_path):

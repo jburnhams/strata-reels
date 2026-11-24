@@ -7,18 +7,43 @@
 // state: `server.use(sourcesError)` in a test, `msw.use(sourcesError)` in a story's beforeEach,
 // `states: { error: [sourcesError] }` in the visual config.
 import { delay, HttpResponse, http } from 'msw'
-import type { Source } from '../api'
+import type { Source, WorkflowRun } from '../api'
 import { initialSources, systemNearlyFull as nearlyFull, readSource, systemStatus } from './fixtures'
-import { jobsPage, proxyWebm, tapeId, tapePeaks, tapeScenes, tapeScenesPartWay, tapeTranscript, thumbnailSvg, waitingScenes } from './tape'
+import {
+  jobsPage,
+  proxyWebm,
+  tapeId,
+  tapePeaks,
+  tapeRun,
+  tapeRunDone,
+  tapeRunFailed,
+  tapeRunPartWay,
+  tapeScenes,
+  tapeScenesPartWay,
+  tapeTranscript,
+  thumbnailSvg,
+  waitingScenes,
+} from './tape'
 
 /** What the mock server holds. Writes change it, so a test can add a source and see it listed. */
-export const mock = { sources: [...initialSources] as Source[], jobs: structuredClone(jobsPage.items) }
+export const mock = {
+  sources: [...initialSources] as Source[],
+  jobs: structuredClone(jobsPage.items),
+  /** Each tape's run, where a test has put one; otherwise the tape (5) is done and the others wait for their scenes. */
+  runs: {} as Record<number, WorkflowRun>,
+}
 
 /** Back to the healthy state: call between tests and stories. */
 export function resetMock() {
   mock.sources = [...initialSources]
   mock.jobs = structuredClone(jobsPage.items)
+  mock.runs = {}
 }
+
+/** A source's run as the server would answer it now. */
+const runOf = (id: number): WorkflowRun =>
+  mock.runs[id] ??
+  (id === tapeId ? tapeRunDone : tapeRun(id, { scenes: 'ready', faces: 'ready', transcript: 'ready', describe: 'blocked' }))
 
 // Matched as paths, so they answer whatever origin and base the app runs under.
 const at = (path: string) => `*${path}`
@@ -38,12 +63,16 @@ export const paths = {
   jobCounts: '/api/jobs/counts',
   cancel: '/api/jobs/:id/cancel',
   retry: '/api/jobs/:id/retry',
+  run: '/api/workflows/tape/subjects/:subject',
+  runAgain: '/api/workflows/tape/subjects/:subject/run',
 } as const
 
 const refused = (detail: string, status = 400) => HttpResponse.json({ detail }, { status })
 const notFound = (detail: string) => HttpResponse.json({ detail }, { status: 404 })
 const sourceOf = (id: unknown) => mock.sources.find(s => s.id === Number(id))
 const down = () => new HttpResponse(null, { status: 503, statusText: 'Service Unavailable' })
+/** A subject's source id, as `jobs.source_id_of` reads it (`source:5`, escaped or not). */
+const subjectId = (subject: unknown) => Number(/^source:(\d+)$/.exec(decodeURIComponent(String(subject)))?.[1] ?? Number.NaN)
 
 export const handlers = [
   http.get(at(paths.health), () => HttpResponse.json({ ok: true, version: systemStatus.version, commit: systemStatus.commit })),
@@ -73,7 +102,7 @@ export const handlers = [
   http.get(at(paths.transcript), ({ params }) =>
     Number(params.id) === tapeId
       ? HttpResponse.json(tapeTranscript)
-      : HttpResponse.json({ language: null, model: null, waiting: 'Listening for speech (the transcript job).', segments: [] }),
+      : HttpResponse.json({ language: null, model: null, waiting: 'Listening for speech (the transcript step).', segments: [] }),
   ),
   http.get(at(paths.peaks), ({ params }) =>
     Number(params.id) === tapeId ? HttpResponse.json(tapePeaks) : notFound('the waveform is not made yet'),
@@ -109,6 +138,26 @@ export const handlers = [
     Object.assign(j, { state: 'queued', error: null, started_at: null, finished_at: null })
     return HttpResponse.json(j)
   }),
+  // strata-python's add_workflow: a tape's stages, and running it again (its failed stages are tried
+  // again by a queued job, as `enqueue` dedupes on the tape).
+  http.get(at(paths.run), ({ params }) => {
+    const id = subjectId(params.subject)
+    return sourceOf(id) ? HttpResponse.json(runOf(id)) : notFound(`there is no source ${String(id)}`)
+  }),
+  http.post(at(paths.runAgain), ({ params }) => {
+    const id = subjectId(params.subject)
+    if (!sourceOf(id)) return notFound(`there is no source ${String(id)}`)
+    const now = runOf(id)
+    const job = { ...(now.job ?? jobsPage.items[0]), state: 'queued' as const, error: null, progress: null, finished_at: null }
+    mock.runs[id] = {
+      ...now,
+      state: 'blocked',
+      failed: [],
+      stages: now.stages.map(s => (s.state === 'failed' ? { ...s, state: 'ready' as const } : s)),
+      job,
+    }
+    return HttpResponse.json(mock.runs[id])
+  }),
 ]
 
 // States. A request that never answers is "loading"; 503 is a server that is down. The app's query
@@ -131,7 +180,7 @@ export const scenesPartWay = http.get(at(paths.scenes), () => HttpResponse.json(
 /** The tape before its scenes are grouped. */
 export const scenesWaiting = http.get(at(paths.scenes), () => HttpResponse.json(waitingScenes(tapeId)))
 export const transcriptWaiting = http.get(at(paths.transcript), () =>
-  HttpResponse.json({ language: null, model: null, waiting: 'Listening for speech (the transcript job).', segments: [] }),
+  HttpResponse.json({ language: null, model: null, waiting: 'Listening for speech (the transcript step).', segments: [] }),
 )
 export const peaksLoading = http.get(at(paths.peaks), () => delay('infinite'))
 // The queue's states answer its list and its counts alike (`/api/jobs*`), so the finding agrees with the table.
@@ -145,3 +194,13 @@ export const jobsEmpty = queue(counts => HttpResponse.json(counts ? {} : { items
 export const jobsError = queue(down)
 /** More jobs than the page shows: the list is cut, and says so. */
 export const jobsMore = http.get(at(paths.jobs), () => HttpResponse.json({ items: mock.jobs, next: 'c200', total: 1340 }))
+
+/** The tape part way through its pipeline, its job running. */
+export const runPartWay = http.get(at(paths.run), () => HttpResponse.json(tapeRunPartWay))
+/** The tape's faces stage failed, and its job waits to try again. */
+export const runFailed = http.get(at(paths.run), () => HttpResponse.json(tapeRunFailed))
+export const runError = http.get(at(paths.run), down)
+/** The tape before its scenes are grouped: the scenes step next, nothing running (as `scenesWaiting`). */
+export const runWaiting = http.get(at(paths.run), () =>
+  HttpResponse.json(tapeRun(tapeId, { scenes: 'ready', faces: 'ready', transcript: 'ready', describe: 'blocked' })),
+)
