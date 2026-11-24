@@ -202,3 +202,24 @@ def test_the_describe_job_waits_for_the_speech_of_a_tape_with_sound(engine, tmp_
     ran = jobs.work(q)
     assert [(j.kind, j.state) for j in ran] == [("transcript", "done"), ("describe", "done")]
     assert ran[1].result == {"scenes": 2, "described": 2, "new": True}
+
+
+def test_a_describe_job_that_missed_the_transcript_is_followed_by_another(engine, tmp_path, tape_models):
+    # Two workers: a describe job has looked for the transcript, found none and is about to end waiting, while the
+    # transcript job stores it. Deduping would hand the transcript job that running describe job back, and nothing
+    # would describe the scenes; it queues a new one instead.
+    source = hashed(engine, tmp_path)
+    with Session(engine) as s:
+        src = s.get(Source, source.id)
+        assert src is not None
+        grouped(s, src)
+    q = jobs.queue(engine)
+    jobs.later(q, "describe", source)
+    running = q.claim(["describe"])
+    assert running is not None
+    waited = jobs.describe_scenes(running)  # it looks now: no transcript yet
+    jobs.later(q, "transcript", source)
+    ran = jobs.work(q)  # the transcript, while that describe job is still running, and what it queued
+    q.finish(running, waited)
+    assert waited == {"waiting": "transcript", "new": False}
+    assert [(j.kind, j.result and j.result.get("described")) for j in ran] == [("transcript", None), ("describe", 2)]

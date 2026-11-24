@@ -30,7 +30,8 @@ Kinds:
 - `transcript` (step 3): the whole source's speech from strata-models' `transcribe` (`speech.transcribe`), queued by
   the `hash` job beside the shots, for a source with sound. When the scenes are done they queue `faces` (`describe.
   find_faces`, on the keyframes) and `describe` (`describe.describe`, a description of each scene); `describe` waits
-  for the transcript on a source with sound, and the `transcript` job queues it again when it ends.
+  for the transcript on a source with sound, and the `transcript` job queues another when it ends
+  (not deduped, so a describe job that looked just before the transcript was stored cannot swallow it).
 
 Ingest is the first four. Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
 
@@ -83,11 +84,11 @@ def derive_later(q: Queue, source: Source) -> list[int]:
     return made
 
 
-def later(q: Queue, kind: str, source: Source) -> int:
+def later(q: Queue, kind: str, source: Source, *, dedupe: bool = True) -> int:
     """Queue one of the analysis jobs (`shots`, `keyframes`, `scenes`, `transcript`, `faces`, `describe`) for a
-    source."""
+    source; with `dedupe`, a job of the kind already queued or running is the answer instead."""
     resources = ["disk"] if kind == "keyframes" else []
-    return q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=True, resources=resources)
+    return q.enqueue(kind, {"source": source.id}, domain=f"source:{source.id}", dedupe=dedupe, resources=resources)
 
 
 def ingest_later(q: Queue, source: Source) -> list[int]:
@@ -174,7 +175,9 @@ def transcribe(job: Job) -> dict[str, Any]:
         _same_footage(source.path, source.fingerprint)
         r, new = speech.transcribe(s, source, job_id=job.id)
         if scenes.current(s, source) is not None:
-            later(queue(_records()), "describe", source)
+            # never deduped: a describe job running now may have looked for the transcript just before it was stored,
+            # and will end waiting; a second one finds the scenes it described stored and asks only for the rest
+            later(queue(_records()), "describe", source, dedupe=False)
         return {"result": r.id, "segments": len(r.payload["segments"]), "new": new}
 
 
@@ -187,7 +190,7 @@ def find_faces(job: Job) -> dict[str, Any]:
 
 def describe_scenes(job: Job) -> dict[str, Any]:
     """The `describe` job: a description of each scene from strata-models. On a source with sound it waits for the
-    transcript (ending at once, done: the `transcript` job queues it again), so every description has its speech."""
+    transcript (ending at once, done: the `transcript` job queues another), so every description has its speech."""
     with Session(_records(), expire_on_commit=False) as s:
         source = _source(s, job)
         if speech.has_sound(source) and speech.current(s, source) is None:
