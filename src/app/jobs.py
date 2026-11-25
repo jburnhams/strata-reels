@@ -269,7 +269,8 @@ OLD_KINDS = ("hash", "proxy", "thumbnails", "peaks", "shots", "keyframes", "scen
 
 def adopt(q: Queue) -> list[int]:
     """Bring a queue from before the tape pipeline onto it: cancel the old kinds of job still waiting or running, and
-    queue the tape job of every source the pipeline has no record of; the sources queued. Cheap when there is nothing
+    queue the tape job of every source the pipeline has no record of, or has a stage ready for that is not done (a
+    stage a newer release added); the sources queued (a tape whose job is already queued keeps that one). Cheap when there is nothing
     to do, so the server and `./app work` call it every time they start."""
     for kind in OLD_KINDS:
         while page := q.page(state=("queued", "running"), kind=kind, limit=200).items:
@@ -277,13 +278,24 @@ def adopt(q: Queue) -> list[int]:
                 q.cancel(int(t.id))
             if all(t.state == "running" for t in page):  # asked to stop: they leave the list when they do
                 break
-    known = set(store().subjects())
+    st = store()
+    known = set(st.subjects())
     with Session(_records()) as s:
         ids = list(s.scalars(select(Source.id).order_by(Source.id)))
-    queued = [i for i in ids if subject_of(i) not in known]
+    queued = [i for i in ids if subject_of(i) not in known or _unstarted(st, subject_of(i))]
     for i in queued:
         ingest_later(q, i)
     return queued
+
+
+def _unstarted(st: DbStore, subject: str) -> bool:
+    """A tape the pipeline knows with a stage ready to run that no job is running: a stage added by a newer release
+    (the chapters, for a tape analysed before them), or a version raised. Its job runs only those, the rest stand."""
+    try:
+        inputs = inputs_of(subject)
+    except KeyError:  # the source is gone
+        return False
+    return any(state in ("ready", "stale") for state in TAPE.status(st, subject, inputs).states.values())
 
 
 def advance_tape(job: Job) -> dict[str, Any]:

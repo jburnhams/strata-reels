@@ -247,3 +247,23 @@ def test_a_queue_from_before_the_pipeline_is_adopted(engine: Engine, tmp_path, t
     assert (job.kind, job.state) == ("workflow:tape", "done")
     assert made(old)["hash"] is None  # the hash it had stands: the file was not read again
     assert jobs.adopt(q) == []  # nothing more to take up
+
+
+def test_a_tape_analysed_before_a_new_stage_is_taken_up_for_it_alone(engine: Engine, tmp_path, tape_models):
+    source = add(engine, tmp_path, b"\x0b" * 200_000)
+    q = jobs.queue(engine)
+    jobs.ingest_later(q, source)
+    jobs.work(q)
+    # as a release before the chapters left it: every stage done but the two it did not have
+    for name in ("chapters", "name_chapters"):
+        jobs.TAPE.clear(jobs.store(), jobs.subject_of(source), name, by="test")
+    asked = len(tape_models.jobs)
+    assert jobs.adopt(q) == [source.id]
+    (job,) = jobs.work(q)
+    assert job.state == "done"
+    assert len(tape_models.jobs) == asked  # the two ran and found their results stored; nothing else ran
+    assert {k: v for k, v in made(source).items() if k in ("chapters", "name_chapters")} == {
+        "chapters": False, "name_chapters": 0,
+    }  # fmt: skip
+    assert jobs.adopt(q) == []
+    assert not jobs._unstarted(jobs.store(), jobs.subject_of(999))  # pyright: ignore[reportPrivateUsage]  a gone source
