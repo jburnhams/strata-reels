@@ -4,7 +4,7 @@ An AI-guided video editor: it works out what is in your footage and proposes an 
 
 It was made from python-app-template: a full-stack Python + React project template, extracted from [strata-360](https://github.com/jburnhams/strata-360) and [strata-stills](https://github.com/jburnhams/strata-stills). Includes a FastAPI backend and CLI (`src/app/`), a React 19 + TypeScript frontend (`web/`) built on [strata-react](https://github.com/jburnhams/strata-react) that builds directly into the Python package, hermetic unit and integration test suites (uv run pytest + hypothesis on Python, Vitest + Testing Library + MSW on web), Storybook, screenshot tests in Chromium (`strata-visual`), ratcheting coverage gates, and multi-OS GitHub Actions CI.
 
-The web app is meant to be read as well as run: each screen in `web/src/screens/` opens with the question it answers and the strata-react patterns it shows (loading, empty and error states; a sortable table with its sort in the URL; a one-field form with the server's refusal under it; a polled status page; light and dark). The template's sample (greetings, a paged log, sample settings) was left out: the first screen is the list of sources, each opening its tape's page (`TapeScreen`: the player, the sound, and the scenes with their thumbnails, descriptions, faces and speech), and the jobs page shows the queue with Cancel and Run again.
+The web app is meant to be read as well as run: each screen in `web/src/screens/` opens with the question it answers and the strata-react patterns it shows (loading, empty and error states; a sortable table with its sort in the URL; a one-field form with the server's refusal under it; a polled status page; light and dark). The template's sample (greetings, a paged log, sample settings) was left out: the first screen is the list of sources, each opening its tape's page (`TapeScreen`: the player, the sound, and the tape's chapters, each named, with their scenes' thumbnails, descriptions, faces and speech), and the jobs page shows the queue with Cancel and Run again.
 
 ## Quick start
 
@@ -16,6 +16,7 @@ uv run app sources                        # the sources kept so far, with their 
 uv run app jobs                           # the job queue: one job per tape, which runs its pipeline's stages in turn
 uv run app work                           # run the queued jobs here until none is left, and print each tape's stages (the server runs them while it is up)
 uv run app scenes 1                       # source 1's scenes, with each one's summary and faces (strata-models must be running)
+uv run app chapters 1                     # source 1's chapters: its scenes grouped by occasion, each with its name
 uv run app serve                          # starts the FastAPI + React app on http://127.0.0.1:8360/
 ```
 

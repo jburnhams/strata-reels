@@ -7,6 +7,7 @@ import {
   scenesError,
   scenesLoading,
   scenesPartWay,
+  scenesUnnamed,
   scenesWaiting,
   transcriptWaiting,
 } from '../src/mocks/handlers'
@@ -23,7 +24,10 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
+/** Every step done: three chapters of the six scenes, each named. */
 export const Ready: Story = {}
+/** The chapters grouped, their names part way: the second is shown by its number. */
+export const ChapterUnnamed: Story = { beforeEach: ({ msw }) => msw.use(scenesUnnamed) }
 /** A scene opened: what it saw, what it guessed and why its start is a boundary (?scene=3 in the URL). */
 export const SceneOpen: Story = { render: () => <AppAt route="/sources/5?scene=3" /> }
 export const Transcript: Story = { render: () => <AppAt route="/sources/5?view=transcript" /> }

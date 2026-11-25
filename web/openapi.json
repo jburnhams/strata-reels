@@ -4,6 +4,10 @@
    "Analysis": {
     "description": "Which of the source's results exist, for the page's finding and its waiting words.",
     "properties": {
+     "chapters": {
+      "title": "Chapters",
+      "type": "boolean"
+     },
      "described": {
       "title": "Described",
       "type": "integer"
@@ -11,6 +15,10 @@
      "faces": {
       "title": "Faces",
       "type": "boolean"
+     },
+     "named": {
+      "title": "Named",
+      "type": "integer"
      },
      "peaks": {
       "title": "Peaks",
@@ -55,7 +63,9 @@
      "shots",
      "transcript",
      "faces",
-     "described"
+     "described",
+     "chapters",
+     "named"
     ],
     "title": "Analysis",
     "type": "object"
@@ -68,6 +78,127 @@
      }
     },
     "title": "Approval",
+    "type": "object"
+   },
+   "Chapter": {
+    "description": "A run of neighbouring scenes of one occasion (`chapters.group`): its place on the tape, its scenes, how sure the\nboundary that starts it is and why, and its name (`None` before the name step has run for it).",
+    "properties": {
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "that the boundary before it starts a chapter; None for the first",
+      "title": "Confidence"
+     },
+     "end": {
+      "title": "End",
+      "type": "number"
+     },
+     "index": {
+      "description": "from 0, in time order",
+      "title": "Index",
+      "type": "integer"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ChapterName"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "reasons": {
+      "description": "why the boundary before it is one, in words",
+      "items": {
+       "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+     },
+     "scenes": {
+      "description": "the indexes of its scenes",
+      "items": {
+       "type": "integer"
+      },
+      "title": "Scenes",
+      "type": "array"
+     },
+     "start": {
+      "title": "Start",
+      "type": "number"
+     }
+    },
+    "required": [
+     "index",
+     "start",
+     "end",
+     "scenes",
+     "confidence",
+     "reasons",
+     "name"
+    ],
+    "title": "Chapter",
+    "type": "object"
+   },
+   "ChapterName": {
+    "description": "strata-models' name for a chapter (preset `chapter-name-v1`): what its scenes show kept apart from what is\nguessed, and whether they look like more than one occasion.",
+    "properties": {
+     "inferred": {
+      "items": {
+       "$ref": "#/components/schemas/Guess"
+      },
+      "title": "Inferred",
+      "type": "array"
+     },
+     "mixed": {
+      "description": "the scenes look like more than one occasion: the grouping is in doubt",
+      "title": "Mixed",
+      "type": "boolean"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the model that wrote it",
+      "title": "Model"
+     },
+     "summary": {
+      "title": "Summary",
+      "type": "string"
+     },
+     "tags": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+     },
+     "title": {
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "title",
+     "summary",
+     "inferred",
+     "tags",
+     "mixed",
+     "model"
+    ],
+    "title": "ChapterName",
     "type": "object"
    },
    "Described": {
@@ -603,6 +734,21 @@
      "analysis": {
       "$ref": "#/components/schemas/Analysis"
      },
+     "chapters": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/Chapter"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "None before the scenes are grouped into chapters",
+      "title": "Chapters"
+     },
      "scenes": {
       "items": {
        "$ref": "#/components/schemas/Scene"
@@ -629,7 +775,8 @@
      "source",
      "analysis",
      "waiting",
-     "scenes"
+     "scenes",
+     "chapters"
     ],
     "title": "Scenes",
     "type": "object"

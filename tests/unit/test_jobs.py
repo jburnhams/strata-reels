@@ -18,7 +18,20 @@ from strata_python.db.web import Database
 from app import derived, jobs, results, sources
 from app.models import Source
 
-STAGES = ["hash", "proxy", "thumbnails", "peaks", "shots", "keyframes", "scenes", "faces", "transcript", "describe"]
+STAGES = [
+    "hash",
+    "proxy",
+    "thumbnails",
+    "peaks",
+    "shots",
+    "keyframes",
+    "scenes",
+    "faces",
+    "transcript",
+    "describe",
+    "chapters",
+    "name_chapters",
+]
 
 
 @pytest.fixture
@@ -51,6 +64,7 @@ def made(source: Source) -> dict[str, object]:
 def test_the_stages_are_in_the_order_they_need_each_other():
     assert [s.name for s in jobs.TAPE.stages] == STAGES
     assert jobs.TAPE["describe"].needs == ("scenes", "transcript")  # every description has its speech
+    assert jobs.TAPE["chapters"].needs == ("scenes", "describe")  # chapters are grouped on what the scenes show
     assert jobs.TAPE.resources == ["disk"]  # two tapes are never read from one drive at once
     assert jobs.source_id_of(jobs.subject_of(12)) == 12
     with pytest.raises(KeyError, match="not a tape"):
@@ -68,7 +82,11 @@ def test_a_new_tape_runs_every_stage_in_one_job_and_once(engine: Engine, tmp_pat
     assert done.result == {"state": "done", "waiting": [], "failed": [], "stages": dict.fromkeys(STAGES, "done")}
     digest = hashlib.sha256(content).hexdigest()
     assert sha256_of(engine, source.id) == digest
-    assert made(source) == {"hash": None} | dict.fromkeys(STAGES[1:-1], True) | {"describe": 2}
+    assert made(source) == {"hash": None} | dict.fromkeys(STAGES[1:-3], True) | {
+        "describe": 2,
+        "chapters": True,
+        "name_chapters": 2,
+    }
     # queued again (the tape added again): every stage is done for the same inputs, so nothing runs or is recorded
     history = len(jobs.store().history(jobs.subject_of(source)))
     (again,) = jobs.work(q) if jobs.ingest_later(q, source) else []
@@ -88,6 +106,7 @@ def test_a_cleared_stage_runs_again_and_finds_its_result_stored(engine: Engine, 
     # the shots and what follows them ran again, each finding the same request stored; the rest were not touched
     assert made(source) == {"hash": None, "proxy": True, "thumbnails": True, "peaks": True, "transcript": True} | {
         "shots": False, "keyframes": False, "scenes": False, "faces": False, "describe": 0,
+        "chapters": False, "name_chapters": 0,
     }  # fmt: skip
 
 
@@ -206,6 +225,7 @@ def test_a_tape_added_again_checks_each_step_against_what_is_stored(engine: Engi
     assert job.state == "done"
     assert made(source) == {"hash": None, "proxy": True, "thumbnails": False, "peaks": False, "shots": True} | {
         "transcript": False, "keyframes": True, "scenes": True, "faces": True, "describe": 2,
+        "chapters": True, "name_chapters": 2,
     }  # fmt: skip
     cleared = [r for r in jobs.store().history(jobs.subject_of(source)) if r.status == "cleared"]
     assert {r.by for r in cleared} == {"ada"}
@@ -227,3 +247,23 @@ def test_a_queue_from_before_the_pipeline_is_adopted(engine: Engine, tmp_path, t
     assert (job.kind, job.state) == ("workflow:tape", "done")
     assert made(old)["hash"] is None  # the hash it had stands: the file was not read again
     assert jobs.adopt(q) == []  # nothing more to take up
+
+
+def test_a_tape_analysed_before_a_new_stage_is_taken_up_for_it_alone(engine: Engine, tmp_path, tape_models):
+    source = add(engine, tmp_path, b"\x0b" * 200_000)
+    q = jobs.queue(engine)
+    jobs.ingest_later(q, source)
+    jobs.work(q)
+    # as a release before the chapters left it: every stage done but the two it did not have
+    for name in ("chapters", "name_chapters"):
+        jobs.TAPE.clear(jobs.store(), jobs.subject_of(source), name, by="test")
+    asked = len(tape_models.jobs)
+    assert jobs.adopt(q) == [source.id]
+    (job,) = jobs.work(q)
+    assert job.state == "done"
+    assert len(tape_models.jobs) == asked  # the two ran and found their results stored; nothing else ran
+    assert {k: v for k, v in made(source).items() if k in ("chapters", "name_chapters")} == {
+        "chapters": False, "name_chapters": 0,
+    }  # fmt: skip
+    assert jobs.adopt(q) == []
+    assert not jobs._unstarted(jobs.store(), jobs.subject_of(999))  # pyright: ignore[reportPrivateUsage]  a gone source

@@ -2,6 +2,21 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-25
+
+**A tape's chapters: its scenes grouped by occasion and named, as two stages of the tape pipeline (branch `claude/project-thread-fejz06`)**
+Jonathan asked for the next step: group each tape's scenes into chapters from the stored results and show them, after making sure reels is on the newest strata-python and strata-react and uses their workflow pipeline and job queue fully. strata-python 0.2.18 comes from #17, which this branch is built on. strata-react 1.3.13 adds nothing this page needs: `MediaPlayer heading` and link state are for a player with a title over the picture. Chapters are two more stages of the `tape` pipeline, not a job of their own. The title and summary prompt is strata-models' new role `chapter-name` (strata-models #125).
+- `src/app/chapters.py` (**new**): `group`, a pure function. It works out the log-odds that a chapter starts at each scene boundary from four signals: the cosine of the two scenes' mean keyframe vectors, the share of description words they have in common (tags and activity), black between them, and indoors next to outdoors. Every boundary is kept with its level (`chapter` or `scene`), its confidence and its reasons in words. The weights are first guesses and are not measured. The result is kind `chapters`, role `reels-chapters`, keyed on the scenes, the vectors and the descriptions it read. `name` asks strata-models' `chapter-name` (preset `chapter-name-v1`, text only) for each chapter: up to 24 of its scenes, each with its description and up to 400 characters of speech. It stores one result of kind `chapter` per chapter, its span the chapter's. Also `current`, `current_names` and `context_of`.
+- `src/app/jobs.py`: stages `chapters` (needs `scenes` and `describe`) and `name_chapters` (needs `chapters`), so the pipeline has twelve. A regrouping or a new description makes both run again. `adopt` now also queues a tape the pipeline knows that has a stage ready to run, so a tape analysed before this release gets its chapters when the server starts or `./app work` runs; before, it queued only tapes the pipeline had never seen (Codex review).
+- `src/app/browse.py`: `Scenes.chapters` (`None` before they are grouped) with `Chapter` and `ChapterName`; `Analysis.chapters` and `named`. `web/openapi.json`, `web/src/api.generated.ts` regenerated.
+- `src/app/cli.py`: `./app chapters <id> [--json]`.
+- `web/src/screens/TapeScreen.tsx`: the scenes sit under their chapters. Each chapter shows its name, span and scene count, its summary, what was guessed and why, Play chapter, and a warning when its start is unsure or its scenes may be more than one occasion. A chapter not named yet shows as "Chapter 2". The finding counts chapters, and says when chapters or names are still to come. The waveform marks chapters once there are any. Before then the scenes are one list, as before. `web/src/api.ts`: `Chapter`.
+- `web/src/mocks/tape.ts`, `handlers.ts`: the Christmas tape's three chapters, the two new stages, `scenesUnnamed`. `web/stories/tape.stories.tsx`: `ChapterUnnamed`.
+- `web/package.json`, `package-lock.json`: strata-react `^1.3.13`.
+- Tests: `tests/unit/test_chapters.py` (**new**); `test_browse.py`, `test_jobs.py`, `test_derived.py`, `tests/integration/test_cli.py` (two chapters of the real red and blue clip, each named from its own scene); `tests/utils/probes.py` (`name_chapter`), `tests/unit/conftest.py`; `web/tests/integration/TapeScreen.test.tsx`, `web/tests/unit/logic.test.ts`.
+- `web/tests/visual/baselines/` (written on CI's runner): every tape page and tape route shot moves, because the scenes now sit under chapter headings and there are two more steps; `screens-tape--chapter-unnamed--*` are new; `screens-jobs--ready` and `--failed` move by a few bytes, since the job's progress counts 12 steps, not 10.
+- `docs/implementation-plan.md`, `docs/progress.md`, `docs/overview.md` §6, `README.md`, `AGENTS.md` (which also said strata-python `>=0.2.15`).
+
 ## 2026-11-24
 
 **strata-python 0.2.18, for tapes with over 100 keyframes (branch `strata-python-0.2.18`)**

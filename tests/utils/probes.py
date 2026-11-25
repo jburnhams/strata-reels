@@ -108,3 +108,20 @@ def describe_scene(params):
 
 def _frame(path):
     return int(os.path.basename(path)[:-4])
+
+
+def name_chapter(params):
+    """A chapter's name that says which scenes it was told of (their starts), so a test can read them back."""
+    starts = [s["start"] for s in params["context"]["scenes"]]
+    return {
+        "text": "{}",
+        "json": {
+            "title": f"Scenes from {starts[0]}",
+            "summary": f"scenes at {', '.join(starts)}",
+            "inferred": [{"guess": "a birthday", "because": "a cake in every scene"}],
+            "tags": ["birthday"],
+            "mixed": False,
+        },
+        "tokens_in": 400,
+        "tokens_out": 60,
+    }

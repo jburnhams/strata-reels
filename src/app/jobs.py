@@ -32,6 +32,8 @@ Stages (each finds its result stored, and makes nothing, when the same request r
 - `transcript`: the whole source's speech from strata-models' `transcribe`, for a source with sound.
 - `describe`: a description of each scene, which needs the scenes and the transcript, so every description has its
   speech.
+- `chapters`: the scenes grouped by occasion (`chapters.group`, this app's own code over the scenes' pictures and
+  descriptions), then `name_chapters`: a title and summary for each from strata-models' `chapter-name`.
 
 Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
 
@@ -52,7 +54,7 @@ from strata_python.tasks.queue import Handler, Job, Queue, Worker
 from strata_python.workflow import Context, Pipeline, request_key, step
 from strata_python.workflow.store import DbStore, enqueue
 
-from app import db, derived, describe, scenes, shots, speech
+from app import chapters, db, derived, describe, scenes, shots, speech
 from app.models import JOBS, STAGES, Result, Source
 
 log = logging.getLogger(__name__)
@@ -193,6 +195,19 @@ def _describe(ctx: Context) -> dict[str, Any]:
         return {"results": [r.id for r, _ in made], "key": request_key(*(r.cache_key for r, _ in made))}
 
 
+def _chapters(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        r, new = chapters.find_chapters(s, _source(s, ctx), job_id=ctx.app.job_id)
+        return _found(ctx, r, new, chapters=len(r.payload["chapters"]))
+
+
+def _name_chapters(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        made = chapters.name(s, _source(s, ctx), job_id=ctx.app.job_id)
+        ctx.measure(new=sum(new for _, new in made))
+        return {"results": [r.id for r, _ in made], "key": request_key(*(r.cache_key for r, _ in made))}
+
+
 def _version(*parts: Any) -> str:
     """A stage's version from what this app asks of it (its parameters), so a release that asks otherwise runs it again.
     What strata-models answers with (its model and settings) is checked by the stage itself, against its stored result,
@@ -218,6 +233,8 @@ TAPE = Pipeline(
         step("faces", _faces, needs=("keyframes",), version=_version(describe.FACE_FIELDS), label="Find the faces"),
         step("transcript", _transcript, needs=("hash",), version=_version(speech.PARAMETERS), label="Write down what is said"),
         step("describe", _describe, needs=("scenes", "transcript"), version=_version(describe.PRESET, describe.FRAMES, speech.SAID_CHARS), label="Describe the scenes"),
+        step("chapters", _chapters, needs=("scenes", "describe"), version=_version(chapters.VERSION, chapters.PARAMETERS), label="Group the scenes into chapters"),
+        step("name_chapters", _name_chapters, needs=("chapters",), version=_version(chapters.NAME_PRESET, chapters.NAMED_SCENES, chapters.SAID_CHARS), label="Name the chapters"),
     ],
 )  # fmt: skip
 
@@ -252,7 +269,8 @@ OLD_KINDS = ("hash", "proxy", "thumbnails", "peaks", "shots", "keyframes", "scen
 
 def adopt(q: Queue) -> list[int]:
     """Bring a queue from before the tape pipeline onto it: cancel the old kinds of job still waiting or running, and
-    queue the tape job of every source the pipeline has no record of; the sources queued. Cheap when there is nothing
+    queue the tape job of every source the pipeline has no record of, or has a stage ready for that is not done (a
+    stage a newer release added); the sources queued (a tape whose job is already queued keeps that one). Cheap when there is nothing
     to do, so the server and `./app work` call it every time they start."""
     for kind in OLD_KINDS:
         while page := q.page(state=("queued", "running"), kind=kind, limit=200).items:
@@ -260,13 +278,24 @@ def adopt(q: Queue) -> list[int]:
                 q.cancel(int(t.id))
             if all(t.state == "running" for t in page):  # asked to stop: they leave the list when they do
                 break
-    known = set(store().subjects())
+    st = store()
+    known = set(st.subjects())
     with Session(_records()) as s:
         ids = list(s.scalars(select(Source.id).order_by(Source.id)))
-    queued = [i for i in ids if subject_of(i) not in known]
+    queued = [i for i in ids if subject_of(i) not in known or _unstarted(st, subject_of(i))]
     for i in queued:
         ingest_later(q, i)
     return queued
+
+
+def _unstarted(st: DbStore, subject: str) -> bool:
+    """A tape the pipeline knows with a stage ready to run that no job is running: a stage added by a newer release
+    (the chapters, for a tape analysed before them), or a version raised. Its job runs only those, the rest stand."""
+    try:
+        inputs = inputs_of(subject)
+    except KeyError:  # the source is gone
+        return False
+    return any(state in ("ready", "stale") for state in TAPE.status(st, subject, inputs).states.values())
 
 
 def advance_tape(job: Job) -> dict[str, Any]:

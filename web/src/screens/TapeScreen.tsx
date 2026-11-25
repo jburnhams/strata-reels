@@ -1,9 +1,16 @@
 // The one question: "What happens on this tape, and where?" (R1 step 4, the tape's chapters). A
 // family tape is hours of footage nobody has watched since it was recorded; the analysis steps split
-// it into scenes (src/app/scenes.py) and say what each shows (describe.py), who is in it (faces) and
-// what is said (speech.py). The finding counts the scenes and says what is still to come; then the
-// player, the tape's sound, and the scenes in order, each a strip of its thumbnails to recognise it
-// by, its description, and what the description is based on.
+// it into scenes (src/app/scenes.py), say what each shows (describe.py), who is in it (faces) and
+// what is said (speech.py), then group the scenes into chapters, one occasion each, and name them
+// (chapters.py). The finding counts the chapters and scenes and says what is still to come; then the
+// player, the tape's sound, and the chapters in order, each its name, what happens in it and its
+// scenes, each scene a strip of its thumbnails to recognise it by, its description, and what the
+// description is based on.
+// - A chapter is the level a person skims at ("Christmas morning, then dinner"), so its name and
+//   summary lead and its scenes follow under it. Before the chapters are grouped the scenes are one
+//   list, as before; a chapter not named yet is "Chapter 2" with its span. What the namer guessed is
+//   kept apart from what the scenes show, and a doubtful chapter (its start unsure, or its scenes
+//   looking like more than one occasion) says so, since that is where a person corrects it.
 //
 // - Every read is useLoad -> DataView. The scenes are one read (`GET /api/sources/{id}/scenes`,
 //   src/app/browse.py), which says what each step has found so far, so a tape part way through its
@@ -29,7 +36,7 @@
 //   says how sure the cut before a scene is when it is unsure, since that is where a person corrects
 //   it (the corrections, stored as overrides, are the next step).
 import { Play } from 'lucide-react'
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { memo, type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import {
   Button,
@@ -54,9 +61,10 @@ import {
   useLoad,
   useWorkflowRun,
   Waveform,
+  type WaveformMark,
   WorkflowSteps,
 } from 'strata-react'
-import { api, keys, type Scene, type Scenes, type Source, subjectOf, type Transcript, type WorkflowRun } from '../api'
+import { api, type Chapter, keys, type Scene, type Scenes, type Source, subjectOf, type Transcript, type WorkflowRun } from '../api'
 
 /** Under this the cut before a scene is as likely a shot change as a new scene: say so. */
 export const UNSURE = 0.65
@@ -64,17 +72,27 @@ export const UNSURE = 0.65
 /** "Scene 3". */
 export const sceneName = (s: Pick<Scene, 'index'>) => `Scene ${s.index + 1}`
 
-/** The page's finding: how many scenes over how long, then what is still to come. */
+/** "Chapter 2: Christmas dinner", or "Chapter 2" before it is named. */
+export const chapterName = (c: Pick<Chapter, 'index' | 'name'>) => `Chapter ${c.index + 1}${c.name ? `: ${c.name.title}` : ''}`
+
+/** The page's finding: how many chapters and scenes over how long, then what is still to come. */
 export function describeScenes(d: Scenes): string {
   if (d.scenes.length === 0) return d.waiting ?? 'No scenes found.'
   const length = d.scenes.reduce((a, s) => a + (s.end - s.start), 0)
-  const parts = [`${format.count(d.scenes.length, 'scene')} over ${format.runningTime(length)}`]
+  const counted = format.count(d.scenes.length, 'scene')
+  const parts = [
+    d.chapters?.length
+      ? `${format.count(d.chapters.length, 'chapter')} of ${counted} over ${format.runningTime(length)}`
+      : `${counted} over ${format.runningTime(length)}`,
+  ]
   const undescribed = d.scenes.filter(s => s.description === null).length
   if (undescribed === d.scenes.length) parts.push('not described yet')
   else if (undescribed) parts.push(`${format.count(undescribed, 'scene')} not described yet`)
   const unsure = d.scenes.filter(s => s.confidence !== null && s.confidence < UNSURE).length
   if (unsure) parts.push(`${unsure} ${unsure === 1 ? 'start' : 'starts'} to check`)
   if (d.analysis.transcript === false) parts.push('speech still to come')
+  if (d.chapters === null) parts.push('chapters still to come')
+  else if (d.chapters.some(c => c.name === null)) parts.push('chapter names still to come')
   return `${parts.join('; ')}.`
 }
 
@@ -132,6 +150,12 @@ export function transcriptGroups(t: Transcript, scenes: Scene[]): TranscriptGrou
     groups[g]?.phrases.push({ id: `p${i}`, start: seg.start, end: seg.end, words })
   })
   return groups.filter(g => g.phrases.length)
+}
+
+/** The waveform's marks: each chapter's start once there are chapters (the scenes are the player's spans), else each scene's. */
+export function soundMarks(scenes: Scene[], chapters: Chapter[] | null): WaveformMark[] {
+  if (chapters?.length) return chapters.map(c => ({ time: c.start, label: chapterName(c), kind: 'chapter' }))
+  return scenes.map(s => ({ time: s.start, label: sceneName(s), kind: 'chapter' }))
 }
 
 /** How often the page reads the tape again while its jobs run. */
@@ -233,7 +257,7 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
   }, [])
   const spans = useMemo<MediaSpanData[]>(() => scenes.map(s => ({ start: s.start, end: s.end, kind: 'scene' })), [scenes])
   const spanKinds = useMemo(() => ({ scene: { label: 'Scene', behaviour: 'off' as const } }), [])
-  const marks = useMemo(() => scenes.map(s => ({ time: s.start, label: sceneName(s), kind: 'chapter' as const })), [scenes])
+  const marks = useMemo(() => soundMarks(scenes, data.chapters), [scenes, data.chapters])
   const playing = scenes.findIndex(s => time >= s.start && time < s.end)
 
   return (
@@ -274,7 +298,7 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
           ) : view === 'transcript' ? (
             <TapeTranscript sourceId={source.id} ready={analysis.transcript} scenes={scenes} time={time} onSeek={seek} />
           ) : (
-            <SceneList scenes={scenes} playing={playing} time={time} onSeek={seek} />
+            <SceneList scenes={scenes} chapters={data.chapters} playing={playing} time={time} onSeek={seek} />
           )
         }
       </Tabs>
@@ -291,7 +315,7 @@ function TapeSound({
   sourceId: number
   time: number
   onSeek: (t: number) => void
-  marks: { time: number; label: string; kind: 'chapter' }[]
+  marks: WaveformMark[]
 }) {
   const load = useLoad({
     queryKey: keys.peaks(sourceId),
@@ -311,19 +335,21 @@ function TapeSound({
 
 function SceneList({
   scenes,
+  chapters,
   playing,
   time,
   onSeek,
 }: {
   scenes: Scene[]
+  chapters: Chapter[] | null
   playing: number
   time: number
   onSeek: (t: number, play?: boolean) => void
 }) {
   const open = useExpanded({ param: 'scene' })
-  return (
-    <ol aria-label="Scenes" className="grid gap-6">
-      {scenes.map(s => (
+  const list = (label: string, of: Scene[]) => (
+    <ol aria-label={label} className="grid gap-6">
+      {of.map(s => (
         <SceneItem
           key={s.index}
           scene={s}
@@ -334,6 +360,62 @@ function SceneList({
         />
       ))}
     </ol>
+  )
+  if (!chapters?.length) return list('Scenes', scenes)
+  return (
+    <ol aria-label="Chapters" className="grid gap-12">
+      {chapters.map(c => (
+        <ChapterItem key={c.index} chapter={c} onSeek={onSeek}>
+          {list(`Scenes of ${chapterName(c).toLowerCase()}`, c.scenes.map(i => scenes[i]).filter(Boolean))}
+        </ChapterItem>
+      ))}
+    </ol>
+  )
+}
+
+/** A chapter: its name, span and summary, what the namer guessed and why, a doubt where there is one, then its scenes. */
+function ChapterItem({
+  chapter,
+  onSeek,
+  children,
+}: {
+  chapter: Chapter
+  onSeek: (t: number, play?: boolean) => void
+  children: ReactNode
+}) {
+  const name = chapterName(chapter)
+  const n = chapter.name
+  const headingId = `chapter-${chapter.index}-heading`
+  const unsure = chapter.confidence !== null && chapter.confidence < UNSURE ? chapter.confidence : null
+  return (
+    <li aria-labelledby={headingId} className="grid min-w-0 gap-4">
+      <div className="grid gap-2 border-b border-border pb-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id={headingId} className="type-title">
+            {name}
+          </h2>
+          <p className="type-body-sm tabular-nums text-muted-foreground">
+            {format.runningTime(chapter.start)} to {format.runningTime(chapter.end)}, {format.runningTime(chapter.end - chapter.start)}{' '}
+            long, {format.count(chapter.scenes.length, 'scene')}
+          </p>
+        </div>
+        <p className="type-body">{n ? n.summary : 'Not named yet: the name step writes a title and summary for each chapter.'}</p>
+        {n && n.inferred.length > 0 && (
+          <p className="type-body-sm text-muted-foreground">
+            Guessed: {n.inferred.map(g => `${g.guess}, because ${g.because}`).join('; ')}.
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 type-body-sm text-muted-foreground">
+          <Button size="sm" variant="outline" onClick={() => onSeek(chapter.start, true)}>
+            <Play aria-hidden />
+            Play chapter {chapter.index + 1}
+          </Button>
+          {unsure !== null && <Status tone="warning">{`Start unsure (${format.share(unsure)}): ${chapter.reasons.join(', ')}`}</Status>}
+          {n?.mixed && <Status tone="warning">May be more than one occasion</Status>}
+        </div>
+      </div>
+      {children}
+    </li>
   )
 }
 

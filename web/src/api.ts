@@ -17,6 +17,7 @@ export type Video = Schema<'Video'>
 export type Folder = Schema<'Folder'>
 export type Scenes = Schema<'Scenes'>
 export type Scene = Schema<'Scene'>
+export type Chapter = Schema<'Chapter'>
 export type Transcript = Schema<'Transcript'>
 export type Peaks = Schema<'Peaks'>
 export type Job = Schema<'Task'>
