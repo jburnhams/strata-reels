@@ -8,9 +8,14 @@
 // - the add is useAsyncAction -> AsyncButton in `Field action=`; the server's refusal ("there is no
 //   file ...") reaches the field as the error's reason, and a file already known answers 200 with
 //   the same record, which the list already shows;
-// - the sort is in the URL (?sort=added.desc), so a sorted table can be linked and reloaded.
+// - the sort is in the URL (?sort=added.desc), so a sorted table can be linked and reloaded;
+// - each tape's analysis is a column in a few words (strata-react's `WorkflowSummary` over the shared
+//   workflow route's list, `GET /api/workflows/tape/subjects`): analysing and on which step, failed and
+//   where, the chapters waiting for the person's check, or done. It is the column that says which tape
+//   needs the person, so the finding counts those too. It is a read of its own: a slow one never holds
+//   the list (the column shows a dash until it answers), and it is read again while any tape's job runs.
 import { useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useMemo, useState } from 'react'
 import {
   AsyncButton,
   type Column,
@@ -20,13 +25,16 @@ import {
   Field,
   format,
   Input,
+  isWorkflowRunning,
   PageHeader,
+  summariseWorkflow,
   TableSkeleton,
   TextLink,
   useAsyncAction,
   useLoad,
+  WorkflowSummary,
 } from 'strata-react'
-import { api, keys, type Source, type Video } from '../api'
+import { allRuns, api, FINISHED, keys, type Source, type Video, type WorkflowRun } from '../api'
 
 /** Frames a second from ffprobe's "25/1" or "30000/1001", or null when it gave none (or 0/0). */
 export function framesPerSecond(rate: string | null): number | null {
@@ -47,43 +55,88 @@ export function describePicture(v: Video | null): string | null {
   return parts.length ? parts.join(', ') : null
 }
 
-/** The page's finding: how many sources and how long they run in all, or what to do when there are none. */
-export function describeSources(sources: Source[]): string {
+/** The page's finding: how many sources and how long they run in all, then which need the person; or what to do when there are none. */
+export function describeSources(sources: Source[], runs?: Map<number, WorkflowRun>): string {
   if (sources.length === 0) return 'No footage yet. Add a tape transfer or a clip below.'
   const times = sources.flatMap(s => (s.duration === null ? [] : [s.duration]))
   const length = times.length ? ` running ${format.runningTime(times.reduce((a, b) => a + b, 0))} in all` : ''
   const untimed = sources.length - times.length
   const unknown = untimed ? ` (${format.count(untimed, 'source')} of unknown length)` : ''
-  return `${format.count(sources.length, 'source')}${length}${unknown}.`
+  const first = `${format.count(sources.length, 'source')}${length}${unknown}`
+  const states = sources.flatMap(s => {
+    const run = runs?.get(s.id)
+    return run ? [summariseWorkflow(run.stages, { running: isWorkflowRunning(run, FINISHED) }).state] : []
+  })
+  const count = (state: string) => states.filter(x => x === state).length
+  const need = [
+    count('waiting') && `${format.count(count('waiting'), 'tape')} to check`,
+    count('failed') && `${count('failed')} stopped at a failed step`,
+    count('running') && `${count('running')} analysing`,
+  ].filter(Boolean)
+  return need.length ? `${first}; ${need.join(', ')}.` : `${first}.`
 }
 
-const columns: Column<Source>[] = [
-  {
-    key: 'name',
-    header: 'Name',
-    value: s => s.name,
-    // the tape's scenes: its own page
-    cell: s => (
-      <span title={s.path}>
-        <TextLink to={`/sources/${s.id}`}>{s.name}</TextLink>
-      </span>
-    ),
-    truncate: true,
-  },
-  { key: 'length', header: 'Length', numeric: true, value: s => s.duration, cell: s => format.runningTime(s.duration) },
-  { key: 'picture', header: 'Picture', value: s => describePicture(s.video), missing: 'No video' },
-  { key: 'size', header: 'Size', numeric: true, value: s => s.size, cell: s => format.bytes(s.size) },
-  { key: 'added', header: 'Added', value: s => new Date(s.added), cell: s => format.date(s.added), className: 'whitespace-nowrap' },
-]
+/** How often the list reads the runs again while a tape's job runs. */
+const FOLLOW = 5000
+
+/** How often to read the runs again: while any tape's job is queued or running, else not at all. */
+export function followRuns(runs: Map<number, WorkflowRun> | undefined): number | false {
+  return [...(runs?.values() ?? [])].some(r => isWorkflowRunning(r, FINISHED)) ? FOLLOW : false
+}
+
+/** The order the analysis column sorts in: what needs the person first. */
+const NEEDS = ['waiting', 'failed', 'running', 'stale', 'partial', 'ready', 'done']
+
+function columnsFor(runs: Map<number, WorkflowRun> | null): Column<Source>[] {
+  const runOf = (s: Source) => runs?.get(s.id) ?? null
+  return [
+    {
+      key: 'name',
+      header: 'Name',
+      value: s => s.name,
+      // the tape's scenes: its own page
+      cell: s => (
+        <span title={s.path}>
+          <TextLink to={`/sources/${s.id}`}>{s.name}</TextLink>
+        </span>
+      ),
+      truncate: true,
+    },
+    { key: 'length', header: 'Length', numeric: true, value: s => s.duration, cell: s => format.runningTime(s.duration) },
+    { key: 'picture', header: 'Picture', value: s => describePicture(s.video), missing: 'No video' },
+    { key: 'size', header: 'Size', numeric: true, value: s => s.size, cell: s => format.bytes(s.size) },
+    {
+      key: 'analysis',
+      header: 'Analysis',
+      value: s => {
+        const run = runOf(s)
+        return run ? NEEDS.indexOf(summariseWorkflow(run.stages, { running: isWorkflowRunning(run, FINISHED) }).state) : null
+      },
+      // Called only for a row whose `value` is not null (DataTable shows the dash for the rest), so the run is there.
+      cell: s => {
+        const run = runOf(s) as WorkflowRun
+        return <WorkflowSummary stages={run.stages} running={isWorkflowRunning(run, FINISHED)} words={{ running: 'Analysing' }} />
+      },
+    },
+    { key: 'added', header: 'Added', value: s => new Date(s.added), cell: s => format.date(s.added), className: 'whitespace-nowrap' },
+  ]
+}
 
 export function SourcesScreen() {
   const load = useLoad({ queryKey: keys.sources, queryFn: () => api.get('/api/sources') })
+  const runs = useLoad({
+    queryKey: keys.runs,
+    queryFn: allRuns,
+    refetchInterval: q => followRuns(q.state.data),
+  })
+  const known = runs.status === 'ready' ? runs.data : null
+  const columns = useMemo(() => columnsFor(known), [known])
   return (
     <>
       <PageHeader
         title="Sources"
         scope="Footage the app can work from, kept in its database"
-        finding={load.status === 'ready' ? { text: describeSources(load.data) } : undefined}
+        finding={load.status === 'ready' ? { text: describeSources(load.data, known ?? undefined) } : undefined}
       />
       <AddSource />
       <section aria-labelledby="footage" className="grid gap-3">
@@ -93,7 +146,7 @@ export function SourcesScreen() {
         <DataView
           state={load}
           isEmpty={rows => rows.length === 0}
-          skeleton={<TableSkeleton rows={6} columns={5} />}
+          skeleton={<TableSkeleton rows={6} columns={6} />}
           empty={
             <EmptyState title="No footage yet">
               Add a file with the form above, or from the command line with <code className="font-mono">./app add /path/to/tape.mkv</code>.

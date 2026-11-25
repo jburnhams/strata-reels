@@ -4,6 +4,19 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-25
 
+**Polishing the tape page and the Sources list: the player beside the chapters, each tape's analysis in the list (branch `claude/project-thread-t8kdgj`)**
+Jonathan asked for the tape page's UI updates after the chapters, with what reels needs from strata-react raised there as issues (strata-react #371, #372, #373, built in strata-react PR #375 and taken up here at its release). Reviewed against the spec's review interface (M1) and correction loop (§6): the page answered well but made a person scroll away from the picture to read a long tape, never said which occasion was playing, and the Sources list said nothing about which tape needed the person.
+- `web/src/screens/TapeScreen.tsx`: on a wide screen the player, its sound and the chapters as contents (`MediaContents`, the one playing marked, pressing one plays it and, while the column is sticky, brings its heading into view) sit in a sticky column beside the scenes; stacked below that width as before. The chapters are marks on the player's seek bar (`MediaPlayer marks`); the scene being played carries the bar the contents and the transcript use. New `chapterMarks`, `chapterContents`; the scope line names chapters.
+- `web/src/screens/SourcesScreen.tsx`: an Analysis column (`WorkflowSummary` over every tape's run, `GET /api/workflows/tape/subjects`, read as its own query, all pages, again every 5 s while a job runs; sorts what needs the person first), and the finding counts tapes to check, stopped and analysing. `followRuns`.
+- `web/src/api.ts`: `allRuns`, `keys.runs`, and `FINISHED` (moved from the tape page).
+- `web/src/routes.tsx`, `web/src/screens/Layout.tsx`, `web/src/screens/NotFoundScreen.tsx`: the list is `/sources` and `/` sends the person there, so the menu marks Sources on a tape's page too (it marked nothing before); a route with `handle: { wide: true }` (the tape page) takes `max-w-7xl` instead of the reading width.
+- `web/src/mocks/tape.ts`, `web/src/mocks/handlers.ts`: `otherRuns` (a tape analysing, one failed, one confirmed) and the runs list handler.
+- `web/strata-visual.config.ts`: the sources route is `/sources`; the scroll-through is on again, as strata-react 1.3.18 shows a picture it has loaded at once on a remount (#352), which is why it was off.
+- `web/stories/sources.stories.tsx`: routes moved to `/sources`.
+- `web/tests/integration/{App,SourcesScreen,TapeScreen}.test.tsx`, `web/tests/unit/logic.test.ts`: the new column, paging, the contents, the sticky scroll, the redirect.
+- `web/package.json`, `web/package-lock.json`: strata-react `^1.3.19`, the release with #371-#373 (a version bump, no new dependency).
+- `web/tests/visual/baselines/`: the tape and sources shots change (two columns on the wide shots, the new column, pictures below the window now loaded); rewritten on the CI runner.
+
 **Correcting the chapters on the tape page: marks, titles and a check, and the weights fitted on them (branch `claude/project-thread-fejz06`)**
 Jonathan asked for chapters first, then any tape page updates, then reels as a service on the GPU machine. On the real tape the first chapters had a wrong name from a misheard line, two places in one chapter and one opening split in two, so this lets the person correct them where they read them, as overrides, with the check as a workflow gate. No dependency added; strata-python 0.2.19 and strata-react 1.3.15 are updates in range.
 - `src/app/overrides.py`: target `tape` (a source as a whole). `tests/unit/test_overrides.py`: its refusal names it.

@@ -11,7 +11,7 @@ export function NotFoundScreen() {
       <EmptyState
         title={`There is nothing at ${pathname}`}
         action={
-          <ButtonLink to="/" variant="default">
+          <ButtonLink to="/sources" variant="default">
             Go to sources
           </ButtonLink>
         }

@@ -15,12 +15,6 @@ import { handlers } from './src/mocks/handlers'
 
 export default defineVisualConfig({
   storybook: 'storybook-static',
-  // Off for now: the CI runner's Chromium makes the window 1x1 for a moment while it takes a whole-page shot, each
-  // FilmStrip re-picks its frames for that width and back, and the new Thumbnails below the window wait to be near it
-  // before asking for their pictures, so the tape page's strips were pictures in one pass and skeletons in the next
-  // (measured on the runner; strata-react issue #352). With pictures below the window never asked for, they are
-  // skeletons in every pass. Turn it back on once strata-react shows a picture it has loaded at once on a remount.
-  scrollThrough: false,
   app: {
     dir: 'dist-visual',
     handlers,
@@ -28,7 +22,7 @@ export default defineVisualConfig({
     routes: [
       {
         name: 'sources',
-        path: '/',
+        path: '/sources',
         states: {
           ready: [],
           refused: {

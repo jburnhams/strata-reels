@@ -2,12 +2,14 @@ import { readFileSync } from 'node:fs'
 import { colorSchemeScript, format } from 'strata-react'
 import { describe, expect, it } from 'vitest'
 import { initialSources, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
-import { tapeRunChecked, tapeRunDone, tapeRunPartWay, tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
+import { otherRuns, tapeRunChecked, tapeRunDone, tapeRunPartWay, tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
 import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
-import { describePicture, describeSources, framesPerSecond } from '../../src/screens/SourcesScreen'
+import { describePicture, describeSources, followRuns, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
 import {
   aspectOf,
+  chapterContents,
+  chapterMarks,
   chapterName,
   checkOf,
   describeFaces,
@@ -20,6 +22,18 @@ import {
 } from '../../src/screens/TapeScreen'
 
 describe('the Sources finding and picture', () => {
+  it('names the tapes that need the person after the footage', () => {
+    const runs = new Map([[5, tapeRunDone], ...Object.entries(otherRuns).map(([id, r]) => [Number(id), r] as const)])
+    expect(describeSources(initialSources, runs)).toBe(
+      `${format.count(5, 'source')} running ${format.runningTime(31_043.1)} in all; ${format.count(1, 'tape')} to check, 1 stopped at a failed step, 1 analysing.`,
+    )
+    expect(describeSources(initialSources, new Map([[1, otherRuns[1]]]))).toMatch(/in all\.$/)
+    // The list is read again only while a tape's job runs.
+    expect(followRuns(new Map([[4, otherRuns[4]]]))).toBe(5000)
+    expect(followRuns(new Map([[1, otherRuns[1]]]))).toBe(false)
+    expect(followRuns(undefined)).toBe(false)
+  })
+
   it('counts sources and adds up their running time, naming those of unknown length', () => {
     expect(describeSources(initialSources)).toBe(`${format.count(5, 'source')} running ${format.runningTime(31_043.1)} in all.`)
     const untimed = { ...initialSources[0], id: 9, duration: null }
@@ -100,6 +114,17 @@ describe('the tape page', () => {
       'Chapter 3: The evening in front of the television',
     ])
     expect(soundMarks(tapeScenes.scenes, null)).toHaveLength(6)
+    // The seek bar's marks leave out the first chapter, which starts where the bar does; the contents keep every one.
+    expect(chapterMarks(tapeScenes.chapters).map(m => m.label)).toEqual([
+      'Chapter 2: Christmas dinner',
+      'Chapter 3: The evening in front of the television',
+    ])
+    expect(chapterMarks(null)).toEqual([])
+    expect(chapterContents(tapeScenes.chapters).map(c => [c.title, c.detail])).toEqual([
+      ['Chapter 1: Christmas morning', format.count(3, 'scene')],
+      ['Chapter 2: Christmas dinner', format.count(2, 'scene')],
+      ['Chapter 3: The evening in front of the television', format.count(1, 'scene')],
+    ])
     expect(describeScenes({ ...tapeScenes, chapters: null })).toMatch(/; chapters still to come\.$/)
     expect(describeScenes({ ...tapeScenes, regrouping: true })).toMatch(/; grouping the chapters again by your marks\.$/)
   })

@@ -26,7 +26,13 @@
 //   scenes first say it is there.
 // - Playback is Strata's MediaPlayer over the browser copy (the proxy step's file), driven from the
 //   page through `mediaRef`: a frame of a strip, a scene's Play button, a word of the transcript and
-//   the waveform all seek it. The scenes are the player's spans and the waveform's chapter marks.
+//   the waveform all seek it. The scenes are the player's spans; the chapters are its seek bar's marks
+//   and the waveform's, and the contents under it (strata-react's `MediaContents`), the one playing
+//   marked, so a person sees which occasion they are in and jumps to another in one press.
+// - On a wide screen the player, its sound and the contents stay in a column of their own beside the
+//   chapters and scenes (sticky, as tall as the window), so the picture is in sight while a person reads
+//   and presses down a long tape; narrower, the column stacks above as before. The scene being played
+//   is marked in the list by the bar the contents and the transcript use.
 // - Only the scene being played is given the time, so the playhead re-draws one strip, not all of
 //   them (a long tape has a hundred scenes); the time is kept to a quarter second for the same reason.
 // - Tape sound is quiet (a camcorder peaks near a tenth of full scale), so the waveform is drawn
@@ -52,6 +58,7 @@ import { useParams } from 'react-router'
 import {
   AsyncButton,
   Button,
+  cn,
   DataView,
   Disclosure,
   EmptyState,
@@ -61,6 +68,8 @@ import {
   Input,
   type Job,
   JobStatus,
+  MediaContents,
+  type MediaContentsItem,
   type MediaElementState,
   MediaPlayer,
   type MediaSpanData,
@@ -80,7 +89,18 @@ import {
   type WaveformMark,
   WorkflowSteps,
 } from 'strata-react'
-import { api, type Chapter, keys, type Scene, type Scenes, type Source, subjectOf, type Transcript, type WorkflowRun } from '../api'
+import {
+  api,
+  type Chapter,
+  FINISHED,
+  keys,
+  type Scene,
+  type Scenes,
+  type Source,
+  subjectOf,
+  type Transcript,
+  type WorkflowRun,
+} from '../api'
 
 /** Under this the cut before a scene is as likely a shot change as a new scene: say so. */
 export const UNSURE = 0.65
@@ -133,9 +153,6 @@ export function describeScenes(d: Scenes): string {
   else if (d.chapters.some(c => c.name === null)) parts.push('chapter names still to come')
   return `${parts.join('; ')}.`
 }
-
-/** The task states that mean a job has ended (strata-python's queue). */
-const FINISHED = ['done', 'failed', 'cancelled']
 
 /** The finding's last sentence when a step failed: which, and where to read why. */
 export function describeFailed(run: Pick<WorkflowRun, 'stages'>): string | null {
@@ -196,6 +213,22 @@ export function soundMarks(scenes: Scene[], chapters: Chapter[] | null): Wavefor
   return scenes.map(s => ({ time: s.start, label: sceneName(s), kind: 'chapter' }))
 }
 
+/** The seek bar's marks: where each chapter after the first starts (the first is the bar's start). */
+export function chapterMarks(chapters: Chapter[] | null): { time: number; label: string }[] {
+  return (chapters ?? []).filter(c => c.start > 0).map(c => ({ time: c.start, label: chapterName(c) }))
+}
+
+/** The chapters as the contents beside the player: each one's name, span, and its scenes counted. */
+export function chapterContents(chapters: Chapter[] | null): MediaContentsItem[] {
+  return (chapters ?? []).map(c => ({
+    id: String(c.index),
+    title: chapterName(c),
+    start: c.start,
+    end: c.end,
+    detail: format.count(c.scenes.length, 'scene'),
+  }))
+}
+
 /** How often the page reads the tape again while its jobs run. */
 const FOLLOW = 5000
 
@@ -218,7 +251,7 @@ export function TapeScreen() {
     <>
       <PageHeader
         title={load.status === 'ready' ? load.data.source.name : 'Tape'}
-        scope="Scenes found on the tape, with what each shows"
+        scope="The tape's chapters and scenes, with what each shows and says"
         finding={load.status === 'ready' ? { text: [describeScenes(load.data), failed].filter(Boolean).join(' ') } : undefined}
       />
       <DataView
@@ -304,6 +337,15 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
   const spans = useMemo<MediaSpanData[]>(() => scenes.map(s => ({ start: s.start, end: s.end, kind: 'scene' })), [scenes])
   const spanKinds = useMemo(() => ({ scene: { label: 'Scene', behaviour: 'off' as const } }), [])
   const marks = useMemo(() => soundMarks(scenes, data.chapters), [scenes, data.chapters])
+  const barMarks = useMemo(() => chapterMarks(data.chapters), [data.chapters])
+  const contents = useMemo(() => chapterContents(data.chapters), [data.chapters])
+  // Pressing a chapter in the contents plays it; where the player stays in sight beside the list (its column is sticky on
+  // a wide screen) the chapter's heading is also brought into view. Stacked, scrolling would take the player away.
+  const column = useRef<HTMLElement>(null)
+  const showChapter = useCallback((id: string) => {
+    if (column.current && getComputedStyle(column.current).position === 'sticky')
+      document.getElementById(`chapter-${id}-heading`)?.scrollIntoView({ block: 'start' })
+  }, [])
   const playing = scenes.findIndex(s => time >= s.start && time < s.end)
   // A correction answers the scenes as they are now: shown at once, and the run read again, since a mark queues the job.
   const queryClient = useQueryClient()
@@ -326,8 +368,8 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
   }, [queryClient, poll, source.id])
 
   return (
-    <div className="grid gap-8">
-      <section aria-label="Player" className="grid gap-3">
+    <div className="grid gap-8 xl:grid-cols-2 xl:items-start">
+      <section ref={column} aria-label="Player" className="grid min-w-0 gap-3 xl:sticky xl:top-0 xl:max-h-dvh xl:overflow-y-auto xl:py-2">
         {analysis.proxy ? (
           <MediaPlayer
             label={`Play ${source.name}`}
@@ -337,6 +379,7 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
             aspect={aspectOf(source)}
             spans={spans}
             spanKinds={spanKinds}
+            marks={barMarks}
             mediaRef={player}
             onTimeUpdate={onTime}
             className="w-full max-w-2xl"
@@ -347,8 +390,19 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
           </EmptyState>
         )}
         {analysis.peaks && <TapeSound sourceId={source.id} time={time} onSeek={seek} marks={marks} />}
+        {contents.length > 0 && (
+          <MediaContents
+            label="Chapters of the tape"
+            items={contents}
+            time={time}
+            onSeek={t => seek(t, true)}
+            onSelect={showChapter}
+            className="max-w-2xl"
+          />
+        )}
       </section>
       <Tabs
+        className="min-w-0"
         param="view"
         label="Scenes or transcript"
         items={[
@@ -643,7 +697,11 @@ const SceneItem = memo(function SceneItem({
   const faces = describeFaces(scene.faces)
   const headingId = `scene-${scene.index}-heading`
   return (
-    <li aria-labelledby={headingId} aria-current={time !== undefined ? 'time' : undefined} className="grid min-w-0 gap-2">
+    <li
+      aria-labelledby={headingId}
+      aria-current={time !== undefined ? 'time' : undefined}
+      className={cn('grid min-w-0 gap-2 border-l-2 pl-3', time !== undefined ? 'border-primary' : 'border-transparent')}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 id={headingId} className="type-heading">
           {name}

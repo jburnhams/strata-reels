@@ -4,7 +4,7 @@ import { AppAt } from './app-at'
 
 const meta = {
   title: 'Screens/Sources',
-  render: () => <AppAt route="/" />,
+  render: () => <AppAt route="/sources" />,
   tags: ['visual-wide'],
 } satisfies Meta
 export default meta
@@ -12,7 +12,7 @@ type Story = StoryObj<typeof meta>
 
 export const Ready: Story = {}
 /** Sorted longest first, from the URL (?sort=length.desc). */
-export const SortedByLength: Story = { render: () => <AppAt route="/?sort=length.desc" /> }
+export const SortedByLength: Story = { render: () => <AppAt route="/sources?sort=length.desc" /> }
 export const Loading: Story = { beforeEach: ({ msw }) => msw.use(sourcesLoading) }
 export const Empty: Story = { beforeEach: ({ msw }) => msw.use(sourcesEmpty) }
 export const ServerError: Story = { beforeEach: ({ msw }) => msw.use(sourcesError) }

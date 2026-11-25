@@ -498,6 +498,31 @@ export const tapeRunFailed = tapeRun(
   { job: job(10, tapeId, 'queued', { error: modelsDown, attempts: 2 }), errors: { faces: modelsDown } },
 )
 
+/** The other sources' runs, for the Sources list: one analysing (on the shots), one stopped at the faces (strata-models
+ *  down), and one whose chapters the person has confirmed. A source not here is part way, its job ended. */
+export const otherRuns: Record<number, WorkflowRun> = {
+  4: tapeRun(
+    4,
+    {
+      shots: 'ready',
+      keyframes: 'blocked',
+      scenes: 'blocked',
+      faces: 'blocked',
+      transcript: 'blocked',
+      describe: 'blocked',
+      chapters: 'blocked',
+      name_chapters: 'blocked',
+    },
+    { job: job(12, 4, 'running', { progress: { done: 4, total: 12, text: 'Find the shots', stage: 'shots', at: null } }) },
+  ),
+  3: tapeRun(
+    3,
+    { faces: 'failed', describe: 'blocked', chapters: 'blocked', name_chapters: 'blocked' },
+    { job: job(13, 3, 'failed', { error: modelsDown, attempts: 3 }), errors: { faces: modelsDown } },
+  ),
+  1: tapeRun(1, { check_chapters: 'done' }, { job: job(14, 1, 'done') }),
+}
+
 /** The browser copy: a two-second blank WebM, base64. */
 export const proxyWebm = Uint8Array.from(
   atob(

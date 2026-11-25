@@ -12,6 +12,7 @@ import { initialSources, systemNearlyFull as nearlyFull, readSource, systemStatu
 import {
   fresh,
   jobsPage,
+  otherRuns,
   proxyWebm,
   tapeId,
   tapePeaks,
@@ -88,6 +89,7 @@ export function correctedScenes(marks = mock.marks, titles = mock.titles): Scene
 /** A source's run as the server would answer it now. */
 const runOf = (id: number): WorkflowRun =>
   mock.runs[id] ??
+  otherRuns[id] ??
   (id === tapeId
     ? tapeRunDone
     : tapeRun(id, {
@@ -119,6 +121,7 @@ export const paths = {
   retry: '/api/jobs/:id/retry',
   chapterMark: '/api/sources/:id/scenes/:scene/chapter-mark',
   chapterTitle: '/api/sources/:id/scenes/:scene/chapter-title',
+  runs: '/api/workflows/tape/subjects',
   run: '/api/workflows/tape/subjects/:subject',
   runAgain: '/api/workflows/tape/subjects/:subject/run',
   approve: '/api/workflows/tape/subjects/:subject/stages/:stage/approve',
@@ -220,6 +223,7 @@ export const handlers = [
   }),
   // strata-python's add_workflow: a tape's stages, and running it again (its failed stages are tried
   // again by a queued job, as `enqueue` dedupes on the tape).
+  http.get(at(paths.runs), () => HttpResponse.json({ items: mock.sources.map(s => fresh(runOf(s.id))), next: null })),
   http.get(at(paths.run), ({ params }) => {
     const id = subjectId(params.subject)
     return sourceOf(id) ? HttpResponse.json(fresh(runOf(id))) : notFound(`there is no source ${String(id)}`)
