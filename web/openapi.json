@@ -1983,64 +1983,6 @@
     "summary": "Get Source"
    }
   },
-  "/api/sources/{source_id}/chapters/{chapter}/title": {
-   "put": {
-    "operationId": "put_chapter_title_api_sources__source_id__chapters__chapter__title_put",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "source_id",
-      "required": true,
-      "schema": {
-       "title": "Source Id",
-       "type": "integer"
-      }
-     },
-     {
-      "in": "path",
-      "name": "chapter",
-      "required": true,
-      "schema": {
-       "title": "Chapter",
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/TitleIn"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/Scenes"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Put Chapter Title"
-   }
-  },
   "/api/sources/{source_id}/keyframes/{name}": {
    "get": {
     "operationId": "get_keyframe_api_sources__source_id__keyframes__name__get",
@@ -2260,6 +2202,64 @@
      }
     },
     "summary": "Put Chapter Mark"
+   }
+  },
+  "/api/sources/{source_id}/scenes/{scene}/chapter-title": {
+   "put": {
+    "operationId": "put_chapter_title_api_sources__source_id__scenes__scene__chapter_title_put",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "scene",
+      "required": true,
+      "schema": {
+       "title": "Scene",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TitleIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Scenes"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Put Chapter Title"
    }
   },
   "/api/sources/{source_id}/thumbnails/{name}": {

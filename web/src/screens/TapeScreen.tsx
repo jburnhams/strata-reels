@@ -318,9 +318,9 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
         api
           .put('/api/sources/{source_id}/scenes/{scene}/chapter-mark', { path: { source_id: source.id, scene }, json: { start } })
           .then(shown),
-      rename: (chapter, title) =>
+      rename: (scene, title) =>
         api
-          .put('/api/sources/{source_id}/chapters/{chapter}/title', { path: { source_id: source.id, chapter }, json: { title } })
+          .put('/api/sources/{source_id}/scenes/{scene}/chapter-title', { path: { source_id: source.id, scene }, json: { title } })
           .then(shown),
     }
   }, [queryClient, poll, source.id])
@@ -449,8 +449,9 @@ function SceneList({
 type Corrections = {
   /** A chapter starts at the scene (true), it stays with the chapter before (false), or the grouping decides (null). */
   mark: (scene: number, start: boolean | null) => Promise<void>
-  /** The person's title for a chapter, or null for the namer's. */
-  rename: (chapter: number, title: string | null) => Promise<void>
+  /** The person's title for the chapter that starts at scene `scene` (not its place in the list, which a regroup
+   *  renumbers), or null for the namer's. */
+  rename: (scene: number, title: string | null) => Promise<void>
 }
 
 /** The chapters' check: the gate waiting for the person, or when they confirmed them; regrouping says so first. */
@@ -575,7 +576,7 @@ function RenameChapter({ chapter, rename }: { chapter: Chapter; rename: Correcti
   const number = chapter.index + 1
   const save = useAsyncAction(
     async (to: string | null) => {
-      await rename(chapter.index, to)
+      await rename(chapter.scenes[0], to)
       setOpen(false)
     },
     { validate: to => ({ title: to === null || to.trim() ? undefined : 'Give the chapter a title of a word or more.' }) },

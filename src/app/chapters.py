@@ -301,16 +301,18 @@ def mark(db: Session, source: Source, scene: int, start: bool | None, *, author:
     _put(db, source, MARK, at, None if start is None else {"at": at, "start": start}, author)
 
 
-def rename(db: Session, source: Source, chapter: int, title: str | None, *, author: str) -> None:
-    """Give chapter `chapter` the person's title, or (None) go back to the namer's. KeyError before there are chapters;
-    ValueError for a chapter there is not, or a title that is empty or too long."""
+def rename(db: Session, source: Source, scene: int, title: str | None, *, author: str) -> None:
+    """Give the chapter that starts at scene `scene` the person's title, or (None) go back to the namer's. Named by its
+    first scene, not its place in the list: a regroup between reading the page and saving renumbers the chapters but
+    not the scenes, so a title meant for one chapter can never land on another. KeyError before there are chapters;
+    ValueError where no chapter starts at that scene (now), or for a title that is empty or too long."""
     grouped = current(db, source)
     if grouped is None:
         raise KeyError(f"{source.name} has no chapters yet")
-    found = grouped.payload["chapters"]
-    if not 0 <= chapter < len(found):
-        raise ValueError(f"{source.name} has chapters 1 to {len(found)}, not chapter {chapter + 1}")
-    at = str(found[chapter]["start"])
+    starts = {c["scenes"][0]: str(c["start"]) for c in grouped.payload["chapters"]}
+    if scene not in starts:
+        raise ValueError(f"no chapter starts at scene {scene + 1} now: read the chapters again")
+    at = starts[scene]
     if title is None:
         _put(db, source, TITLE, at, None, author)
         return

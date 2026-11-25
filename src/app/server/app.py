@@ -15,7 +15,8 @@ error answers ({detail, payload}) and the web app's pages. This app's own routes
     PUT /api/sources/{id}/scenes/{n}/chapter-mark {start}   the person's word on whether a chapter starts at scene n
                                       (true, false, or null to take it back); queues the tape's job, which groups the
                                       chapters again; answers the scenes as they are now (`regrouping` true meanwhile)
-    PUT /api/sources/{id}/chapters/{n}/title {title}        the person's title for chapter n (null: the namer's again)
+    PUT /api/sources/{id}/scenes/{n}/chapter-title {title}  the person's title for the chapter that starts at scene n
+                                      (null: the namer's again; 400 when none starts there now)
     GET /api/sources/{id}/transcript  its speech, segment by segment with word timings
     GET /api/sources/{id}/peaks?buckets=4000   its waveform, reduced to that many slices (404 before it is made)
     GET /api/sources/{id}/proxy       the browser copy, with range requests so the player can seek
@@ -142,11 +143,12 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
         jobs.ingest_later(jobs.queue(records.engine()), source, by=WHO)
         return browse.scenes_of(s, source)
 
-    @app.put("/api/sources/{source_id}/chapters/{chapter}/title")
-    def put_chapter_title(source_id: int, chapter: int, b: TitleIn, s: DbSession) -> browse.Scenes:
-        # Laid over the namer's when the chapters are read: nothing to run again.
+    @app.put("/api/sources/{source_id}/scenes/{scene}/chapter-title")
+    def put_chapter_title(source_id: int, scene: int, b: TitleIn, s: DbSession) -> browse.Scenes:
+        # The chapter is named by its first scene, which a regroup does not renumber. Laid over the namer's when the
+        # chapters are read: nothing to run again.
         source = one(s, source_id)
-        chapters.rename(s, source, chapter, b.title, author=WHO)
+        chapters.rename(s, source, scene, b.title, author=WHO)
         return browse.scenes_of(s, source)
 
     @app.get("/api/sources/{source_id}/transcript")

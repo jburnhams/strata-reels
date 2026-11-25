@@ -151,8 +151,8 @@ def cmd_fit_chapters(args: argparse.Namespace) -> int:
         st = jobs.store()
         for source in s.scalars(select(sources.Source).order_by(sources.Source.id)):
             found = chapters.current(s, source)
-            if found is None:
-                continue
+            if found is None or not chapters.follows_marks(s, source, found):
+                continue  # not grouped by the marks that hold now: its labels would be ones taken back
             got = chapters.examples_of(found.payload, jobs.checked(st, source))
             if got:
                 examples += got

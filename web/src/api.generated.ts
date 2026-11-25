@@ -158,23 +158,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sources/{source_id}/chapters/{chapter}/title": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Put Chapter Title */
-        put: operations["put_chapter_title_api_sources__source_id__chapters__chapter__title_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sources/{source_id}/keyframes/{name}": {
         parameters: {
             query?: never;
@@ -253,6 +236,23 @@ export interface paths {
         get?: never;
         /** Put Chapter Mark */
         put: operations["put_chapter_mark_api_sources__source_id__scenes__scene__chapter_mark_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/scenes/{scene}/chapter-title": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Chapter Title */
+        put: operations["put_chapter_title_api_sources__source_id__scenes__scene__chapter_title_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1300,42 +1300,6 @@ export interface operations {
             };
         };
     };
-    put_chapter_title_api_sources__source_id__chapters__chapter__title_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                source_id: number;
-                chapter: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TitleIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Scenes"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_keyframe_api_sources__source_id__keyframes__name__get: {
         parameters: {
             query?: never;
@@ -1472,6 +1436,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MarkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_chapter_title_api_sources__source_id__scenes__scene__chapter_title_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+                scene: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TitleIn"];
             };
         };
         responses: {

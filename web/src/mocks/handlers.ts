@@ -118,7 +118,7 @@ export const paths = {
   cancel: '/api/jobs/:id/cancel',
   retry: '/api/jobs/:id/retry',
   chapterMark: '/api/sources/:id/scenes/:scene/chapter-mark',
-  chapterTitle: '/api/sources/:id/chapters/:chapter/title',
+  chapterTitle: '/api/sources/:id/scenes/:scene/chapter-title',
   run: '/api/workflows/tape/subjects/:subject',
   runAgain: '/api/workflows/tape/subjects/:subject/run',
   approve: '/api/workflows/tape/subjects/:subject/stages/:stage/approve',
@@ -171,8 +171,8 @@ export const handlers = [
   }),
   http.put(at(paths.chapterTitle), async ({ params, request }) => {
     if (Number(params.id) !== tapeId) return notFound(`${String(params.id)} has no chapters yet`)
-    const chapter = correctedScenes().chapters?.[Number(params.chapter)]
-    if (!chapter) return refused(`there is no chapter ${Number(params.chapter) + 1}`)
+    const chapter = correctedScenes().chapters?.find(c => c.scenes[0] === Number(params.scene))
+    if (!chapter) return refused(`no chapter starts at scene ${Number(params.scene) + 1} now: read the chapters again`)
     const { title } = (await request.json()) as { title: string | null }
     if (title === null) delete mock.titles[chapter.scenes[0]]
     else if (!title.trim()) return refused('a chapter’s title needs a word or more')

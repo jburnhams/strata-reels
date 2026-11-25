@@ -291,7 +291,7 @@ def test_a_chapter_takes_the_persons_title_and_gives_it_back(engine, tmp_path, t
         chapters.rename(s, src, 1, None, author="Ada")
         assert chapters.titles(s, src) == {}
         for chapter, title, why in (
-            (2, "Tea", "chapters 1 to 2"),
+            (2, "Tea", "no chapter starts at scene 3"),
             (0, "  ", "a word or more"),
             (0, "x" * 121, "at most"),
         ):
@@ -316,7 +316,7 @@ def test_the_page_marks_and_renames_chapters_and_the_tape_is_grouped_again(clien
     jobs.work(jobs.queue(engine))
     after = client.get(f"{base}/scenes").json()
     assert (after["regrouping"], [c["scenes"] for c in after["chapters"]]) == (False, [[0, 1]])
-    titled = client.put(f"{base}/chapters/0/title", json={"title": "Grandma's birthday"}).json()
+    titled = client.put(f"{base}/scenes/0/chapter-title", json={"title": "Grandma's birthday"}).json()
     assert titled["chapters"][0]["title"] == "Grandma's birthday"
     assert titled["chapters"][0]["name"]["title"] == "Scenes from 0:00"  # the namer's, kept beside it
     refused = client.put(f"{base}/scenes/0/chapter-mark", json={"start": True})
@@ -324,8 +324,8 @@ def test_the_page_marks_and_renames_chapters_and_the_tape_is_grouped_again(clien
         400,
         "a chapter can be marked at scenes 2 to 2, not scene 1",
     )
-    assert client.put("/api/sources/99/chapters/0/title", json={"title": "x"}).status_code == 404
-    assert client.put(f"{base}/chapters/0/title", json={"title": None}).json()["chapters"][0]["title"] is None
+    assert client.put("/api/sources/99/scenes/0/chapter-title", json={"title": "x"}).status_code == 404
+    assert client.put(f"{base}/scenes/0/chapter-title", json={"title": None}).json()["chapters"][0]["title"] is None
 
 
 def test_the_fit_command_learns_from_marks_and_checked_tapes(capsys, engine, tmp_path, tape_models):
@@ -351,3 +351,9 @@ def test_the_fit_command_learns_from_marks_and_checked_tapes(capsys, engine, tmp
     assert fitted["fitted"]["black"] < chapters.PARAMETERS["black"]  # the black was not a new occasion here
     assert cli.main(["chapters", str(source.id)]) == 0
     assert "Grandma's birthday (yours)" in capsys.readouterr().out
+    with Session(engine) as s:  # the mark taken back, not grouped again yet: the old grouping's labels no longer hold
+        src = s.get(Source, source.id)
+        assert src is not None
+        chapters.mark(s, src, 1, None, author="Ada")
+    assert cli.main(["fit-chapters"]) == 1
+    assert "nothing to learn from yet" in capsys.readouterr().out

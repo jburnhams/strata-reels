@@ -307,7 +307,9 @@ describe('a tape', () => {
 
     it('renames a chapter not named yet, shows a refused title under its field, and closes on Escape', async () => {
       server.use(
-        http.put('*/api/sources/:id/chapters/:chapter/title', () => HttpResponse.json({ detail: 'that title is taken' }, { status: 400 })),
+        http.put('*/api/sources/:id/scenes/:scene/chapter-title', () =>
+          HttpResponse.json({ detail: 'that title is taken' }, { status: 400 }),
+        ),
       )
       const unnamed = structuredClone(tapeScenes)
       unnamed.chapters![1].name = null
