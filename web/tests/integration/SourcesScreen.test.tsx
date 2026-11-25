@@ -59,6 +59,33 @@ describe('Sources', () => {
     expect(within(table).getAllByRole('row')[1]).toHaveTextContent('christmas-1996.mkv')
   })
 
+  it('says the analysis could not be read, with Try again, and keeps the list', async () => {
+    let fail = true
+    server.use(
+      http.get('*/api/workflows/tape/subjects', () =>
+        fail
+          ? new HttpResponse(null, { status: 503, statusText: 'Service Unavailable' })
+          : HttpResponse.json({ items: [tapeRunDone], next: null }),
+      ),
+    )
+    const { user } = openApp('/sources')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/Each tape’s analysis could not be read/)
+    expect(screen.getByRole('grid', { name: /Sources/ })).toBeInTheDocument()
+    fail = false
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }))
+    const table = screen.getByRole('grid', { name: /Sources/ })
+    await waitFor(() => expect(within(table).getByRole('row', { name: /christmas-1996/ })).toHaveTextContent('Needs review'))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('keeps the sort of an older link to the list at the app’s root', async () => {
+    const { router } = openApp('/?sort=length.desc')
+    await screen.findByRole('grid', { name: /Sources/ })
+    expect(router.state.location.pathname).toBe('/sources')
+    expect(router.state.location.search).toBe('?sort=length.desc')
+  })
+
   it('keeps the sort in the URL', async () => {
     const { user, router } = openApp('/')
     const table = await screen.findByRole('grid', { name: /Sources/ })

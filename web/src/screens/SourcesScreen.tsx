@@ -14,6 +14,8 @@
 //   where, the chapters waiting for the person's check, or done. It is the column that says which tape
 //   needs the person, so the finding counts those too. It is a read of its own: a slow one never holds
 //   the list (the column shows a dash until it answers), and it is read again while any tape's job runs.
+//   When it fails, the failure says so above the table with Try again, so a dash is never read as "no
+//   analysis".
 import { useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useMemo, useState } from 'react'
 import {
@@ -26,6 +28,7 @@ import {
   format,
   Input,
   isWorkflowRunning,
+  LoadError,
   PageHeader,
   summariseWorkflow,
   TableSkeleton,
@@ -143,6 +146,11 @@ export function SourcesScreen() {
         <h2 id="footage" className="type-heading">
           Footage
         </h2>
+        {runs.status === 'error' && (
+          <div role="alert">
+            <LoadError message={`Each tape’s analysis could not be read: ${runs.message}`} retry={runs.retry} />
+          </div>
+        )}
         <DataView
           state={load}
           isEmpty={rows => rows.length === 0}
