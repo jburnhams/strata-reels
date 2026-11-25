@@ -4,6 +4,11 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-25
 
+**strata-python 0.2.22: low priority jobs go through strata-models' bulk endpoint (branch `claude/models-bulk`)**
+strata-models now takes a normal or low priority job only on its bulk endpoint; 0.2.22's client sends them there (as a call of one), so this app's `priority="low"` calls keep working after the service restarts.
+- `pyproject.toml`, `uv.lock`: strata-python 0.2.22 or later.
+- `.github/workflows/` `integration.yml`: on Windows, when Chocolatey leaves no ffmpeg (its feed answered 504 on 2026-11-25, and choco still exited 0), fall back to BtbN's static build, as strata-360's workflow already does.
+
 **Correcting the chapters on the tape page: marks, titles and a check, and the weights fitted on them (branch `claude/project-thread-fejz06`)**
 Jonathan asked for chapters first, then any tape page updates, then reels as a service on the GPU machine. On the real tape the first chapters had a wrong name from a misheard line, two places in one chapter and one opening split in two, so this lets the person correct them where they read them, as overrides, with the check as a workflow gate. No dependency added; strata-python 0.2.19 and strata-react 1.3.15 are updates in range.
 - `src/app/overrides.py`: target `tape` (a source as a whole). `tests/unit/test_overrides.py`: its refusal names it.
