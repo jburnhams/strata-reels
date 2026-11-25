@@ -33,6 +33,25 @@ async function waitForPictures(page: Page) {
     { timeout: 30_000 },
   )
   await page.setViewportSize(size)
+  // TEMPORARY diagnostics for the unstable tape shot on CI: say what changes on the page after this point.
+  const t0 = Date.now()
+  const say = (what: string) => console.log(`DIAG ${page.viewportSize()?.width} +${Date.now() - t0}ms ${what}`)
+  page.on('request', r => say(`request ${new URL(r.url()).pathname}`))
+  page.on('console', m => m.text().startsWith('DIAG') && say(m.text()))
+  await page.evaluate(() => {
+    const busy = () => document.querySelectorAll('[aria-busy="true"]').length
+    let last = busy()
+    console.log(`DIAG busy ${last} images ${document.images.length}`)
+    new MutationObserver(() => {
+      const now = busy()
+      if (now !== last) console.log(`DIAG busy ${last} -> ${now}, images ${document.images.length}, at ${location.pathname}${location.search}`)
+      last = now
+    }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-busy'] })
+    const v = document.querySelector('video')
+    for (const e of ['error', 'loadeddata', 'emptied', 'durationchange', 'seeked'])
+      v?.addEventListener(e, () => console.log(`DIAG video ${e} ${v.readyState} ${v.currentTime}`))
+    window.addEventListener('resize', () => console.log(`DIAG resize ${innerWidth}x${innerHeight}`))
+  })
 }
 
 export default defineVisualConfig({
