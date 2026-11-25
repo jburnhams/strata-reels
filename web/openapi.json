@@ -133,6 +133,18 @@
      "start": {
       "title": "Start",
       "type": "number"
+     },
+     "title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the person's title for it, which wins over the name's; None for none",
+      "title": "Title"
      }
     },
     "required": [
@@ -142,7 +154,8 @@
      "scenes",
      "confidence",
      "reasons",
-     "name"
+     "name",
+     "title"
     ],
     "title": "Chapter",
     "type": "object"
@@ -432,6 +445,27 @@
     "title": "HTTPValidationError",
     "type": "object"
    },
+   "MarkIn": {
+    "description": "Whether a chapter starts at the scene: True starts one, False keeps it with the chapter before, None leaves it\nto the grouping (the mark taken back).",
+    "properties": {
+     "start": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Start"
+     }
+    },
+    "required": [
+     "start"
+    ],
+    "title": "MarkIn",
+    "type": "object"
+   },
    "Page_Task_": {
     "properties": {
      "items": {
@@ -684,6 +718,18 @@
       "title": "Index",
       "type": "integer"
      },
+     "mark": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the person's word on whether a chapter starts at it: True starts one, False keeps it with the chapter before, None leaves it to the grouping",
+      "title": "Mark"
+     },
      "reasons": {
       "description": "why the cut before it is a boundary, in words",
       "items": {
@@ -723,7 +769,8 @@
      "frames",
      "description",
      "faces",
-     "speech"
+     "speech",
+     "mark"
     ],
     "title": "Scene",
     "type": "object"
@@ -748,6 +795,11 @@
       ],
       "description": "None before the scenes are grouped into chapters",
       "title": "Chapters"
+     },
+     "regrouping": {
+      "description": "the person's marks are newer than the chapters shown: they are being grouped again",
+      "title": "Regrouping",
+      "type": "boolean"
      },
      "scenes": {
       "items": {
@@ -776,7 +828,8 @@
      "analysis",
      "waiting",
      "scenes",
-     "chapters"
+     "chapters",
+     "regrouping"
     ],
     "title": "Scenes",
     "type": "object"
@@ -1172,6 +1225,27 @@
      "domain"
     ],
     "title": "Task",
+    "type": "object"
+   },
+   "TitleIn": {
+    "description": "The person's title for a chapter; None goes back to the name the namer gave it.",
+    "properties": {
+     "title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Title"
+     }
+    },
+    "required": [
+     "title"
+    ],
+    "title": "TitleIn",
     "type": "object"
    },
    "Transcript": {
@@ -1909,6 +1983,64 @@
     "summary": "Get Source"
    }
   },
+  "/api/sources/{source_id}/chapters/{chapter}/title": {
+   "put": {
+    "operationId": "put_chapter_title_api_sources__source_id__chapters__chapter__title_put",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "chapter",
+      "required": true,
+      "schema": {
+       "title": "Chapter",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TitleIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Scenes"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Put Chapter Title"
+   }
+  },
   "/api/sources/{source_id}/keyframes/{name}": {
    "get": {
     "operationId": "get_keyframe_api_sources__source_id__keyframes__name__get",
@@ -2070,6 +2202,64 @@
      }
     },
     "summary": "Get Scenes"
+   }
+  },
+  "/api/sources/{source_id}/scenes/{scene}/chapter-mark": {
+   "put": {
+    "operationId": "put_chapter_mark_api_sources__source_id__scenes__scene__chapter_mark_put",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "scene",
+      "required": true,
+      "schema": {
+       "title": "Scene",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MarkIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Scenes"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Put Chapter Mark"
    }
   },
   "/api/sources/{source_id}/thumbnails/{name}": {

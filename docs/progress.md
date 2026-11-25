@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-25: correcting the chapters
+
+- Asked for: let the person correct the chapters on the tape page, then any updates the page needs, then run reels as a service. On the real tape the first grouping named a chapter "Christmas nativity play" from a misheard line, put the house and a church hall in one chapter, and split the opening sofa footage in two: all three are corrections a person makes in seconds and a model will keep getting wrong.
+- **What the person can say.** At a scene inside a chapter: a chapter starts here. On a chapter: it belongs with the chapter before (a mark on its first scene). On a chapter: its own title. Each mark shows on its scene with Undo mark, which gives the boundary back to the grouping. A chapter can only start at a scene boundary: if the house and the hall are one scene, the scene boundary is wrong first (scene corrections are still to come).
+- **Kept as overrides, never edits** (overview §6). A mark is an input of the `chapters` stage (`chapter_marks`), so the tape's job groups again and the stage records say why it ran. The grouping follows every mark (confidence 1 or 0) and keeps what the signals said (`guess`) and the signals themselves beside it. Names are now keyed on the scenes and what the namer is told, not on the grouping, so a regroup asks names only for the chapters that changed. A title is laid over the namer's when the chapters are read, and the namer's stays in sight under it.
+- **The check is a gate.** `check_chapters` follows `name_chapters`; the page's "Confirm the chapters" (and Approve on the Steps tab) is strata-python's approve route. It holds until the names it was given change, so a regroup asks again. Nothing waits on it yet: it is the tape's "to check" state (a tape's run is `waiting` until then), and a confirmed tape is a whole tape of labels.
+- **Fitting.** `./app fit-chapters` collects every marked boundary, and every boundary of a confirmed tape, with the signals stored in the grouping, and fits `group`'s own parameters by logistic regression, held towards today's by a prior so that a handful of marks moves them a little. It prints the agreement before and after and the new numbers; a release takes them into `PARAMETERS`, as the scenes' were taken from the first real tape. No tape is marked yet, so the weights have not moved.
+- Releases: strata-python 0.2.19 (no change reels uses: `wer.find`), strata-react 1.3.15. strata-react's next release makes its default look part of `strata.css` (`UPGRADING.md`, 2026-11-25); reels has its own theme in `app.css` and should then switch its import to `strata.bare.css`, or decide to take the default look.
+
 ## 2026-11-25: chapters
 
 - Asked for: group each tape's scenes into chapters from the stored results and show them, after making sure reels is on the newest strata-python and strata-react and uses their workflow pipeline and job queue fully.

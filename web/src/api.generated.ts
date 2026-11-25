@@ -158,6 +158,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources/{source_id}/chapters/{chapter}/title": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Chapter Title */
+        put: operations["put_chapter_title_api_sources__source_id__chapters__chapter__title_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/{source_id}/keyframes/{name}": {
         parameters: {
             query?: never;
@@ -219,6 +236,23 @@ export interface paths {
         /** Get Scenes */
         get: operations["get_scenes_api_sources__source_id__scenes_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/scenes/{scene}/chapter-mark": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Chapter Mark */
+        put: operations["put_chapter_mark_api_sources__source_id__scenes__scene__chapter_mark_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -450,6 +484,11 @@ export interface components {
             scenes: number[];
             /** Start */
             start: number;
+            /**
+             * Title
+             * @description the person's title for it, which wins over the name's; None for none
+             */
+            title: string | null;
         };
         /**
          * ChapterName
@@ -566,6 +605,15 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * MarkIn
+         * @description Whether a chapter starts at the scene: True starts one, False keeps it with the chapter before, None leaves it
+         *     to the grouping (the mark taken back).
+         */
+        MarkIn: {
+            /** Start */
+            start: boolean | null;
+        };
         /** Page[Task] */
         Page_Task_: {
             /** Items */
@@ -657,6 +705,11 @@ export interface components {
              */
             index: number;
             /**
+             * Mark
+             * @description the person's word on whether a chapter starts at it: True starts one, False keeps it with the chapter before, None leaves it to the grouping
+             */
+            mark: boolean | null;
+            /**
              * Reasons
              * @description why the cut before it is a boundary, in words
              */
@@ -683,6 +736,11 @@ export interface components {
              * @description None before the scenes are grouped into chapters
              */
             chapters: components["schemas"]["Chapter"][] | null;
+            /**
+             * Regrouping
+             * @description the person's marks are newer than the chapters shown: they are being grouped again
+             */
+            regrouping: boolean;
             /** Scenes */
             scenes: components["schemas"]["Scene"][];
             source: components["schemas"]["Described"];
@@ -837,6 +895,14 @@ export interface components {
              * @enum {string}
              */
             state: "queued" | "running" | "done" | "failed" | "cancelled";
+        };
+        /**
+         * TitleIn
+         * @description The person's title for a chapter; None goes back to the name the namer gave it.
+         */
+        TitleIn: {
+            /** Title */
+            title: string | null;
         };
         /**
          * Transcript
@@ -1234,6 +1300,42 @@ export interface operations {
             };
         };
     };
+    put_chapter_title_api_sources__source_id__chapters__chapter__title_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+                chapter: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TitleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_keyframe_api_sources__source_id__keyframes__name__get: {
         parameters: {
             query?: never;
@@ -1336,6 +1438,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_chapter_mark_api_sources__source_id__scenes__scene__chapter_mark_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+                scene: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

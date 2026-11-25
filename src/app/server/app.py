@@ -12,6 +12,10 @@ error answers ({detail, payload}) and the web app's pages. This app's own routes
     GET /api/sources/{id}             one source (404 when there is none)
     GET /api/sources/{id}/scenes      its scenes with their pictures, speech, descriptions and faces, as far as the
                                       jobs have got (`browse.Scenes`; `waiting` says what for while there are none)
+    PUT /api/sources/{id}/scenes/{n}/chapter-mark {start}   the person's word on whether a chapter starts at scene n
+                                      (true, false, or null to take it back); queues the tape's job, which groups the
+                                      chapters again; answers the scenes as they are now (`regrouping` true meanwhile)
+    PUT /api/sources/{id}/chapters/{n}/title {title}        the person's title for chapter n (null: the namer's again)
     GET /api/sources/{id}/transcript  its speech, segment by segment with word timings
     GET /api/sources/{id}/peaks?buckets=4000   its waveform, reduced to that many slices (404 before it is made)
     GET /api/sources/{id}/proxy       the browser copy, with range requests so the player can seek
@@ -28,6 +32,7 @@ From strata-python's `add_workflow`, the tape pipeline's steps (subject `source:
     GET /api/workflows/tape/subjects/{subject}          each stage's state and last record, and the job advancing it
     GET /api/workflows/tape/subjects/{subject}/stages/{stage}   that stage's history
     POST /api/workflows/tape/subjects/{subject}/run     queue the tape's job again (a retry after a failure)
+    POST .../stages/check_chapters/approve              the person says the chapters are right (the gate)
     POST .../stages/{stage}/clear                       forget a stage and what follows it, then run
 
 The server runs the job queue (`app.jobs.Runner`) while it is up: jobs start once the database is open.
@@ -52,7 +57,7 @@ from strata_python.tasks.web import add_jobs
 from strata_python.workflow.store import DbStore
 from strata_python.workflow.web import add_workflow
 
-from app import __version__, browse, db, jobs, settings, sources, system
+from app import __version__, browse, chapters, db, jobs, settings, sources, system
 
 # A thumbnail or keyframe URL carries its result's key (`?v=`, browse.py), so a new recipe is a new URL and the browser
 # may keep the old one for good. The proxy's URL is the tape's, whichever proxy is current, so it is checked each time.
@@ -67,6 +72,22 @@ COMMIT = web.source_commit(__file__)  # None when installed from a wheel
 
 class SourceIn(BaseModel):
     path: str
+
+
+class MarkIn(BaseModel):
+    """Whether a chapter starts at the scene: True starts one, False keeps it with the chapter before, None leaves it
+    to the grouping (the mark taken back)."""
+
+    start: bool | None
+
+
+class TitleIn(BaseModel):
+    """The person's title for a chapter; None goes back to the name the namer gave it."""
+
+    title: str | None
+
+
+WHO = "person"  # the apps have no logins yet: the same word the shared workflow routes record
 
 
 def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes") -> FastAPI:
@@ -112,6 +133,21 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
     @app.get("/api/sources/{source_id}/scenes")
     def get_scenes(source_id: int, s: DbSession) -> browse.Scenes:
         return browse.scenes_of(s, one(s, source_id))
+
+    @app.put("/api/sources/{source_id}/scenes/{scene}/chapter-mark")
+    def put_chapter_mark(source_id: int, scene: int, b: MarkIn, s: DbSession) -> browse.Scenes:
+        # An override, and one of the tape's inputs: queueing the tape's job groups its chapters again by it.
+        source = one(s, source_id)
+        chapters.mark(s, source, scene, b.start, author=WHO)
+        jobs.ingest_later(jobs.queue(records.engine()), source, by=WHO)
+        return browse.scenes_of(s, source)
+
+    @app.put("/api/sources/{source_id}/chapters/{chapter}/title")
+    def put_chapter_title(source_id: int, chapter: int, b: TitleIn, s: DbSession) -> browse.Scenes:
+        # Laid over the namer's when the chapters are read: nothing to run again.
+        source = one(s, source_id)
+        chapters.rename(s, source, chapter, b.title, author=WHO)
+        return browse.scenes_of(s, source)
 
     @app.get("/api/sources/{source_id}/transcript")
     def get_transcript(source_id: int, s: DbSession) -> browse.Transcript:

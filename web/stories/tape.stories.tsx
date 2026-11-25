@@ -1,12 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import {
   peaksLoading,
+  runChecked,
   runFailed,
   runPartWay,
   runWaiting,
+  scenesCorrected,
   scenesError,
   scenesLoading,
   scenesPartWay,
+  scenesRegrouping,
   scenesUnnamed,
   scenesWaiting,
   transcriptWaiting,
@@ -28,6 +31,10 @@ type Story = StoryObj<typeof meta>
 export const Ready: Story = {}
 /** The chapters grouped, their names part way: the second is shown by its number. */
 export const ChapterUnnamed: Story = { beforeEach: ({ msw }) => msw.use(scenesUnnamed) }
+/** Corrected and confirmed: two scenes marked as the grouping had them, and chapter 2 under the person's title. */
+export const Corrected: Story = { beforeEach: ({ msw }) => msw.use(scenesCorrected, runChecked) }
+/** A mark made, the chapters not grouped by it yet. */
+export const Regrouping: Story = { beforeEach: ({ msw }) => msw.use(scenesRegrouping) }
 /** A scene opened: what it saw, what it guessed and why its start is a boundary (?scene=3 in the URL). */
 export const SceneOpen: Story = { render: () => <AppAt route="/sources/5?scene=3" /> }
 export const Transcript: Story = { render: () => <AppAt route="/sources/5?view=transcript" /> }

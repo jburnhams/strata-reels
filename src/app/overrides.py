@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.models import Override
 
 Mode = Literal["advisory", "prefer", "require", "forbid"]
-Target = Literal["result", "scene", "clip"]
+Target = Literal["result", "scene", "clip", "tape"]  # tape: the source as a whole (its chapters)
 Scope = Literal["target", "source", "all"]
 MODES: tuple[str, ...] = get_args(Mode)
 TARGETS: tuple[str, ...] = get_args(Target)

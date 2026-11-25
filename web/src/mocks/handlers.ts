@@ -7,7 +7,7 @@
 // state: `server.use(sourcesError)` in a test, `msw.use(sourcesError)` in a story's beforeEach,
 // `states: { error: [sourcesError] }` in the visual config.
 import { delay, HttpResponse, http } from 'msw'
-import type { Source, WorkflowRun } from '../api'
+import type { Chapter, Scenes, Source, WorkflowRun } from '../api'
 import { initialSources, systemNearlyFull as nearlyFull, readSource, systemStatus } from './fixtures'
 import {
   fresh,
@@ -16,6 +16,7 @@ import {
   tapeId,
   tapePeaks,
   tapeRun,
+  tapeRunChecked,
   tapeRunDone,
   tapeRunFailed,
   tapeRunPartWay,
@@ -32,6 +33,9 @@ export const mock = {
   jobs: structuredClone(jobsPage.items),
   /** Each tape's run, where a test has put one; otherwise the tape (5) is done and the others wait for their scenes. */
   runs: {} as Record<number, WorkflowRun>,
+  /** The person's chapter marks on the tape, by scene index, and titles, by the index of the chapter's first scene. */
+  marks: {} as Record<number, boolean>,
+  titles: {} as Record<number, string>,
 }
 
 /** Back to the healthy state: call between tests and stories. */
@@ -39,6 +43,46 @@ export function resetMock() {
   mock.sources = [...initialSources]
   mock.jobs = structuredClone(jobsPage.items)
   mock.runs = {}
+  mock.marks = {}
+  mock.titles = {}
+}
+
+/** The tape's scenes with the person's marks and titles, grouped again at once (the server's job does it a moment
+ *  later): a chapter starts where the grouping or a mark says so; one with the scenes of a named chapter keeps its name. */
+export function correctedScenes(marks = mock.marks, titles = mock.titles): Scenes {
+  const starts = new Set((tapeScenes.chapters ?? []).map(c => c.scenes[0]))
+  for (const [scene, start] of Object.entries(marks)) {
+    if (start) starts.add(Number(scene))
+    else starts.delete(Number(scene))
+  }
+  starts.add(0)
+  const runs: number[][] = []
+  for (const s of tapeScenes.scenes) {
+    if (starts.has(s.index)) runs.push([s.index])
+    else runs[runs.length - 1].push(s.index)
+  }
+  const chapters = runs.map((scenes, index): Chapter => {
+    const was = tapeScenes.chapters?.find(c => c.scenes.join() === scenes.join())
+    const mark = marks[scenes[0]]
+    const first = tapeScenes.scenes[scenes[0]]
+    const last = tapeScenes.scenes[scenes[scenes.length - 1]]
+    return {
+      index,
+      start: first.start,
+      end: last.end,
+      scenes,
+      confidence: index === 0 ? null : mark === undefined ? (was?.confidence ?? 0.5) : 1,
+      reasons: mark === undefined ? (was?.reasons ?? []) : [...(was?.reasons ?? []), 'you started a chapter here'],
+      name: was?.name ?? null,
+      title: titles[scenes[0]] ?? null,
+    }
+  })
+  return {
+    ...tapeScenes,
+    analysis: { ...tapeScenes.analysis, named: chapters.filter(c => c.name).length },
+    scenes: tapeScenes.scenes.map(s => ({ ...s, mark: marks[s.index] ?? null })),
+    chapters,
+  }
 }
 
 /** A source's run as the server would answer it now. */
@@ -73,8 +117,11 @@ export const paths = {
   jobCounts: '/api/jobs/counts',
   cancel: '/api/jobs/:id/cancel',
   retry: '/api/jobs/:id/retry',
+  chapterMark: '/api/sources/:id/scenes/:scene/chapter-mark',
+  chapterTitle: '/api/sources/:id/chapters/:chapter/title',
   run: '/api/workflows/tape/subjects/:subject',
   runAgain: '/api/workflows/tape/subjects/:subject/run',
+  approve: '/api/workflows/tape/subjects/:subject/stages/:stage/approve',
 } as const
 
 const refused = (detail: string, status = 400) => HttpResponse.json({ detail }, { status })
@@ -107,7 +154,30 @@ export const handlers = [
   http.get(at(paths.scenes), ({ params }) => {
     const found = sourceOf(params.id)
     if (!found) return notFound(`there is no source ${String(params.id)}`)
-    return HttpResponse.json(found.id === tapeId ? tapeScenes : waitingScenes(found.id))
+    return HttpResponse.json(found.id === tapeId ? correctedScenes() : waitingScenes(found.id))
+  }),
+  // As chapters.mark and chapters.rename do: refused where the server refuses, else answered with the scenes after.
+  http.put(at(paths.chapterMark), async ({ params, request }) => {
+    if (Number(params.id) !== tapeId) return notFound(`${String(params.id)} has no scenes yet`)
+    const scene = Number(params.scene)
+    const n = tapeScenes.scenes.length
+    if (!(scene > 0 && scene < n)) return refused(`a chapter can be marked at scenes 2 to ${n}, not scene ${scene + 1}`)
+    const { start } = (await request.json()) as { start: boolean | null }
+    if (start === null) delete mock.marks[scene]
+    else mock.marks[scene] = start
+    // a changed check: the chapters regrouped, so the person is asked again
+    mock.runs[tapeId] = tapeRunDone
+    return HttpResponse.json(correctedScenes())
+  }),
+  http.put(at(paths.chapterTitle), async ({ params, request }) => {
+    if (Number(params.id) !== tapeId) return notFound(`${String(params.id)} has no chapters yet`)
+    const chapter = correctedScenes().chapters?.[Number(params.chapter)]
+    if (!chapter) return refused(`there is no chapter ${Number(params.chapter) + 1}`)
+    const { title } = (await request.json()) as { title: string | null }
+    if (title === null) delete mock.titles[chapter.scenes[0]]
+    else if (!title.trim()) return refused('a chapter’s title needs a word or more')
+    else mock.titles[chapter.scenes[0]] = title.trim()
+    return HttpResponse.json(correctedScenes())
   }),
   http.get(at(paths.transcript), ({ params }) =>
     Number(params.id) === tapeId
@@ -168,6 +238,13 @@ export const handlers = [
     }
     return HttpResponse.json(fresh(mock.runs[id]))
   }),
+  http.post(at(paths.approve), ({ params }) => {
+    const id = subjectId(params.subject)
+    if (!sourceOf(id)) return notFound(`there is no source ${String(id)}`)
+    if (params.stage !== 'check_chapters') return refused(`${String(params.stage)} is a stage, not a gate: it is run, not approved`)
+    mock.runs[id] = tapeRunChecked
+    return HttpResponse.json(fresh(mock.runs[id]))
+  }),
 ]
 
 // States. A request that never answers is "loading"; 503 is a server that is down. The app's query
@@ -195,6 +272,15 @@ export const scenesUnnamed = http.get(at(paths.scenes), () =>
     chapters: tapeScenes.chapters!.map(c => (c.index === 1 ? { ...c, name: null } : c)),
   }),
 )
+/** Corrected by the person, and grouped by it: the start of chapter 2 and scene 2's place in chapter 1 marked as the
+ *  grouping had them, and chapter 2 under their own title. */
+export const scenesCorrected = http.get(at(paths.scenes), () =>
+  HttpResponse.json(correctedScenes({ 1: false, 3: true }, { 3: 'Dinner at Grandma’s' })),
+)
+/** A mark the job has not grouped by yet: the chapters as they were, and the page saying it is regrouping. */
+export const scenesRegrouping = http.get(at(paths.scenes), () =>
+  HttpResponse.json({ ...tapeScenes, regrouping: true, scenes: tapeScenes.scenes.map(s => (s.index === 2 ? { ...s, mark: true } : s)) }),
+)
 /** The tape before its scenes are grouped. */
 export const scenesWaiting = http.get(at(paths.scenes), () => HttpResponse.json(waitingScenes(tapeId)))
 export const transcriptWaiting = http.get(at(paths.transcript), () =>
@@ -217,6 +303,8 @@ export const jobsMore = http.get(at(paths.jobs), () => HttpResponse.json(fresh({
 export const runPartWay = http.get(at(paths.run), () => HttpResponse.json(fresh(tapeRunPartWay)))
 /** The tape's faces stage failed, and its job waits to try again. */
 export const runFailed = http.get(at(paths.run), () => HttpResponse.json(fresh(tapeRunFailed)))
+/** The person has confirmed the chapters. */
+export const runChecked = http.get(at(paths.run), () => HttpResponse.json(fresh(tapeRunChecked)))
 export const runError = http.get(at(paths.run), down)
 /** The tape before its scenes are grouped: the scenes step next, nothing running (as `scenesWaiting`). */
 export const runWaiting = http.get(at(paths.run), () =>

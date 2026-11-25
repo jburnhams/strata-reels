@@ -31,7 +31,10 @@ STAGES = [
     "describe",
     "chapters",
     "name_chapters",
+    "check_chapters",
 ]
+RAN = STAGES[:-1]  # the stages that run; the last is the person's check (a gate)
+WAITING = {"state": "waiting", "waiting": ["check_chapters"], "failed": []}
 
 
 @pytest.fixture
@@ -79,10 +82,11 @@ def test_a_new_tape_runs_every_stage_in_one_job_and_once(engine: Engine, tmp_pat
     assert jobs.ingest_later(q, source) == jid  # asked again while queued: the same job
     (done,) = jobs.work(q)
     assert (done.id, done.kind, done.state, done.domain) == (jid, "workflow:tape", "done", f"tape:source:{source.id}")
-    assert done.result == {"state": "done", "waiting": [], "failed": [], "stages": dict.fromkeys(STAGES, "done")}
+    # every stage done, then the tape waits for the person to say its chapters are right
+    assert done.result == WAITING | {"stages": dict.fromkeys(RAN, "done") | {"check_chapters": "waiting"}}
     digest = hashlib.sha256(content).hexdigest()
     assert sha256_of(engine, source.id) == digest
-    assert made(source) == {"hash": None} | dict.fromkeys(STAGES[1:-3], True) | {
+    assert made(source) == {"hash": None} | dict.fromkeys(RAN[1:-3], True) | {
         "describe": 2,
         "chapters": True,
         "name_chapters": 2,
@@ -92,6 +96,7 @@ def test_a_new_tape_runs_every_stage_in_one_job_and_once(engine: Engine, tmp_pat
     (again,) = jobs.work(q) if jobs.ingest_later(q, source) else []
     assert again.state == "done"
     assert len(jobs.store().history(jobs.subject_of(source))) == history
+    assert not jobs.checked(jobs.store(), source)
 
 
 def test_a_cleared_stage_runs_again_and_finds_its_result_stored(engine: Engine, tmp_path, tape_models):
@@ -158,7 +163,7 @@ def test_the_server_queues_the_tape_and_runs_it_while_it_is_up(db_env: str, tmp_
         run = client.get("/api/workflows/tape/subjects/source:1").json()
     # the server took up the tape it had no record of (`adopt`), then ran it again when it was added again
     assert {(t.kind, t.state) for t in q.page().items} == {("workflow:tape", "done")}
-    assert run["state"] == "done"
+    assert run["state"] == "waiting"  # for the person's check of the chapters
     assert run["job"]["state"] == "done"
     # no audio stream: the peaks and transcript stages are done with nothing to make
     stages = {s["name"]: s for s in run["stages"]}
@@ -198,8 +203,13 @@ def test_the_workflow_routes_show_a_tape_and_run_it_again(client: TestClient, en
     queued = client.post(f"/api/workflows/tape/subjects/{subject}/run").json()
     assert queued["job"]["state"] == "queued"
     jobs.work(jobs.queue(engine))
-    listed = client.get("/api/workflows/tape/subjects", params={"state": "done"}).json()
-    assert [(r["subject"], r["state"]) for r in listed["items"]] == [(subject, "done")]
+    listed = client.get("/api/workflows/tape/subjects", params={"state": "waiting"}).json()
+    assert [(r["subject"], r["waiting"]) for r in listed["items"]] == [(subject, ["check_chapters"])]
+    # the person says the chapters are right: the gate holds, and the tape is done
+    checked = client.post(f"/api/workflows/tape/subjects/{subject}/stages/check_chapters/approve", json={}).json()
+    assert checked["state"] == "done"
+    assert {s["name"]: s["last"]["by"] for s in checked["stages"] if s["gate"]} == {"check_chapters": "person"}
+    assert jobs.checked(jobs.store(), source)
     (hashed,) = client.get(f"/api/workflows/tape/subjects/{subject}/stages/hash").json()
     assert hashed["data"] == {"sha256": hashlib.sha256(b"\x05" * 200_000).hexdigest()}
     cleared = client.post(f"/api/workflows/tape/subjects/{subject}/stages/faces/clear").json()

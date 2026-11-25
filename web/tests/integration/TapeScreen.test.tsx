@@ -1,4 +1,5 @@
 import { HttpResponse, http } from 'msw'
+import { expectOneFilledButton } from 'strata-react/testing'
 import { describe, expect, it } from 'vitest'
 import { runError, scenesError, scenesPartWay, scenesWaiting, transcriptWaiting } from '../../src/mocks/handlers'
 import { tapeRunFailed, tapeRunPartWay, tapeScenes, waitingScenes } from '../../src/mocks/tape'
@@ -187,7 +188,7 @@ describe('a tape', () => {
     await user.click(screen.getByRole('tab', { name: 'Steps' }))
     expect(router.state.location.search).toBe('?view=steps')
     const steps = await screen.findByRole('list', { name: 'Steps of the analysis' })
-    expect(within(steps).getAllByRole('listitem')).toHaveLength(12)
+    expect(within(steps).getAllByRole('listitem')).toHaveLength(13) // twelve steps, then the person's check
     const faces = within(steps)
       .getAllByRole('listitem')
       .find(li => li.textContent?.includes('Find the faces'))!
@@ -228,5 +229,119 @@ describe('a tape', () => {
     server.use(scenesError)
     openApp('/sources/5')
     expect(await screen.findByRole('alert')).toHaveTextContent('The server could not answer (503)')
+  })
+
+  describe('corrections', () => {
+    const headings = (list: HTMLElement) =>
+      within(list)
+        .getAllByRole('listitem', { name: /^Chapter \d/ })
+        .map(c => within(c).getAllByRole('heading')[0].textContent)
+
+    it('asks the person to confirm the chapters, with the view’s one filled button, and says when they did', async () => {
+      const { user } = openApp('/sources/5')
+      const confirm = await screen.findByRole('button', { name: 'Confirm the chapters' })
+      expectOneFilledButton()
+      await user.click(confirm)
+      expect(await screen.findByText(/^Chapters confirmed /)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Confirm the chapters' })).toBeNull()
+      expect(mock.runs[5].stages.at(-1)).toMatchObject({ name: 'check_chapters', state: 'done' })
+    })
+
+    it('confirms the chapters from the Steps tab too', async () => {
+      const { user } = openApp('/sources/5?view=steps')
+      const steps = await screen.findByRole('list', { name: 'Steps of the analysis' })
+      const check = within(steps)
+        .getAllByRole('listitem')
+        .find(li => li.textContent?.includes('Check the chapters'))!
+      await user.click(within(check).getByRole('button', { name: /Approve/ }))
+      await waitFor(() => expect(mock.runs[5].state).toBe('done'))
+    })
+
+    it('starts a chapter at a scene, shows the mark, and gives it back to the grouping', async () => {
+      const { user } = openApp('/sources/5')
+      const list = await screen.findByRole('list', { name: 'Chapters' })
+      // the first scene of a chapter is joined from its chapter, so only the scenes inside one offer a start
+      expect(within(list).queryByRole('button', { name: 'Start a chapter at scene 1' })).toBeNull()
+      expect(within(list).queryByRole('button', { name: 'Start a chapter at scene 4' })).toBeNull()
+      await user.click(within(list).getByRole('button', { name: 'Start a chapter at scene 3' }))
+      await waitFor(() => expect(headings(list)).toHaveLength(4))
+      expect(headings(list)[1]).toBe('Chapter 2') // a new chapter: named once the job has run
+      await user.click(within(list).getByRole('button', { name: 'Rename chapter 2' }))
+      expect(await screen.findByRole('textbox', { name: 'Title of chapter 2' })).toHaveValue('') // nothing to start from
+      await user.keyboard('{Escape}')
+      const third = within(list).getByRole('listitem', { name: 'Scene 3' })
+      expect(within(third).getByText('You started a chapter here')).toBeInTheDocument()
+      expect(mock.marks).toEqual({ 2: true })
+      await user.click(within(third).getByRole('button', { name: 'Undo your mark on scene 3' }))
+      await waitFor(() => expect(headings(list)).toHaveLength(3))
+      expect(mock.marks).toEqual({})
+    })
+
+    it('joins a chapter to the one before', async () => {
+      const { user } = openApp('/sources/5')
+      const list = await screen.findByRole('list', { name: 'Chapters' })
+      expect(within(list).queryByRole('button', { name: /^Join chapter 1/ })).toBeNull()
+      await user.click(within(list).getByRole('button', { name: 'Join chapter 3 to chapter 2' }))
+      await waitFor(() => expect(headings(list)).toEqual(['Chapter 1: Christmas morning', 'Chapter 2']))
+      expect(within(list).getByText('You kept this with the chapter before')).toBeInTheDocument()
+    })
+
+    it('gives a chapter the person’s own title, keeps the namer’s in sight, and gives it back', async () => {
+      const { user } = openApp('/sources/5')
+      const list = await screen.findByRole('list', { name: 'Chapters' })
+      await user.click(within(list).getByRole('button', { name: 'Rename chapter 2' }))
+      const field = await screen.findByRole('textbox', { name: 'Title of chapter 2' })
+      expect(field).toHaveValue('Christmas dinner')
+      await user.clear(field)
+      await user.click(screen.getByRole('button', { name: 'Save title' }))
+      expect(field).toHaveAccessibleDescription(/Give the chapter a title of a word or more\./)
+      await user.type(field, 'Dinner at Grandma’s')
+      await user.click(screen.getByRole('button', { name: 'Save title' }))
+      await waitFor(() => expect(headings(list)[1]).toBe('Chapter 2: Dinner at Grandma’s'))
+      expect(screen.queryByRole('textbox', { name: 'Title of chapter 2' })).toBeNull() // saved: closed
+      expect(within(list).getByText('Your title. The namer called it “Christmas dinner”.')).toBeInTheDocument()
+      await user.click(within(list).getByRole('button', { name: 'Rename chapter 2' }))
+      await user.click(await screen.findByRole('button', { name: 'Use “Christmas dinner”' }))
+      await waitFor(() => expect(headings(list)[1]).toBe('Chapter 2: Christmas dinner'))
+    })
+
+    it('renames a chapter not named yet, shows a refused title under its field, and closes on Escape', async () => {
+      server.use(
+        http.put('*/api/sources/:id/chapters/:chapter/title', () => HttpResponse.json({ detail: 'that title is taken' }, { status: 400 })),
+      )
+      const unnamed = structuredClone(tapeScenes)
+      unnamed.chapters![1].name = null
+      unnamed.chapters![1].title = 'Tea'
+      server.use(http.get('*/api/sources/:id/scenes', () => HttpResponse.json(unnamed)))
+      const { user } = openApp('/sources/5')
+      const list = await screen.findByRole('list', { name: 'Chapters' })
+      await user.click(within(list).getByRole('button', { name: 'Rename chapter 3' }))
+      const field = await screen.findByRole('textbox', { name: 'Title of chapter 3' })
+      expect(field).toHaveValue('The evening in front of the television')
+      await user.type(field, ' and the film')
+      await user.click(screen.getByRole('button', { name: 'Save title' }))
+      await waitFor(() => expect(field).toHaveAccessibleDescription(/that title is taken/))
+      await user.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Title of chapter 3' })).toBeNull())
+      // a title of the person's on a chapter the namer has not named: nothing to go back to
+      await user.click(within(list).getByRole('button', { name: 'Rename chapter 2' }))
+      expect(await screen.findByRole('textbox', { name: 'Title of chapter 2' })).toHaveValue('Tea')
+      expect(screen.queryByRole('button', { name: /^Use “/ })).toBeNull()
+    })
+
+    it('says a refused correction in the server’s words', async () => {
+      server.use(http.put('*/api/sources/:id/scenes/:scene/chapter-mark', () => HttpResponse.json({ detail: 'no' }, { status: 400 })))
+      const { user } = openApp('/sources/5')
+      const list = await screen.findByRole('list', { name: 'Chapters' })
+      await user.click(within(list).getByRole('button', { name: 'Start a chapter at scene 2' }))
+      expect(await within(list).findByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    })
+
+    it('says the chapters are being grouped again', async () => {
+      server.use(http.get('*/api/sources/:id/scenes', () => HttpResponse.json({ ...tapeScenes, regrouping: true })))
+      openApp('/sources/5')
+      expect(await screen.findByText('Grouping the chapters again by your marks')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Confirm the chapters' })).toBeNull()
+    })
   })
 })
