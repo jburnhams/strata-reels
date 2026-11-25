@@ -15,7 +15,7 @@ Jonathan asked for the tape page's UI updates after the chapters, with what reel
 - `web/strata-visual.config.ts`: the sources route is `/sources`; the scroll-through is on again, as strata-react 1.3.18 shows a picture it has loaded at once on a remount (#352), which is why it was off.
 - `web/stories/sources.stories.tsx`: routes moved to `/sources`.
 - `web/tests/integration/{App,SourcesScreen,TapeScreen}.test.tsx`, `web/tests/unit/logic.test.ts`: the new column, paging, the contents, the sticky scroll, the redirect.
-- `web/package.json`, `web/package-lock.json`: strata-react `^1.3.19`, the release with #371-#373 (a version bump, no new dependency).
+- `web/package.json`, `web/package-lock.json`: strata-react `^1.3.22`: the release with #371-#373, and strata-react #379, which stopped seek bar marks past the end of the 2-second mock copy from making the page 790,000 px wide (Chromium could not capture it). A version bump, no new dependency.
 - `web/tests/visual/baselines/`: the tape and sources shots change (two columns on the wide shots, the new column, pictures below the window now loaded); rewritten on the CI runner.
 
 **Correcting the chapters on the tape page: marks, titles and a check, and the weights fitted on them (branch `claude/project-thread-fejz06`)**
