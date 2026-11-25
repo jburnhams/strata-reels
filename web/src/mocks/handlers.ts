@@ -44,7 +44,16 @@ export function resetMock() {
 /** A source's run as the server would answer it now. */
 const runOf = (id: number): WorkflowRun =>
   mock.runs[id] ??
-  (id === tapeId ? tapeRunDone : tapeRun(id, { scenes: 'ready', faces: 'ready', transcript: 'ready', describe: 'blocked' }))
+  (id === tapeId
+    ? tapeRunDone
+    : tapeRun(id, {
+        scenes: 'ready',
+        faces: 'ready',
+        transcript: 'ready',
+        describe: 'blocked',
+        chapters: 'blocked',
+        name_chapters: 'blocked',
+      }))
 
 // Matched as paths, so they answer whatever origin and base the app runs under.
 const at = (path: string) => `*${path}`
@@ -178,6 +187,14 @@ export const systemUnread = http.get(at(paths.system), () => HttpResponse.json({
 export const scenesLoading = http.get(at(paths.scenes), () => delay('infinite'))
 export const scenesError = http.get(at(paths.scenes), down)
 export const scenesPartWay = http.get(at(paths.scenes), () => HttpResponse.json(tapeScenesPartWay))
+/** Grouped into chapters, the names still being written: the second has none yet. */
+export const scenesUnnamed = http.get(at(paths.scenes), () =>
+  HttpResponse.json({
+    ...tapeScenes,
+    analysis: { ...tapeScenes.analysis, named: 2 },
+    chapters: tapeScenes.chapters!.map(c => (c.index === 1 ? { ...c, name: null } : c)),
+  }),
+)
 /** The tape before its scenes are grouped. */
 export const scenesWaiting = http.get(at(paths.scenes), () => HttpResponse.json(waitingScenes(tapeId)))
 export const transcriptWaiting = http.get(at(paths.transcript), () =>
@@ -203,5 +220,16 @@ export const runFailed = http.get(at(paths.run), () => HttpResponse.json(fresh(t
 export const runError = http.get(at(paths.run), down)
 /** The tape before its scenes are grouped: the scenes step next, nothing running (as `scenesWaiting`). */
 export const runWaiting = http.get(at(paths.run), () =>
-  HttpResponse.json(fresh(tapeRun(tapeId, { scenes: 'ready', faces: 'ready', transcript: 'ready', describe: 'blocked' }))),
+  HttpResponse.json(
+    fresh(
+      tapeRun(tapeId, {
+        scenes: 'ready',
+        faces: 'ready',
+        transcript: 'ready',
+        describe: 'blocked',
+        chapters: 'blocked',
+        name_chapters: 'blocked',
+      }),
+    ),
+  ),
 )

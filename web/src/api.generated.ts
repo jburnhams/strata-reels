@@ -388,10 +388,14 @@ export interface components {
          * @description Which of the source's results exist, for the page's finding and its waiting words.
          */
         Analysis: {
+            /** Chapters */
+            chapters: boolean;
             /** Described */
             described: number;
             /** Faces */
             faces: boolean;
+            /** Named */
+            named: number;
             /** Peaks */
             peaks: boolean;
             /** Proxy */
@@ -414,6 +418,63 @@ export interface components {
         Approval: {
             /** Value */
             value?: unknown;
+        };
+        /**
+         * Chapter
+         * @description A run of neighbouring scenes of one occasion (`chapters.group`): its place on the tape, its scenes, how sure the
+         *     boundary that starts it is and why, and its name (`None` before the name step has run for it).
+         */
+        Chapter: {
+            /**
+             * Confidence
+             * @description that the boundary before it starts a chapter; None for the first
+             */
+            confidence: number | null;
+            /** End */
+            end: number;
+            /**
+             * Index
+             * @description from 0, in time order
+             */
+            index: number;
+            name: components["schemas"]["ChapterName"] | null;
+            /**
+             * Reasons
+             * @description why the boundary before it is one, in words
+             */
+            reasons: string[];
+            /**
+             * Scenes
+             * @description the indexes of its scenes
+             */
+            scenes: number[];
+            /** Start */
+            start: number;
+        };
+        /**
+         * ChapterName
+         * @description strata-models' name for a chapter (preset `chapter-name-v1`): what its scenes show kept apart from what is
+         *     guessed, and whether they look like more than one occasion.
+         */
+        ChapterName: {
+            /** Inferred */
+            inferred: components["schemas"]["Guess"][];
+            /**
+             * Mixed
+             * @description the scenes look like more than one occasion: the grouping is in doubt
+             */
+            mixed: boolean;
+            /**
+             * Model
+             * @description the model that wrote it
+             */
+            model: string | null;
+            /** Summary */
+            summary: string;
+            /** Tags */
+            tags: string[];
+            /** Title */
+            title: string;
         };
         /**
          * Described
@@ -617,6 +678,11 @@ export interface components {
          */
         Scenes: {
             analysis: components["schemas"]["Analysis"];
+            /**
+             * Chapters
+             * @description None before the scenes are grouped into chapters
+             */
+            chapters: components["schemas"]["Chapter"][] | null;
             /** Scenes */
             scenes: components["schemas"]["Scene"][];
             source: components["schemas"]["Described"];

@@ -2,7 +2,7 @@
 `openapi` (the schema file the web app's types are generated from). The app's own: `add` adds footage as sources (and
 queues each one's ingest: the content hash, then the proxy, thumbnails, peaks, shots and speech), `sources` lists
 them, `scenes` lists a source's scenes (from its shots, once the jobs have run, with each one's description and
-faces), `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
+faces), `chapters` its chapters (the scenes grouped by occasion, each with its name), `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
 itself while it is up)."""
 
 import argparse
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from strata_python import cli as shared
 from strata_python import mediatime
 
-from app import __version__, db, describe, jobs, scenes, settings, shots, sources
+from app import __version__, chapters, db, describe, jobs, scenes, settings, shots, sources
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -100,6 +100,35 @@ def cmd_scenes(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_chapters(args: argparse.Namespace) -> int:
+    with db.session() as s:
+        source = s.get(sources.Source, args.source)
+        if source is None:
+            print(f"  there is no source {args.source} (./app sources lists them)", file=sys.stderr)
+            return 1
+        found = chapters.current(s, source)
+        if found is None:
+            print(f"  {source.name} has no chapters yet: ./app jobs shows what is queued, ./app work runs it")
+            return 1
+        grouped = found.payload
+        names = chapters.current_names(s, source)
+    listed: list[dict[str, Any]] = [
+        {**ch, "name": None if ch["start"] not in names else names[ch["start"]].payload["name"]}
+        for ch in grouped["chapters"]
+    ]
+    if args.json:
+        print(json.dumps({**grouped, "chapters": listed}, indent=1))
+        return 0
+    for i, ch in enumerate(listed):
+        start, end = float(mediatime.rational(ch["start"])), float(mediatime.rational(ch["end"]))
+        sure = "" if ch["confidence"] is None else f"  (boundary {ch['confidence']:.0%})"
+        title = "" if ch["name"] is None else f"  {ch['name'].get('title', '')}"
+        print(f"  {i + 1:>3}  {start:9.2f} to {end:9.2f} s  {len(ch['scenes']):3} scenes{sure}{title}")
+        if ch["name"] is not None:
+            print(f"       {ch['name'].get('summary', '')}")
+    return 0
+
+
 def cmd_jobs(args: argparse.Namespace) -> int:
     with db.opened() as engine:
         page = jobs.queue(engine).page(limit=args.limit)
@@ -146,6 +175,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     sc.add_argument("source", type=int)
     sc.add_argument("--json", action="store_true")
     sc.set_defaults(fn=cmd_scenes)
+    ch = sub.add_parser("chapters", help="list a source's chapters: its scenes grouped by occasion, and their names")
+    ch.add_argument("source", type=int)
+    ch.add_argument("--json", action="store_true")
+    ch.set_defaults(fn=cmd_chapters)
     jo = sub.add_parser("jobs", help="list the job queue, newest first")
     jo.add_argument("--limit", type=int, default=50)
     jo.add_argument("--json", action="store_true")

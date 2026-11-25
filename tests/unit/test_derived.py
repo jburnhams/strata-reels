@@ -125,7 +125,7 @@ def test_a_tape_added_again_makes_nothing_again(engine, tmp_path, made, tape_mod
     assert len(made) == 4
     # asked once each (a description per scene)
     assert [j["role"] for j in tape_models.jobs] == [
-        "shot-boundaries", "image-embed", "faces", "transcribe", "scene-describe", "scene-describe",
+        "shot-boundaries", "image-embed", "faces", "transcribe", "scene-describe", "scene-describe", "chapter-name", "chapter-name",
     ]  # fmt: skip
 
 

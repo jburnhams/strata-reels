@@ -8,7 +8,7 @@ from probes import TAPE, answer
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from app import browse, derived, describe, jobs, scenes, shots, sources, speech
+from app import browse, chapters, derived, describe, jobs, scenes, shots, sources, speech
 from app.models import Source
 
 
@@ -44,6 +44,10 @@ def analysed(engine: Engine, source_id: int, *, assets=derived.KINDS, steps=("sc
             describe.find_faces(s, src)
         if "describe" in steps:
             describe.describe(s, src)
+        if "chapters" in steps:
+            chapters.find_chapters(s, src)
+        if "names" in steps:
+            chapters.name(s, src)
 
 
 def test_before_the_hash_the_scenes_say_what_they_wait_for(client: TestClient, engine, tmp_path):
@@ -53,7 +57,7 @@ def test_before_the_hash_the_scenes_say_what_they_wait_for(client: TestClient, e
     assert got["waiting"] == "Reading the whole file first, to know it by its content."
     assert got["analysis"] == {
         "proxy": False, "thumbnails": False, "peaks": False, "shots": None, "transcript": False, "faces": False,
-        "described": 0,
+        "described": 0, "chapters": False, "named": 0,
     }  # fmt: skip
     assert got["source"]["name"] == "tape.mkv"
     assert client.get(f"/api/sources/{sid}").json()["id"] == sid
@@ -80,7 +84,7 @@ def test_each_scene_has_its_pictures_speech_description_and_faces(client: TestCl
     assert got["waiting"] is None
     assert got["analysis"] == {
         "proxy": True, "thumbnails": True, "peaks": True, "shots": 3, "transcript": True, "faces": True,
-        "described": 2,
+        "described": 2, "chapters": False, "named": 0,
     }  # fmt: skip
     first, second = got["scenes"]
     assert (first["index"], first["start"], first["end"], first["shots"]) == (0, 0.0, 10.0, 2)
@@ -184,3 +188,34 @@ def test_the_shared_jobs_routes_list_the_queue(client: TestClient, engine, tmp_p
     job = page["items"][0]["id"]
     assert client.post(f"/api/jobs/{job}/cancel").json()["state"] == "cancelled"
     assert client.post(f"/api/jobs/{job}/retry").json()["state"] == "queued"
+
+
+def test_the_chapters_come_with_the_scenes_and_their_names_when_written(
+    client: TestClient, engine, tmp_path, tape_models
+):
+    sid = added(engine, tmp_path)
+    analysed(engine, sid)
+    assert client.get(f"/api/sources/{sid}/scenes").json()["chapters"] is None  # not grouped yet: not "none"
+    analysed(engine, sid, assets=(), steps=("chapters",))
+    got = client.get(f"/api/sources/{sid}/scenes").json()
+    assert (got["analysis"]["chapters"], got["analysis"]["named"]) == (True, 0)
+    first, second = got["chapters"]
+    assert (first["index"], first["start"], first["end"], first["scenes"], first["confidence"]) == (
+        0,
+        0.0,
+        10.0,
+        [0],
+        None,
+    )
+    assert (first["reasons"], first["name"]) == ([], None)
+    assert second["scenes"] == [1]
+    assert second["confidence"] > 0.5
+    assert "black between" in second["reasons"]
+    analysed(engine, sid, assets=(), steps=("names",))
+    got = client.get(f"/api/sources/{sid}/scenes").json()
+    assert got["analysis"]["named"] == 2
+    assert got["chapters"][1]["name"] == {
+        "title": "Scenes from 0:10", "summary": "scenes at 0:10",
+        "inferred": [{"guess": "a birthday", "because": "a cake in every scene"}], "tags": ["birthday"], "mixed": False,
+        "model": "qwen3.5-9b-vl",
+    }  # fmt: skip

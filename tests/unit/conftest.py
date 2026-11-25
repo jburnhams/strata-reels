@@ -5,7 +5,7 @@ import os
 
 import pytest
 from hypothesis import HealthCheck, settings
-from probes import FACES, SHOTS, SPEECH, describe_scene, embeddings
+from probes import FACES, SHOTS, SPEECH, describe_scene, embeddings, name_chapter
 from strata_python import derive, media, mediatime
 
 settings.register_profile(
@@ -93,6 +93,7 @@ def tape_models(fake_models):
             "transcribe": SPEECH,
             "faces": FACES,
             "scene-describe": describe_scene,
+            "chapter-name": name_chapter,
         }
     )
     fake_models.models.update(
@@ -102,6 +103,7 @@ def tape_models(fake_models):
             "transcribe": "whisper-large-v3-turbo",
             "faces": "buffalo_l",
             "scene-describe": "qwen3.5-9b-vl",
+            "chapter-name": "qwen3.5-9b-vl",
         }
     )
     fake_models.options.update({"shot-boundaries": {"threshold": 0.3}, "image-embed": {"half": True}})

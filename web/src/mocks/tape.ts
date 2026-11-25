@@ -187,8 +187,68 @@ const source = initialSources.find(s => s.id === tapeId)!
 /** `GET /api/sources/5/scenes` with every job done. */
 export const tapeScenes: Scenes = {
   source,
-  analysis: { proxy: true, thumbnails: true, peaks: true, shots: 81, transcript: true, faces: true, described: 5 },
+  analysis: {
+    proxy: true,
+    thumbnails: true,
+    peaks: true,
+    shots: 81,
+    transcript: true,
+    faces: true,
+    described: 5,
+    chapters: true,
+    named: 3,
+  },
   waiting: null,
+  chapters: [
+    {
+      index: 0,
+      start: 0,
+      end: 2401.0,
+      scenes: [0, 1, 2],
+      confidence: null,
+      reasons: [],
+      name: {
+        title: 'Christmas morning',
+        summary: 'The children wave by the tree, open their presents with the family watching, then play in the snowy garden.',
+        inferred: [{ guess: 'Christmas Day', because: 'pyjamas, presents under a decorated tree and gift labels read aloud' }],
+        tags: ['christmas', 'presents', 'snow'],
+        mixed: false,
+        model: 'qwen3.5-9b-vl',
+      },
+    },
+    {
+      index: 1,
+      start: 2412.6,
+      end: 5642.8,
+      scenes: [3, 4],
+      confidence: 0.97,
+      reasons: ['pictures differ (0.58)', 'described differently', 'black between'],
+      name: {
+        title: 'Christmas dinner',
+        summary: 'The family eats at a long table in paper hats, then pulls crackers and reads the jokes.',
+        inferred: [{ guess: 'at a grandparent’s house', because: 'a different room from the morning scenes' }],
+        tags: ['christmas', 'dinner', 'crackers'],
+        mixed: false,
+        model: 'qwen3.5-9b-vl',
+      },
+    },
+    {
+      index: 2,
+      start: 5650.0,
+      end: 10812.4,
+      scenes: [5],
+      confidence: 0.61,
+      reasons: ['pictures differ (0.74)', 'described differently'],
+      name: {
+        title: 'The evening in front of the television',
+        summary: 'Adults talk and doze on the sofa while a film plays, with the camera left running on a shelf.',
+        inferred: [],
+        tags: ['television', 'sofa', 'evening'],
+        mixed: true,
+        model: 'qwen3.5-9b-vl',
+      },
+    },
+  ],
   scenes: plan.map((p, index) => {
     const frames = []
     for (let t = Math.ceil(p.start / THUMB_STEP) * THUMB_STEP; t < p.end; t += THUMB_STEP)
@@ -212,16 +272,37 @@ export const tapeScenes: Scenes = {
  *  the thumbnails not made yet (so the scenes have no pictures). */
 export const tapeScenesPartWay: Scenes = {
   ...tapeScenes,
-  analysis: { ...tapeScenes.analysis, proxy: false, peaks: false, thumbnails: false, transcript: false, described: 0 },
+  analysis: {
+    ...tapeScenes.analysis,
+    proxy: false,
+    peaks: false,
+    thumbnails: false,
+    transcript: false,
+    described: 0,
+    chapters: false,
+    named: 0,
+  },
+  chapters: null,
   scenes: tapeScenes.scenes.map(s => ({ ...s, frames: [], description: null, speech: null })),
 }
 
 /** Another source before its scenes are grouped. */
 export const waitingScenes = (id: number): Scenes => ({
   source: initialSources.find(s => s.id === id) ?? source,
-  analysis: { proxy: true, thumbnails: true, peaks: true, shots: 12, transcript: false, faces: false, described: 0 },
+  analysis: {
+    proxy: true,
+    thumbnails: true,
+    peaks: true,
+    shots: 12,
+    transcript: false,
+    faces: false,
+    described: 0,
+    chapters: false,
+    named: 0,
+  },
   waiting: 'Grouping the shots into scenes (the keyframes and scenes steps).',
   scenes: [],
+  chapters: null,
 })
 
 /** `GET /api/sources/5/transcript`: what is said, phrase by phrase, with one doubtful stretch of hiss. */
@@ -308,7 +389,7 @@ const modelsDown = 'strata-models is not answering at its address: is the servic
 /** `GET /api/jobs`: a job per tape, newest first: one running, one waiting, one failed. */
 export const jobsPage = {
   items: [
-    job(9, 4, 'running', { progress: { done: 5, total: 10, text: 'Find the shots', stage: 'shots', at: null } }),
+    job(9, 4, 'running', { progress: { done: 5, total: 12, text: 'Find the shots', stage: 'shots', at: null } }),
     job(8, 3, 'queued'),
     job(7, 2, 'failed', { error: modelsDown, attempts: 5 }),
     job(6, 1, 'done'),
@@ -331,6 +412,8 @@ const STAGES: [string, string, string[]][] = [
   ['faces', 'Find the faces', ['keyframes']],
   ['transcript', 'Write down what is said', ['hash']],
   ['describe', 'Describe the scenes', ['scenes', 'transcript']],
+  ['chapters', 'Group the scenes into chapters', ['scenes', 'describe']],
+  ['name_chapters', 'Name the chapters', ['chapters']],
 ]
 
 type StageState = WorkflowRun['stages'][number]['state']
@@ -355,7 +438,7 @@ export function tapeRun(
             stage: name,
             status: state === 'failed' ? 'failed' : 'done',
             at: at(40 - i),
-            elapsed_s: [212, 1480, 96, 31, 640, 75, 4, 58, 2210, 380][i] ?? 0,
+            elapsed_s: [212, 1480, 96, 31, 640, 75, 4, 58, 2210, 380, 1, 42][i] ?? 0,
             metrics: {},
             error: errors[name] ?? null,
             by: null,
@@ -382,8 +465,16 @@ export const tapeRunDone = tapeRun(tapeId, {}, { job: job(5, tapeId, 'done') })
 /** Part way: the browser copy, the sound and the descriptions still to come, the job on the copy. */
 export const tapeRunPartWay = tapeRun(
   tapeId,
-  { proxy: 'ready', thumbnails: 'blocked', peaks: 'blocked', transcript: 'blocked', describe: 'blocked' },
-  { job: job(10, tapeId, 'running', { progress: { done: 1, total: 10, text: 'Make a browser copy', stage: 'proxy', at: null } }) },
+  {
+    proxy: 'ready',
+    thumbnails: 'blocked',
+    peaks: 'blocked',
+    transcript: 'blocked',
+    describe: 'blocked',
+    chapters: 'blocked',
+    name_chapters: 'blocked',
+  },
+  { job: job(10, tapeId, 'running', { progress: { done: 1, total: 12, text: 'Make a browser copy', stage: 'proxy', at: null } }) },
 )
 /** The faces stage failed (strata-models down) and the job is waiting to try again; what does not need it went on. */
 export const tapeRunFailed = tapeRun(

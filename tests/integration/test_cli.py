@@ -159,12 +159,16 @@ def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp
         return {"text": "{}", "json": {"summary": f"a {colour} picture", "heard": p["context"]["speech"]}}
 
     fake_models.results["scene-describe"] = described
+    fake_models.results["chapter-name"] = lambda p: {
+        "text": "{}",
+        "json": {"title": " and ".join(sc["summary"] for sc in p["context"]["scenes"]), "summary": "", "mixed": False},
+    }
     fake_models.results["faces"] = lambda p: {
         "images": [{"width": 320, "height": 240, "faces": [] if os.path.isfile(x) else None} for x in p["paths"]]
     }
     cli("add", str(tape))
     out = cli("work").stdout
-    for kind in ("shots", "keyframes", "scenes", "transcript", "faces", "describe"):
+    for kind in ("shots", "keyframes", "scenes", "transcript", "faces", "describe", "chapters"):
         assert f"{kind:10} done" in out
     with db.session() as s:
         source = s.get(Source, 1)
@@ -188,3 +192,9 @@ def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp
     assert "8.00 to     12.00 s    1 shots  (boundary 100%)  0 faces\n       a blue picture\n" in listed
     told = json.loads(cli("scenes", "1", "--json").stdout)["scenes"]
     assert [sc["description"]["heard"] for sc in told] == ["Look at the red wall.", "And now blue."]
+    # the red and the blue scenes look unlike, with black between: two chapters, each named from its own scene
+    assert "name_chapters done" in out
+    named = json.loads(cli("chapters", "1", "--json").stdout)["chapters"]
+    assert [(ch["start"], ch["end"], ch["name"]["title"]) for ch in named] == [
+        ("0", "7", "a red picture"), ("8", "12", "a blue picture"),
+    ]  # fmt: skip

@@ -32,6 +32,8 @@ Stages (each finds its result stored, and makes nothing, when the same request r
 - `transcript`: the whole source's speech from strata-models' `transcribe`, for a source with sound.
 - `describe`: a description of each scene, which needs the scenes and the transcript, so every description has its
   speech.
+- `chapters`: the scenes grouped by occasion (`chapters.group`, this app's own code over the scenes' pictures and
+  descriptions), then `name_chapters`: a title and summary for each from strata-models' `chapter-name`.
 
 Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
 
@@ -52,7 +54,7 @@ from strata_python.tasks.queue import Handler, Job, Queue, Worker
 from strata_python.workflow import Context, Pipeline, request_key, step
 from strata_python.workflow.store import DbStore, enqueue
 
-from app import db, derived, describe, scenes, shots, speech
+from app import chapters, db, derived, describe, scenes, shots, speech
 from app.models import JOBS, STAGES, Result, Source
 
 log = logging.getLogger(__name__)
@@ -193,6 +195,19 @@ def _describe(ctx: Context) -> dict[str, Any]:
         return {"results": [r.id for r, _ in made], "key": request_key(*(r.cache_key for r, _ in made))}
 
 
+def _chapters(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        r, new = chapters.find_chapters(s, _source(s, ctx), job_id=ctx.app.job_id)
+        return _found(ctx, r, new, chapters=len(r.payload["chapters"]))
+
+
+def _name_chapters(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        made = chapters.name(s, _source(s, ctx), job_id=ctx.app.job_id)
+        ctx.measure(new=sum(new for _, new in made))
+        return {"results": [r.id for r, _ in made], "key": request_key(*(r.cache_key for r, _ in made))}
+
+
 def _version(*parts: Any) -> str:
     """A stage's version from what this app asks of it (its parameters), so a release that asks otherwise runs it again.
     What strata-models answers with (its model and settings) is checked by the stage itself, against its stored result,
@@ -218,6 +233,8 @@ TAPE = Pipeline(
         step("faces", _faces, needs=("keyframes",), version=_version(describe.FACE_FIELDS), label="Find the faces"),
         step("transcript", _transcript, needs=("hash",), version=_version(speech.PARAMETERS), label="Write down what is said"),
         step("describe", _describe, needs=("scenes", "transcript"), version=_version(describe.PRESET, describe.FRAMES, speech.SAID_CHARS), label="Describe the scenes"),
+        step("chapters", _chapters, needs=("scenes", "describe"), version=_version(chapters.VERSION, chapters.PARAMETERS), label="Group the scenes into chapters"),
+        step("name_chapters", _name_chapters, needs=("chapters",), version=_version(chapters.NAME_PRESET, chapters.NAMED_SCENES, chapters.SAID_CHARS), label="Name the chapters"),
     ],
 )  # fmt: skip
 

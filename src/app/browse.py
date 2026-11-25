@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from strata_python import mediatime
 from strata_python.contracts import ApiModel
 
-from app import derived, describe, results, scenes, shots, speech
+from app import chapters, derived, describe, results, scenes, shots, speech
 from app.models import Result, Source
 from app.sources import Described
 
@@ -84,6 +84,31 @@ class Scene(ApiModel):
     )
 
 
+class ChapterName(ApiModel):
+    """strata-models' name for a chapter (preset `chapter-name-v1`): what its scenes show kept apart from what is
+    guessed, and whether they look like more than one occasion."""
+
+    title: str
+    summary: str
+    inferred: list[Guess]
+    tags: list[str]
+    mixed: bool = Field(description="the scenes look like more than one occasion: the grouping is in doubt")
+    model: str | None = Field(description="the model that wrote it")
+
+
+class Chapter(ApiModel):
+    """A run of neighbouring scenes of one occasion (`chapters.group`): its place on the tape, its scenes, how sure the
+    boundary that starts it is and why, and its name (`None` before the name step has run for it)."""
+
+    index: int = Field(description="from 0, in time order")
+    start: float
+    end: float
+    scenes: list[int] = Field(description="the indexes of its scenes")
+    confidence: float | None = Field(description="that the boundary before it starts a chapter; None for the first")
+    reasons: list[str] = Field(description="why the boundary before it is one, in words")
+    name: ChapterName | None
+
+
 class Analysis(ApiModel):
     """Which of the source's results exist, for the page's finding and its waiting words."""
 
@@ -94,6 +119,8 @@ class Analysis(ApiModel):
     transcript: bool | None = Field(description="None for a source with no sound")
     faces: bool
     described: int
+    chapters: bool
+    named: int
 
 
 class Scenes(ApiModel):
@@ -104,6 +131,7 @@ class Scenes(ApiModel):
     analysis: Analysis
     waiting: str | None
     scenes: list[Scene]
+    chapters: list[Chapter] | None = Field(description="None before the scenes are grouped into chapters")
 
 
 class Word(ApiModel):
@@ -182,6 +210,8 @@ def scenes_of(db: Session, source: Source) -> Scenes:
     said = speech.current(db, source) if sound else None
     faces = describe.current_faces(db, source)
     told = describe.current_descriptions(db, source)
+    grouped_chapters = chapters.current(db, source) if grouped is not None else None
+    names = chapters.current_names(db, source) if grouped_chapters is not None else {}
     analysis = Analysis(
         proxy=_asset(db, source, "proxy") is not None,
         thumbnails=thumbs is not None,
@@ -190,9 +220,13 @@ def scenes_of(db: Session, source: Source) -> Scenes:
         transcript=(said is not None) if sound else None,
         faces=faces is not None,
         described=len(told),
+        chapters=grouped_chapters is not None,
+        named=len(names),
     )
     if grouped is None or cut is None:
-        return Scenes(source=Described.of(source), analysis=analysis, waiting=_waiting(source, cut), scenes=[])
+        return Scenes(
+            source=Described.of(source), analysis=analysis, waiting=_waiting(source, cut), scenes=[], chapters=None
+        )
     thumb_times = (
         []
         if thumbs is None
@@ -227,7 +261,35 @@ def scenes_of(db: Session, source: Source) -> Scenes:
                 speech=speech.said_in(said.payload, start, end) if said is not None else ("" if not sound else None),
             )
         )
-    return Scenes(source=Described.of(source), analysis=analysis, waiting=None, scenes=out)
+    return Scenes(
+        source=Described.of(source),
+        analysis=analysis,
+        waiting=None,
+        scenes=out,
+        chapters=None if grouped_chapters is None else _chapters(grouped_chapters, names),
+    )
+
+
+def _chapters(grouped: Result, names: dict[str, Result]) -> list[Chapter]:
+    starts = {b["scene"]: b for b in grouped.payload["boundaries"]}
+    out: list[Chapter] = []
+    for i, ch in enumerate(grouped.payload["chapters"]):
+        boundary = starts.get(ch["scenes"][0])
+        named = names.get(ch["start"])
+        out.append(
+            Chapter(
+                index=i,
+                start=_seconds(ch["start"]),
+                end=_seconds(ch["end"]),
+                scenes=list(ch["scenes"]),
+                confidence=ch["confidence"],
+                reasons=[] if boundary is None else list(boundary["reasons"]),
+                name=None
+                if named is None
+                else ChapterName.model_validate({**named.payload["name"], "model": named.model}),
+            )
+        )
+    return out
 
 
 def _waiting(source: Source, cut: Result | None) -> str:

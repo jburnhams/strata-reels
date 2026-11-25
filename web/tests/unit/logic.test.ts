@@ -6,7 +6,16 @@ import { tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
 import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
 import { describePicture, describeSources, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
-import { aspectOf, describeFaces, describeJobNow, describeScenes, sceneName, transcriptGroups } from '../../src/screens/TapeScreen'
+import {
+  aspectOf,
+  chapterName,
+  describeFaces,
+  describeJobNow,
+  describeScenes,
+  sceneName,
+  soundMarks,
+  transcriptGroups,
+} from '../../src/screens/TapeScreen'
 
 describe('the Sources finding and picture', () => {
   it('counts sources and adds up their running time, naming those of unknown length', () => {
@@ -62,14 +71,32 @@ describe('index.html', () => {
 describe('the tape page', () => {
   it('says how many scenes, what is not described, which starts to check and what is to come', () => {
     expect(describeScenes(tapeScenes)).toBe(
-      `${format.count(6, 'scene')} over 2:59:48; ${format.count(1, 'scene')} not described yet; 2 starts to check.`,
+      `${format.count(3, 'chapter')} of ${format.count(6, 'scene')} over 2:59:48; ${format.count(1, 'scene')} not described yet; 2 starts to check.`,
     )
     expect(describeScenes(waitingScenes(4))).toBe('Grouping the shots into scenes (the keyframes and scenes steps).')
-    const one = { ...tapeScenes, scenes: [{ ...tapeScenes.scenes[0] }], analysis: { ...tapeScenes.analysis, transcript: false } }
+    const one = {
+      ...tapeScenes,
+      chapters: [],
+      scenes: [{ ...tapeScenes.scenes[0] }],
+      analysis: { ...tapeScenes.analysis, transcript: false },
+    }
     expect(describeScenes(one)).toBe(`${format.count(1, 'scene')} over 6:52; speech still to come.`)
     expect(describeScenes({ ...one, scenes: [], waiting: null })).toBe('No scenes found.')
     const unsure = { ...one, scenes: [{ ...tapeScenes.scenes[4] }] }
     expect(describeScenes(unsure)).toBe(`${format.count(1, 'scene')} over 7:12; not described yet; 1 start to check; speech still to come.`)
+  })
+
+  it('names chapters from one, and marks the sound at chapters once there are any', () => {
+    const [first] = tapeScenes.chapters!
+    expect(chapterName(first)).toBe('Chapter 1: Christmas morning')
+    expect(chapterName({ index: 1, name: null })).toBe('Chapter 2')
+    expect(soundMarks(tapeScenes.scenes, tapeScenes.chapters).map(m => m.label)).toEqual([
+      'Chapter 1: Christmas morning',
+      'Chapter 2: Christmas dinner',
+      'Chapter 3: The evening in front of the television',
+    ])
+    expect(soundMarks(tapeScenes.scenes, null)).toHaveLength(6)
+    expect(describeScenes({ ...tapeScenes, chapters: null })).toMatch(/; chapters still to come\.$/)
   })
 
   it('says what the tape’s job is doing now', () => {

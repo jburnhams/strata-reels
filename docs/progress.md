@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-25: chapters
+
+- Asked for: group each tape's scenes into chapters from the stored results and show them, after making sure reels is on the newest strata-python and strata-react and uses their workflow pipeline and job queue fully.
+- Releases: strata-python 0.2.18 (the 100-keyframe fix, through #17) and strata-react 1.3.13. 0.2.18 only fixes `derive.frames`. 1.3.12 and 1.3.13 add `MediaPlayer heading` and link state, which the tape page has no use for. Of the pipeline's features, reels now uses stages, needs, versions, the shared records and routes, one deduped job per tape and the queue's retry. Gates are still unused: a person approving a step belongs with the corrections, which are not built yet.
+- A chapter is a run of neighbouring scenes of one occasion: Christmas morning, then dinner. Scenes were already split where the pictures change, so chapters need more than pictures. Four signals feed the log-odds of a chapter boundary: the cosine of the two scenes' mean keyframe vectors (`similar` 0.8, spread 0.05), the share of the describer's tags and activity words they have in common (0.2, spread 0.1), black between them (+2) and indoors next to outdoors (+0.5). Every boundary is kept with its level, confidence and reasons, as for scenes. **None of these weights is measured.** The one real tape has 23 scenes, and nobody has marked its occasions yet; the corrections on the tape page will give the marks.
+- Naming is model work, so the prompt is strata-models' new role `chapter-name` (preset `chapter-name-v1`, strata-models #125). It is text only: up to 24 of the chapter's scenes, each with its description and up to 400 characters of speech. It answers a title, a summary, guesses with their evidence, tags, and `mixed` when the scenes look like more than one occasion. The page shows `mixed` as a doubt. The grouping stays deterministic code here, the spec's simple baseline first; whether the namer should also judge the boundaries is for when there are marks to measure it on.
+- Both are stages of the tape pipeline. `chapters` needs `scenes` and `describe`, and `name_chapters` needs `chapters`, so a regrouping or a new description runs them again, and a tape added again re-checks the namer's model through the stages before it.
+- Not done: a run on the real tape. It needs strata-models #125 deployed on the GPU machine. Also still to do: correcting a chapter as an override, and an eval of the namer.
+
 ## 2026-11-24: the first real tape
 
 - Asked for: run the whole tape pipeline on a real VHS family tape on the GPU machine, evaluate its shot and scene boundaries, check the transcript, descriptions and faces, and tune.
