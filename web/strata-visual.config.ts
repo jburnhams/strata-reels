@@ -10,52 +10,17 @@
 //
 // `npm run test:visual` builds both and compares; `npm run test:visual:update` writes new
 // baselines. Look at a diff in tests/visual/output/ before accepting it.
-
-import type { Page } from 'playwright'
 import { defineVisualConfig } from 'strata-react/visual'
 import { handlers } from './src/mocks/handlers'
 
-/**
- * Waits, with the window as tall as the page, until every picture on it has loaded. strata-react 1.3.15's runner
- * does this for 3 s and then shoots whatever is there; the tape page has about sixty thumbnails answered by MSW in
- * Node, and on the CI runner some passes ran out of time, so one pass shot the lower filmstrips as skeletons and the
- * next as pictures (strata-react issue #331, fixed on its main with a 15 s wait and not yet released). Remove this
- * once strata-react is past 1.3.15.
- */
-async function waitForPictures(page: Page) {
-  const size = page.viewportSize()
-  if (!size) return
-  const height = await page.evaluate(() => document.documentElement.scrollHeight)
-  await page.setViewportSize({ width: size.width, height: Math.min(height, 20_000) })
-  await page.waitForFunction(
-    () => [...document.images].every(img => img.complete) && !document.querySelector('[aria-busy="true"]'),
-    undefined,
-    { timeout: 30_000 },
-  )
-  await page.setViewportSize(size)
-  // TEMPORARY diagnostics for the unstable tape shot on CI: say what changes on the page after this point.
-  const t0 = Date.now()
-  const say = (what: string) => console.log(`DIAG ${page.viewportSize()?.width} +${Date.now() - t0}ms ${what}`)
-  page.on('request', r => say(`request ${new URL(r.url()).pathname}`))
-  page.on('console', m => m.text().startsWith('DIAG') && say(m.text()))
-  await page.evaluate(() => {
-    const busy = () => document.querySelectorAll('[aria-busy="true"]').length
-    let last = busy()
-    console.log(`DIAG busy ${last} images ${document.images.length}`)
-    new MutationObserver(() => {
-      const now = busy()
-      if (now !== last) console.log(`DIAG busy ${last} -> ${now}, images ${document.images.length}, at ${location.pathname}${location.search}`)
-      last = now
-    }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-busy'] })
-    const v = document.querySelector('video')
-    for (const e of ['error', 'loadeddata', 'emptied', 'durationchange', 'seeked'])
-      v?.addEventListener(e, () => console.log(`DIAG video ${e} ${v.readyState} ${v.currentTime}`))
-    window.addEventListener('resize', () => console.log(`DIAG resize ${innerWidth}x${innerHeight}`))
-  })
-}
-
 export default defineVisualConfig({
   storybook: 'storybook-static',
+  // Off for now: the CI runner's Chromium makes the window 1x1 for a moment while it takes a whole-page shot, each
+  // FilmStrip re-picks its frames for that width and back, and the new Thumbnails below the window wait to be near it
+  // before asking for their pictures, so the tape page's strips were pictures in one pass and skeletons in the next
+  // (measured on the runner; strata-react issue #352). With pictures below the window never asked for, they are
+  // skeletons in every pass. Turn it back on once strata-react shows a picture it has loaded at once on a remount.
+  scrollThrough: false,
   app: {
     dir: 'dist-visual',
     handlers,
@@ -76,7 +41,7 @@ export default defineVisualConfig({
           },
         },
       },
-      { name: 'tape', path: '/sources/5', setup: waitForPictures },
+      { name: 'tape', path: '/sources/5' },
       { name: 'jobs', path: '/jobs' },
       { name: 'system', path: '/system' },
       { name: 'settings', path: '/settings' },
