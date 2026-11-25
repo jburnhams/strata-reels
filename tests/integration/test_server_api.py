@@ -103,6 +103,17 @@ def test_the_server_hashes_a_new_tape_and_derives_its_assets_in_job_processes(se
         time.sleep(0.2)
         seen = run()
     assert {k: seen[k] for k in want} == want
-    (job,) = json.loads(cli("jobs", "--json").stdout)["items"]
-    assert (job["kind"], job["domain"]) == ("workflow:tape", "tape:source:1")
-    assert "strata-models" in (job["error"] or "")
+
+    # The stage's failure is stored by the pipeline as the stage ends; the job's error is written by the queue after
+    # the job's run returns, a moment later in the job process, so a read between the two sees the stage failed and
+    # the job without its error yet (it failed this way on Windows and macOS runners).
+    def job() -> dict[str, Any]:
+        (only,) = json.loads(cli("jobs", "--json").stdout)["items"]
+        return only
+
+    seen_job = job()
+    while not seen_job["error"] and time.monotonic() < deadline:
+        time.sleep(0.2)
+        seen_job = job()
+    assert (seen_job["kind"], seen_job["domain"]) == ("workflow:tape", "tape:source:1")
+    assert "strata-models" in (seen_job["error"] or "")

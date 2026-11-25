@@ -2,7 +2,8 @@
 `openapi` (the schema file the web app's types are generated from). The app's own: `add` adds footage as sources (and
 queues each one's ingest: the content hash, then the proxy, thumbnails, peaks, shots and speech), `sources` lists
 them, `scenes` lists a source's scenes (from its shots, once the jobs have run, with each one's description and
-faces), `chapters` its chapters (the scenes grouped by occasion, each with its name), `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
+faces), `chapters` its chapters (the scenes grouped by occasion, each with its name or the person's title),
+`fit-chapters` what the person's chapter corrections say the grouping's weights should be, `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
 itself while it is up)."""
 
 import argparse
@@ -11,6 +12,7 @@ import sys
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from strata_python import cli as shared
 from strata_python import mediatime
@@ -112,8 +114,13 @@ def cmd_chapters(args: argparse.Namespace) -> int:
             return 1
         grouped = found.payload
         names = chapters.current_names(s, source)
+        titles = chapters.titles(s, source)
     listed: list[dict[str, Any]] = [
-        {**ch, "name": None if ch["start"] not in names else names[ch["start"]].payload["name"]}
+        {
+            **ch,
+            "name": None if ch["start"] not in names else names[ch["start"]].payload["name"],
+            "title": titles.get(ch["start"]),  # the person's, which wins over the name's
+        }
         for ch in grouped["chapters"]
     ]
     if args.json:
@@ -122,10 +129,48 @@ def cmd_chapters(args: argparse.Namespace) -> int:
     for i, ch in enumerate(listed):
         start, end = float(mediatime.rational(ch["start"])), float(mediatime.rational(ch["end"]))
         sure = "" if ch["confidence"] is None else f"  (boundary {ch['confidence']:.0%})"
-        title = "" if ch["name"] is None else f"  {ch['name'].get('title', '')}"
+        title = (
+            f"  {ch['title']} (yours)"
+            if ch["title"]
+            else ""
+            if ch["name"] is None
+            else f"  {ch['name'].get('title', '')}"
+        )
         print(f"  {i + 1:>3}  {start:9.2f} to {end:9.2f} s  {len(ch['scenes']):3} scenes{sure}{title}")
         if ch["name"] is not None:
             print(f"       {ch['name'].get('summary', '')}")
+    return 0
+
+
+def cmd_fit_chapters(args: argparse.Namespace) -> int:
+    """What the person's chapter corrections say the grouping's weights should be: printed, not applied (a release
+    takes them into `chapters.PARAMETERS`, as the scenes' weights were taken from the first real tape)."""
+    examples: list[chapters.Example] = []
+    taught: list[str] = []
+    with db.session() as s:
+        st = jobs.store()
+        for source in s.scalars(select(sources.Source).order_by(sources.Source.id)):
+            found = chapters.current(s, source)
+            if found is None or not chapters.follows_marks(s, source, found):
+                continue  # not grouped by the marks that hold now: its labels would be ones taken back
+            got = chapters.examples_of(found.payload, jobs.checked(st, source))
+            if got:
+                examples += got
+                taught.append(source.name)
+    jobs.close_records()
+    fitted = chapters.fit(examples, prior=args.prior)
+    now, then = chapters.agreement(examples, chapters.PARAMETERS), chapters.agreement(examples, fitted)
+    if args.json:
+        print(json.dumps({"tapes": taught, "boundaries": len(examples), "now": chapters.PARAMETERS,
+                          "fitted": fitted, "agreement_now": now, "agreement_fitted": then}, indent=1))  # fmt: skip
+        return 0
+    if not examples:
+        print("  nothing to learn from yet: mark chapters on a tape's page, or say a tape's chapters are right")
+        return 1
+    print(f"  {len(examples)} boundaries judged on {len(taught)} tapes ({', '.join(taught)})")
+    print(f"  agree with you now {now:.0%}, with the fitted weights {then:.0%}")
+    for k, v in fitted.items():
+        print(f"  {k:14} {float(chapters.PARAMETERS[k]):8.4f} -> {v:8.4f}")
     return 0
 
 
@@ -179,6 +224,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ch.add_argument("source", type=int)
     ch.add_argument("--json", action="store_true")
     ch.set_defaults(fn=cmd_chapters)
+    fi = sub.add_parser(
+        "fit-chapters", help="fit the chapter grouping's weights to your marks and checked tapes (prints them)"
+    )
+    fi.add_argument("--prior", type=float, default=1.0, help="how hard the weights are held to today's (default 1)")
+    fi.add_argument("--json", action="store_true")
+    fi.set_defaults(fn=cmd_fit_chapters)
     jo = sub.add_parser("jobs", help="list the job queue, newest first")
     jo.add_argument("--limit", type=int, default=50)
     jo.add_argument("--json", action="store_true")

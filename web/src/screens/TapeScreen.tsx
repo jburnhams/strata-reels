@@ -34,29 +34,45 @@
 // - The tab (scenes or transcript) and the open scene details are in the URL, so a link opens them.
 // - Copy keeps what the describer saw apart from what it guessed, as its output does (spec S4), and
 //   says how sure the cut before a scene is when it is unsure, since that is where a person corrects
-//   it (the corrections, stored as overrides, are the next step).
+//   it.
+// - The person corrects the chapters where they read them (overview §6, the corrections are overrides,
+//   never edits of a result): "Start a chapter at scene 4" on a scene inside a chapter, "Join chapter 3
+//   to chapter 2" on a chapter, and a title of their own (a Popover with one field). A mark is one of
+//   the tape's inputs, so it queues the tape's job, which groups the chapters again and names only the
+//   chapters that changed; meanwhile the page says it is regrouping and follows the job. Each mark shows
+//   on its scene with Undo mark, which hands the boundary back to the grouping. A title is laid over the
+//   namer's at once, and the namer's stays in sight under it.
+// - "Confirm the chapters" is the pipeline's `check_chapters` gate (strata-python's approve route), the
+//   view's one filled button while the tape waits for it: it says the chapters are right, which the
+//   weights are later fitted on (`./app fit-chapters`). A regroup after it asks again.
+import { useQueryClient } from '@tanstack/react-query'
 import { Play } from 'lucide-react'
-import { memo, type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
+import { type FormEvent, memo, type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import {
+  AsyncButton,
   Button,
   DataView,
   Disclosure,
   EmptyState,
+  Field,
   FilmStrip,
   format,
+  Input,
   type Job,
   JobStatus,
   type MediaElementState,
   MediaPlayer,
   type MediaSpanData,
   PageHeader,
+  Popover,
   Skeleton,
   Status,
   Tabs,
   TextLink,
   type TranscriptGroup,
   TranscriptView,
+  useAsyncAction,
   useExpanded,
   useLoad,
   useWorkflowRun,
@@ -72,8 +88,29 @@ export const UNSURE = 0.65
 /** "Scene 3". */
 export const sceneName = (s: Pick<Scene, 'index'>) => `Scene ${s.index + 1}`
 
+/** A chapter's title: the person's, else the namer's, else none yet. */
+export const chapterTitle = (c: Pick<Chapter, 'name' | 'title'>) => c.title ?? c.name?.title ?? null
+
 /** "Chapter 2: Christmas dinner", or "Chapter 2" before it is named. */
-export const chapterName = (c: Pick<Chapter, 'index' | 'name'>) => `Chapter ${c.index + 1}${c.name ? `: ${c.name.title}` : ''}`
+export const chapterName = (c: Pick<Chapter, 'index' | 'name' | 'title'>) => {
+  const title = chapterTitle(c)
+  return `Chapter ${c.index + 1}${title ? `: ${title}` : ''}`
+}
+
+/** What the person's mark on a scene says, or null for none. */
+export function describeMark(mark: boolean | null | undefined): string | null {
+  if (mark === true) return 'You started a chapter here'
+  if (mark === false) return 'You kept this with the chapter before'
+  return null
+}
+
+/** The chapters' check (the `check_chapters` gate) as the page tells it: to do, done, or nothing to say yet. */
+export function checkOf(run: Pick<WorkflowRun, 'stages'>): { state: 'waiting' } | { state: 'done'; at: string } | null {
+  const gate = run.stages.find(s => s.name === 'check_chapters')
+  if (gate?.state === 'waiting') return { state: 'waiting' }
+  if (gate?.state === 'done' && gate.last) return { state: 'done', at: gate.last.at }
+  return null
+}
 
 /** The page's finding: how many chapters and scenes over how long, then what is still to come. */
 export function describeScenes(d: Scenes): string {
@@ -92,6 +129,7 @@ export function describeScenes(d: Scenes): string {
   if (unsure) parts.push(`${unsure} ${unsure === 1 ? 'start' : 'starts'} to check`)
   if (d.analysis.transcript === false) parts.push('speech still to come')
   if (d.chapters === null) parts.push('chapters still to come')
+  else if (d.regrouping) parts.push('grouping the chapters again by your marks')
   else if (d.chapters.some(c => c.name === null)) parts.push('chapter names still to come')
   return `${parts.join('; ')}.`
 }
@@ -237,6 +275,14 @@ function TapeSteps({ id, run }: { id: number; run: Job<WorkflowRun> }) {
             label="Steps of the analysis"
             stages={r.stages}
             onRetry={() => api.post('/api/workflows/tape/subjects/{subject}/run', { path: { subject: subjectOf(id) } }).then(run.poll)}
+            onApprove={stage =>
+              api
+                .post('/api/workflows/tape/subjects/{subject}/stages/{stage}/approve', {
+                  path: { subject: subjectOf(id), stage: stage.name },
+                  json: { value: null },
+                })
+                .then(run.poll)
+            }
           />
         </div>
       )}
@@ -259,6 +305,25 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
   const spanKinds = useMemo(() => ({ scene: { label: 'Scene', behaviour: 'off' as const } }), [])
   const marks = useMemo(() => soundMarks(scenes, data.chapters), [scenes, data.chapters])
   const playing = scenes.findIndex(s => time >= s.start && time < s.end)
+  // A correction answers the scenes as they are now: shown at once, and the run read again, since a mark queues the job.
+  const queryClient = useQueryClient()
+  const { poll } = run
+  const corrections = useMemo<Corrections>(() => {
+    const shown = (d: Scenes) => {
+      queryClient.setQueryData(keys.scenes(source.id), d)
+      poll()
+    }
+    return {
+      mark: (scene, start) =>
+        api
+          .put('/api/sources/{source_id}/scenes/{scene}/chapter-mark', { path: { source_id: source.id, scene }, json: { start } })
+          .then(shown),
+      rename: (scene, title) =>
+        api
+          .put('/api/sources/{source_id}/scenes/{scene}/chapter-title', { path: { source_id: source.id, scene }, json: { title } })
+          .then(shown),
+    }
+  }, [queryClient, poll, source.id])
 
   return (
     <div className="grid gap-8">
@@ -298,7 +363,10 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
           ) : view === 'transcript' ? (
             <TapeTranscript sourceId={source.id} ready={analysis.transcript} scenes={scenes} time={time} onSeek={seek} />
           ) : (
-            <SceneList scenes={scenes} chapters={data.chapters} playing={playing} time={time} onSeek={seek} />
+            <div className="grid gap-8">
+              {data.chapters?.length ? <ChaptersCheck id={source.id} run={run} regrouping={data.regrouping} /> : null}
+              <SceneList scenes={scenes} chapters={data.chapters} playing={playing} time={time} onSeek={seek} corrections={corrections} />
+            </div>
           )
         }
       </Tabs>
@@ -339,17 +407,19 @@ function SceneList({
   playing,
   time,
   onSeek,
+  corrections,
 }: {
   scenes: Scene[]
   chapters: Chapter[] | null
   playing: number
   time: number
   onSeek: (t: number, play?: boolean) => void
+  corrections: Corrections
 }) {
   const open = useExpanded({ param: 'scene' })
-  const list = (label: string, of: Scene[]) => (
+  const list = (label: string, of: Scene[], marking: boolean) => (
     <ol aria-label={label} className="grid gap-6">
-      {of.map(s => (
+      {of.map((s, i) => (
         <SceneItem
           key={s.index}
           scene={s}
@@ -357,30 +427,87 @@ function SceneList({
           open={open.isOpen(String(s.index))}
           onOpenChange={o => open.setOpen(String(s.index), o)}
           onSeek={onSeek}
+          // A scene inside a chapter can start one; the first of a chapter is joined from the chapter's header.
+          onMark={marking && s.index > 0 && (i > 0 || s.mark !== null) ? corrections.mark : undefined}
         />
       ))}
     </ol>
   )
-  if (!chapters?.length) return list('Scenes', scenes)
+  if (!chapters?.length) return list('Scenes', scenes, false)
   return (
     <ol aria-label="Chapters" className="grid gap-12">
       {chapters.map(c => (
-        <ChapterItem key={c.index} chapter={c} onSeek={onSeek}>
-          {list(`Scenes of ${chapterName(c).toLowerCase()}`, c.scenes.map(i => scenes[i]).filter(Boolean))}
+        <ChapterItem key={c.index} chapter={c} onSeek={onSeek} first={scenes[c.scenes[0]]} corrections={corrections}>
+          {list(`Scenes of ${chapterName(c).toLowerCase()}`, c.scenes.map(i => scenes[i]).filter(Boolean), true)}
         </ChapterItem>
       ))}
     </ol>
   )
 }
 
+/** The person's corrections, each answering the scenes as they are after it. */
+type Corrections = {
+  /** A chapter starts at the scene (true), it stays with the chapter before (false), or the grouping decides (null). */
+  mark: (scene: number, start: boolean | null) => Promise<void>
+  /** The person's title for the chapter that starts at scene `scene` (not its place in the list, which a regroup
+   *  renumbers), or null for the namer's. */
+  rename: (scene: number, title: string | null) => Promise<void>
+}
+
+/** The chapters' check: the gate waiting for the person, or when they confirmed them; regrouping says so first. */
+function ChaptersCheck({ id, run, regrouping }: { id: number; run: Job<WorkflowRun>; regrouping: boolean }) {
+  const confirm = useAsyncAction(() =>
+    api
+      .post('/api/workflows/tape/subjects/{subject}/stages/{stage}/approve', {
+        path: { subject: subjectOf(id), stage: 'check_chapters' },
+        json: { value: null },
+      })
+      .then(run.poll),
+  )
+  // In a div, so the status is as wide as its words, not the list's grid column.
+  if (regrouping)
+    return (
+      <div>
+        <Status tone="info">Grouping the chapters again by your marks</Status>
+      </div>
+    )
+  const check = run.status === 'ready' ? checkOf(run.data) : null
+  if (check?.state === 'done')
+    return (
+      <div>
+        <Status tone="success">{`Chapters confirmed ${format.ago(check.at)}`}</Status>
+      </div>
+    )
+  if (check?.state !== 'waiting') return null
+  return (
+    <div className="flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-2">
+      <p className="type-body min-w-0 flex-1">
+        Are these the tape’s occasions? Start a chapter at a scene, join one to the chapter before or rename it, then confirm them.
+      </p>
+      <AsyncButton
+        variant="default"
+        phase={confirm.phase}
+        error={confirm.error}
+        labels={{ idle: 'Confirm the chapters', pending: 'Confirming…', done: 'Confirmed', error: 'Try again' }}
+        onClick={() => void confirm.run()}
+      />
+    </div>
+  )
+}
+
 /** A chapter: its name, span and summary, what the namer guessed and why, a doubt where there is one, then its scenes. */
 function ChapterItem({
   chapter,
+  first,
   onSeek,
+  corrections,
   children,
 }: {
   chapter: Chapter
+  /** Its first scene, where joining it to the chapter before is marked. */
+  first: Scene | undefined
   onSeek: (t: number, play?: boolean) => void
+  corrections: Corrections
   children: ReactNode
 }) {
   const name = chapterName(chapter)
@@ -400,6 +527,7 @@ function ChapterItem({
           </p>
         </div>
         <p className="type-body">{n ? n.summary : 'Not named yet: the name step writes a title and summary for each chapter.'}</p>
+        {chapter.title && n && <p className="type-body-sm text-muted-foreground">Your title. The namer called it “{n.title}”.</p>}
         {n && n.inferred.length > 0 && (
           <p className="type-body-sm text-muted-foreground">
             Guessed: {n.inferred.map(g => `${g.guess}, because ${g.because}`).join('; ')}.
@@ -410,12 +538,85 @@ function ChapterItem({
             <Play aria-hidden />
             Play chapter {chapter.index + 1}
           </Button>
+          <RenameChapter chapter={chapter} rename={corrections.rename} />
+          {chapter.index > 0 && first && first.mark === null && (
+            <MarkButton
+              label={`Join chapter ${chapter.index + 1} to chapter ${chapter.index}`}
+              run={() => corrections.mark(first.index, false)}
+            />
+          )}
           {unsure !== null && <Status tone="warning">{`Start unsure (${format.share(unsure)}): ${chapter.reasons.join(', ')}`}</Status>}
           {n?.mixed && <Status tone="warning">May be more than one occasion</Status>}
         </div>
       </div>
       {children}
     </li>
+  )
+}
+
+/** A correction's button: its own pending and error, as each scene and chapter has one. */
+function MarkButton({ label, run, variant = 'outline' }: { label: string; run: () => Promise<void>; variant?: 'outline' | 'ghost' }) {
+  const action = useAsyncAction(run)
+  return (
+    <AsyncButton
+      size="sm"
+      variant={variant}
+      phase={action.phase}
+      error={action.error}
+      labels={{ idle: label, pending: 'Saving…', done: 'Saved', error: 'Try again' }}
+      onClick={() => void action.run()}
+    />
+  )
+}
+
+/** A chapter's own title: one field in a Popover, and the namer's back when the person has given one. */
+function RenameChapter({ chapter, rename }: { chapter: Chapter; rename: Corrections['rename'] }) {
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState(chapterTitle(chapter) ?? '')
+  const number = chapter.index + 1
+  const save = useAsyncAction(
+    async (to: string | null) => {
+      await rename(chapter.scenes[0], to)
+      setOpen(false)
+    },
+    { validate: to => ({ title: to === null || to.trim() ? undefined : 'Give the chapter a title of a word or more.' }) },
+  )
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    void save.run(title)
+  }
+  return (
+    <Popover
+      label={`Title of chapter ${number}`}
+      open={open}
+      onOpenChange={o => {
+        setOpen(o)
+        if (o) setTitle(chapterTitle(chapter) ?? '')
+      }}
+      trigger={
+        <Button size="sm" variant="outline">
+          Rename chapter {number}
+        </Button>
+      }
+    >
+      <form onSubmit={onSubmit} noValidate className="grid gap-3">
+        <Field
+          label={`Title of chapter ${number}`}
+          hint="Yours is shown in place of the namer’s."
+          error={save.fieldErrors.title ?? (save.phase === 'error' ? save.error : undefined)}
+        >
+          <Input value={title} maxLength={120} onChange={e => setTitle(e.target.value)} />
+        </Field>
+        <div className="flex flex-wrap gap-2">
+          <AsyncButton type="submit" size="sm" phase={save.phase} labels={{ idle: 'Save title', pending: 'Saving…', done: 'Saved' }} />
+          {chapter.title && chapter.name && (
+            <Button size="sm" variant="ghost" onClick={() => void save.run(null)}>
+              Use “{chapter.name.title}”
+            </Button>
+          )}
+        </div>
+      </form>
+    </Popover>
   )
 }
 
@@ -426,14 +627,18 @@ const SceneItem = memo(function SceneItem({
   open,
   onOpenChange,
   onSeek,
+  onMark,
 }: {
   scene: Scene
   time: number | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
   onSeek: (t: number, play?: boolean) => void
+  /** Where the person may mark a chapter's start at this scene (stable: the page's one `corrections.mark`). */
+  onMark?: Corrections['mark']
 }) {
   const name = sceneName(scene)
+  const marked = describeMark(scene.mark)
   const d = scene.description
   const faces = describeFaces(scene.faces)
   const headingId = `scene-${scene.index}-heading`
@@ -466,6 +671,13 @@ const SceneItem = memo(function SceneItem({
         {scene.confidence !== null && scene.confidence < UNSURE && (
           <Status tone="warning">{`Start unsure (${format.share(scene.confidence)})`}</Status>
         )}
+        {marked && <Status tone="info">{marked}</Status>}
+        {onMark &&
+          (marked ? (
+            <MarkButton variant="ghost" label={`Undo your mark on ${name.toLowerCase()}`} run={() => onMark(scene.index, null)} />
+          ) : (
+            <MarkButton variant="ghost" label={`Start a chapter at ${name.toLowerCase()}`} run={() => onMark(scene.index, true)} />
+          ))}
       </div>
       {scene.speech ? (
         <blockquote className="border-l-2 border-border pl-3 type-body-sm text-muted-foreground">“{scene.speech}”</blockquote>

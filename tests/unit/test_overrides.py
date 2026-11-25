@@ -47,7 +47,7 @@ def test_locks_and_bans_hold_side_by_side_for_other_targets(db_session: Session)
 @pytest.mark.parametrize(
     ("target", "mode", "scope", "author", "message"),
     [
-        ("frame", "require", "target", "J", "target is one of result, scene, clip, not 'frame'"),
+        ("frame", "require", "target", "J", "target is one of result, scene, clip, tape, not 'frame'"),
         ("scene", "must", "target", "J", "mode is one of advisory, prefer, require, forbid"),
         ("scene", "require", "world", "J", "scope is one of target, source, all"),
         ("scene", "require", "target", " ", "says who made it"),

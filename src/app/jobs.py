@@ -33,7 +33,11 @@ Stages (each finds its result stored, and makes nothing, when the same request r
 - `describe`: a description of each scene, which needs the scenes and the transcript, so every description has its
   speech.
 - `chapters`: the scenes grouped by occasion (`chapters.group`, this app's own code over the scenes' pictures and
-  descriptions), then `name_chapters`: a title and summary for each from strata-models' `chapter-name`.
+  descriptions), then `name_chapters`: a title and summary for each from strata-models' `chapter-name`. The person's
+  chapter marks are one of the tape's inputs (`chapter_marks`), so a mark groups the chapters again.
+- `check_chapters`: a gate, the person saying the chapters are right (`Pipeline.approve`, the shared workflow route's
+  approve). It holds until the names it was given for change, so a regroup asks again. Nothing waits on it yet; it is
+  the tape's "to check" state, and a checked tape's chapters are what `chapters.fit` learns the weights from.
 
 Restoration (strata-models' `video-enhance`) comes later in the pipeline, from the raw source."""
 
@@ -51,7 +55,7 @@ from strata_python import files
 from strata_python.db import url_for
 from strata_python.db.web import Database
 from strata_python.tasks.queue import Handler, Job, Queue, Worker
-from strata_python.workflow import Context, Pipeline, request_key, step
+from strata_python.workflow import Context, Pipeline, gate, request_key, step
 from strata_python.workflow.store import DbStore, enqueue
 
 from app import chapters, db, derived, describe, scenes, shots, speech
@@ -94,13 +98,14 @@ def inputs_of(subject: str) -> dict[str, Any]:
 
 
 def inputs_in(engine: Engine, subject: str) -> dict[str, Any]:
-    """`inputs_of` on a given database (the server's, which it opened itself)."""
+    """`inputs_of` on a given database (the server's, which it opened itself). The person's chapter marks are an input
+    of the `chapters` stage, so a new mark groups the chapters again (and names those that changed)."""
     source_id = source_id_of(subject)
     with Session(engine) as s:
         source = s.get(Source, source_id)
         if source is None:
             raise KeyError(f"there is no source {source_id}")
-        return {"fingerprint": source.fingerprint}
+        return {"fingerprint": source.fingerprint, "chapter_marks": chapters.marks_key(chapters.marks(s, source))}
 
 
 def _source(s: Session, ctx: Context) -> Source:
@@ -233,8 +238,9 @@ TAPE = Pipeline(
         step("faces", _faces, needs=("keyframes",), version=_version(describe.FACE_FIELDS), label="Find the faces"),
         step("transcript", _transcript, needs=("hash",), version=_version(speech.PARAMETERS), label="Write down what is said"),
         step("describe", _describe, needs=("scenes", "transcript"), version=_version(describe.PRESET, describe.FRAMES, speech.SAID_CHARS), label="Describe the scenes"),
-        step("chapters", _chapters, needs=("scenes", "describe"), version=_version(chapters.VERSION, chapters.PARAMETERS), label="Group the scenes into chapters"),
-        step("name_chapters", _name_chapters, needs=("chapters",), version=_version(chapters.NAME_PRESET, chapters.NAMED_SCENES, chapters.SAID_CHARS), label="Name the chapters"),
+        step("chapters", _chapters, needs=("scenes", "describe"), keys=("chapter_marks",), version=_version(chapters.VERSION, chapters.PARAMETERS), label="Group the scenes into chapters"),
+        step("name_chapters", _name_chapters, needs=("chapters",), version=_version(chapters.NAME_PRESET, chapters.NAME_VERSION, chapters.NAMED_SCENES, chapters.SAID_CHARS), label="Name the chapters"),
+        gate("check_chapters", needs=("name_chapters",), label="Check the chapters"),
     ],
 )  # fmt: skip
 
@@ -296,6 +302,12 @@ def _unstarted(st: DbStore, subject: str) -> bool:
     except KeyError:  # the source is gone
         return False
     return any(state in ("ready", "stale") for state in TAPE.status(st, subject, inputs).states.values())
+
+
+def checked(st: DbStore, source: Source | int) -> bool:
+    """Whether the person has said the tape's chapters (as they stand) are right: its `check_chapters` gate holds."""
+    subject = subject_of(source)
+    return TAPE.status(st, subject, inputs_of(subject)).states.get("check_chapters") == "done"
 
 
 def advance_tape(job: Job) -> dict[str, Any]:

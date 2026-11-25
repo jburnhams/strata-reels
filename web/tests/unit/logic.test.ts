@@ -2,15 +2,17 @@ import { readFileSync } from 'node:fs'
 import { colorSchemeScript, format } from 'strata-react'
 import { describe, expect, it } from 'vitest'
 import { initialSources, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
-import { tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
+import { tapeRunChecked, tapeRunDone, tapeRunPartWay, tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
 import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
 import { describePicture, describeSources, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
 import {
   aspectOf,
   chapterName,
+  checkOf,
   describeFaces,
   describeJobNow,
+  describeMark,
   describeScenes,
   sceneName,
   soundMarks,
@@ -89,7 +91,9 @@ describe('the tape page', () => {
   it('names chapters from one, and marks the sound at chapters once there are any', () => {
     const [first] = tapeScenes.chapters!
     expect(chapterName(first)).toBe('Chapter 1: Christmas morning')
-    expect(chapterName({ index: 1, name: null })).toBe('Chapter 2')
+    expect(chapterName({ index: 1, name: null, title: null })).toBe('Chapter 2')
+    expect(chapterName({ ...first, title: 'Presents at home' })).toBe('Chapter 1: Presents at home') // the person's wins
+    expect(chapterName({ index: 1, name: null, title: 'Tea' })).toBe('Chapter 2: Tea')
     expect(soundMarks(tapeScenes.scenes, tapeScenes.chapters).map(m => m.label)).toEqual([
       'Chapter 1: Christmas morning',
       'Chapter 2: Christmas dinner',
@@ -97,6 +101,16 @@ describe('the tape page', () => {
     ])
     expect(soundMarks(tapeScenes.scenes, null)).toHaveLength(6)
     expect(describeScenes({ ...tapeScenes, chapters: null })).toMatch(/; chapters still to come\.$/)
+    expect(describeScenes({ ...tapeScenes, regrouping: true })).toMatch(/; grouping the chapters again by your marks\.$/)
+  })
+
+  it('says what a mark on a scene says, and where the chapters’ check stands', () => {
+    expect(describeMark(true)).toBe('You started a chapter here')
+    expect(describeMark(false)).toBe('You kept this with the chapter before')
+    expect(describeMark(null)).toBeNull()
+    expect(checkOf(tapeRunDone)).toEqual({ state: 'waiting' })
+    expect(checkOf(tapeRunChecked)).toEqual({ state: 'done', at: tapeRunChecked.stages.at(-1)!.last!.at })
+    expect(checkOf(tapeRunPartWay)).toBeNull() // still blocked behind the steps
   })
 
   it('says what the tape’s job is doing now', () => {

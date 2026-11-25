@@ -199,6 +199,7 @@ export const tapeScenes: Scenes = {
     named: 3,
   },
   waiting: null,
+  regrouping: false,
   chapters: [
     {
       index: 0,
@@ -215,6 +216,7 @@ export const tapeScenes: Scenes = {
         mixed: false,
         model: 'qwen3.5-9b-vl',
       },
+      title: null,
     },
     {
       index: 1,
@@ -231,6 +233,7 @@ export const tapeScenes: Scenes = {
         mixed: false,
         model: 'qwen3.5-9b-vl',
       },
+      title: null,
     },
     {
       index: 2,
@@ -247,6 +250,7 @@ export const tapeScenes: Scenes = {
         mixed: true,
         model: 'qwen3.5-9b-vl',
       },
+      title: null,
     },
   ],
   scenes: plan.map((p, index) => {
@@ -264,6 +268,7 @@ export const tapeScenes: Scenes = {
       description: p.description,
       faces: p.faces,
       speech: p.speech,
+      mark: null,
     }
   }),
 }
@@ -303,6 +308,7 @@ export const waitingScenes = (id: number): Scenes => ({
   waiting: 'Grouping the shots into scenes (the keyframes and scenes steps).',
   scenes: [],
   chapters: null,
+  regrouping: false,
 })
 
 /** `GET /api/sources/5/transcript`: what is said, phrase by phrase, with one doubtful stretch of hiss. */
@@ -414,23 +420,29 @@ const STAGES: [string, string, string[]][] = [
   ['describe', 'Describe the scenes', ['scenes', 'transcript']],
   ['chapters', 'Group the scenes into chapters', ['scenes', 'describe']],
   ['name_chapters', 'Name the chapters', ['chapters']],
+  ['check_chapters', 'Check the chapters', ['name_chapters']],
 ]
+/** The person's steps: approved, never run. */
+const GATES = new Set(['check_chapters'])
 
 type StageState = WorkflowRun['stages'][number]['state']
 
-/** A tape's `WorkflowRun` with each stage done unless `states` says otherwise; `errors` are the failed stages' sentences. */
+/** A tape's `WorkflowRun` with each stage done unless `states` says otherwise (the chapters' check waits for the person
+ *  unless it says done); `errors` are the failed stages' sentences. */
 export function tapeRun(
   source: number,
   states: Partial<Record<string, StageState>> = {},
   { job: running = null, errors = {} }: { job?: Job | null; errors?: Record<string, string> } = {},
 ): WorkflowRun {
   const stages = STAGES.map(([name, title, needs], i) => {
-    const state = states[name] ?? 'done'
+    const gate = GATES.has(name)
+    const before = i > 0 ? (states[STAGES[i - 1][0]] ?? 'done') : 'done'
+    const state = states[name] ?? (gate ? (before === 'done' ? 'waiting' : 'blocked') : 'done')
     const ran = state === 'done' || state === 'failed' || state === 'stale'
     return {
       name,
       title,
-      gate: false,
+      gate,
       needs,
       state,
       last: ran
@@ -441,27 +453,30 @@ export function tapeRun(
             elapsed_s: [212, 1480, 96, 31, 640, 75, 4, 58, 2210, 380, 1, 42][i] ?? 0,
             metrics: {},
             error: errors[name] ?? null,
-            by: null,
+            by: gate ? 'person' : null,
             data: null,
           }
         : null,
     }
   })
   const failed = stages.filter(s => s.state === 'failed').map(s => s.name)
+  const waiting = stages.filter(s => s.state === 'waiting').map(s => s.name)
   const done = stages.every(s => s.state === 'done')
   return {
     pipeline: 'tape',
     subject: `source:${source}`,
-    state: failed.length ? 'failed' : done ? 'done' : 'blocked',
-    waiting: [],
+    state: failed.length ? 'failed' : waiting.length ? 'waiting' : done ? 'done' : 'blocked',
+    waiting,
     failed,
     stages,
     job: running,
   }
 }
 
-/** `GET /api/workflows/tape/subjects/source:5`: every stage done, by the tape's job. */
+/** `GET /api/workflows/tape/subjects/source:5`: every stage done, by the tape's job; the chapters wait for the check. */
 export const tapeRunDone = tapeRun(tapeId, {}, { job: job(5, tapeId, 'done') })
+/** The same, the person having confirmed the chapters. */
+export const tapeRunChecked = tapeRun(tapeId, { check_chapters: 'done' }, { job: job(5, tapeId, 'done') })
 /** Part way: the browser copy, the sound and the descriptions still to come, the job on the copy. */
 export const tapeRunPartWay = tapeRun(
   tapeId,

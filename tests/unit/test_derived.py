@@ -114,7 +114,7 @@ def test_a_tape_added_again_makes_nothing_again(engine, tmp_path, made, tape_mod
     q = jobs.queue(engine)
     (ran,) = jobs.work(q) if jobs.ingest_later(q, source) else []
     assert ran.result is not None
-    assert ran.result["state"] == "done"
+    assert ran.result["state"] == "waiting"  # every stage done; the chapters wait for the person's check
     records = jobs.store().load(jobs.subject_of(source))
     assert records["proxy"].metrics == {"new": True}
     proxy = records["proxy"].data  # the result it stands on, so what reads it runs again only for another one

@@ -2,6 +2,7 @@
 test's migrated database with strata-models stood in for over real HTTP (`tape_models`: two scenes with black between
 them, unlike pictures, both described as a birthday)."""
 
+import json
 import math
 
 import pytest
@@ -9,7 +10,7 @@ from probes import TAPE, answer
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from app import chapters, cli, describe, jobs, scenes, shots, sources, speech
+from app import chapters, cli, describe, jobs, overrides, scenes, shots, sources, speech
 from app.models import Source
 
 
@@ -65,7 +66,8 @@ def test_black_between_scenes_tips_a_doubtful_boundary_and_nothing_to_compare_sa
     none = chapters.group(p, [None, None, None], [None, None, None])
     assert none["boundaries"][0] == {
         "scene": 1, "at": "10", "level": "chapter", "confidence": 0.5, "similarity": None, "shared": [],
-        "reasons": ["nothing to compare"],
+        "reasons": ["nothing to compare"], "guess": 0.5, "marked": None,
+        "signals": {"similarity": None, "share": None, "black": False, "moved": False},
     }  # fmt: skip
     worded = chapters.group(p, [None, None, None], words)
     assert [c["scenes"] for c in worded["chapters"]] == [[0, 1], [2]]
@@ -176,3 +178,182 @@ def test_the_chapters_command_lists_each_with_its_name(capsys, engine, tmp_path,
     assert "scenes at 0:10" in out
     assert cli.main(["chapters", str(source.id), "--json"]) == 0
     assert '"title": "Scenes from 0:00"' in capsys.readouterr().out
+
+
+def test_a_mark_settles_a_boundary_and_keeps_the_guess_and_signals_beside_it():
+    p = payload(3)
+    pictures = [[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]]  # alike, then unlike
+    guessed = chapters.group(p, pictures, [None, None, None])
+    assert [c["scenes"] for c in guessed["chapters"]] == [[0, 1], [2]]
+    marked = chapters.group(p, pictures, [None, None, None], marks={"10": True, "20": False})
+    assert [c["scenes"] for c in marked["chapters"]] == [[0], [1, 2]]
+    start, joined = marked["boundaries"]
+    assert (start["confidence"], start["marked"], start["reasons"][-1]) == (1.0, True, "you started a chapter here")
+    assert (joined["confidence"], joined["marked"]) == (0.0, False)
+    assert joined["reasons"][-1] == "you put it with the chapter before"
+    assert joined["guess"] > 0.99  # what the pictures said, kept for fitting
+    assert joined["signals"] == {"similarity": 0.0, "share": None, "black": False, "moved": False}
+    assert marked["marks"] == {"10": True, "20": False}
+    assert marked["chapters"][1]["confidence"] == 1.0  # it starts where the person said, against the guess
+
+
+def example(similarity: float, starts: bool) -> chapters.Example:
+    return chapters.Example(similarity, None, black=False, moved=False, starts=starts)
+
+
+def test_the_weights_are_fitted_to_what_the_person_said_and_held_near_todays():
+    # this person starts a chapter wherever two scenes' pictures are below 0.9 alike, where the weights say 0.8
+    judged = [example(0.70 + i * 0.01, 0.70 + i * 0.01 < 0.9) for i in range(30)]
+    fitted = chapters.fit(judged)
+    assert fitted["similar"] > 0.85
+    now, then = chapters.agreement(judged, chapters.PARAMETERS), chapters.agreement(judged, fitted)
+    assert now is not None
+    assert then is not None
+    assert then > now
+    assert then >= 0.9
+    held = chapters.fit(judged, prior=1000.0)  # held hard: they hardly move
+    assert abs(held["similar"] - chapters.PARAMETERS["similar"]) < 0.02
+    assert chapters.fit([]) == {k: float(v) for k, v in chapters.PARAMETERS.items()}
+    assert chapters.agreement([], chapters.PARAMETERS) is None
+    worded = chapters.Example(None, 0.5, black=True, moved=True, starts=False)
+    assert chapters.logit_of(worded, chapters.PARAMETERS) == pytest.approx(-3.0 + 2.0 + 0.5)
+
+
+def test_what_a_grouping_teaches_is_its_marks_and_all_of_a_checked_tape():
+    got = chapters.group(payload(3), [[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]], [None] * 3, marks={"10": True})
+    marked_only = chapters.examples_of(got, checked=False)
+    assert [e.starts for e in marked_only] == [True]
+    every = chapters.examples_of(got, checked=True)
+    assert [(e.similarity, e.starts) for e in every] == [(1.0, True), (0.0, True)]
+    old = {"boundaries": [{"level": "chapter", "reasons": [], "marked": None}]}  # VERSION 1 kept no signals
+    assert chapters.examples_of(old, checked=True) == []
+
+
+def named_by_model(tape_models) -> int:
+    return sum(j["role"] == "chapter-name" for j in tape_models.jobs)
+
+
+def test_marks_regroup_the_chapters_and_a_chapter_left_as_it_was_keeps_its_name(engine, tmp_path, tape_models):
+    with Session(engine) as s:
+        f = tmp_path / "bare.mkv"
+        f.write_bytes(b"bare" * 500)
+        bare, _ = sources.add(s, str(f), probe=answer(TAPE))
+        with pytest.raises(KeyError, match="no scenes yet"):
+            chapters.mark(s, bare, 1, True, author="Ada")
+        with pytest.raises(KeyError, match="no chapters yet"):
+            chapters.rename(s, bare, 0, "Tea", author="Ada")
+    source = described(engine, tmp_path)
+    with Session(engine) as s:
+        src = s.get(Source, source.id)
+        assert src is not None
+        apart, _ = chapters.find_chapters(s, src)
+        chapters.name(s, src)
+        asked = named_by_model(tape_models)
+        for scene in (0, 2):
+            with pytest.raises(ValueError, match="scenes 2 to 2"):
+                chapters.mark(s, src, scene, True, author="Ada")
+        chapters.mark(s, src, 1, False, author="Ada")  # one birthday: the black was the camcorder paused
+        assert chapters.marks(s, src) == {"10": False}
+        assert chapters.current(s, src) == apart  # until it is grouped again
+        assert not chapters.follows_marks(s, src, apart)
+        together, new = chapters.find_chapters(s, src)
+        assert new
+        assert [c["scenes"] for c in together.payload["chapters"]] == [[0, 1]]
+        assert chapters.current(s, src) == together
+        assert chapters.follows_marks(s, src, together)
+        assert [n for _, n in chapters.name(s, src)] == [True]  # the joined chapter is new: asked
+        assert named_by_model(tape_models) == asked + 1
+        chapters.mark(s, src, 1, None, author="Ada")  # taken back: grouped as before, and named as before
+        chapters.mark(s, src, 1, None, author="Ada")  # nothing left to take back
+        assert chapters.marks(s, src) == {}
+        again, new = chapters.find_chapters(s, src)
+        assert new  # the joined grouping replaced it, so it is grouped again: cheap, and the same
+        assert again.payload == apart.payload
+        assert chapters.current(s, src) == again
+        assert [n for _, n in chapters.name(s, src)] == [False, False]
+        assert named_by_model(tape_models) == asked + 1
+        assert set(chapters.current_names(s, src)) == {"0", "10"}
+
+
+def test_a_chapter_takes_the_persons_title_and_gives_it_back(engine, tmp_path, tape_models):
+    source = described(engine, tmp_path)
+    with Session(engine) as s:
+        src = s.get(Source, source.id)
+        assert src is not None
+        chapters.find_chapters(s, src)
+        chapters.rename(s, src, 1, "  Grandma's   birthday ", author="Ada")
+        assert chapters.titles(s, src) == {"10": "Grandma's birthday"}
+        chapters.rename(s, src, 1, "Grandma's birthday", author="Ada")  # said again: nothing new
+        assert len(overrides.active(s, "tape", src.id)) == 1
+        chapters.rename(s, src, 1, "Tea at Grandma's", author="Ada")
+        (held,) = overrides.active(s, "tape", src.id)
+        assert held.value == {"at": "10", "title": "Tea at Grandma's"}
+        chapters.rename(s, src, 1, None, author="Ada")
+        assert chapters.titles(s, src) == {}
+        for chapter, title, why in (
+            (2, "Tea", "no chapter starts at scene 3"),
+            (0, "  ", "a word or more"),
+            (0, "x" * 121, "at most"),
+        ):
+            with pytest.raises(ValueError, match=why):
+                chapters.rename(s, src, chapter, title, author="Ada")
+
+
+def test_the_page_marks_and_renames_chapters_and_the_tape_is_grouped_again(client, engine, tmp_path, tape_models):
+    source = described(engine, tmp_path)
+    with Session(engine) as s:
+        src = s.get(Source, source.id)
+        assert src is not None
+        chapters.find_chapters(s, src)
+        chapters.name(s, src)
+    base = f"/api/sources/{source.id}"
+    marked = client.put(f"{base}/scenes/1/chapter-mark", json={"start": False})
+    assert marked.status_code == 200
+    body = marked.json()
+    assert [sc["mark"] for sc in body["scenes"]] == [None, False]
+    assert body["regrouping"]  # the job that groups them again is queued
+    assert len(body["chapters"]) == 2
+    jobs.work(jobs.queue(engine))
+    after = client.get(f"{base}/scenes").json()
+    assert (after["regrouping"], [c["scenes"] for c in after["chapters"]]) == (False, [[0, 1]])
+    titled = client.put(f"{base}/scenes/0/chapter-title", json={"title": "Grandma's birthday"}).json()
+    assert titled["chapters"][0]["title"] == "Grandma's birthday"
+    assert titled["chapters"][0]["name"]["title"] == "Scenes from 0:00"  # the namer's, kept beside it
+    refused = client.put(f"{base}/scenes/0/chapter-mark", json={"start": True})
+    assert (refused.status_code, refused.json()["detail"]) == (
+        400,
+        "a chapter can be marked at scenes 2 to 2, not scene 1",
+    )
+    assert client.put("/api/sources/99/scenes/0/chapter-title", json={"title": "x"}).status_code == 404
+    assert client.put(f"{base}/scenes/0/chapter-title", json={"title": None}).json()["chapters"][0]["title"] is None
+
+
+def test_the_fit_command_learns_from_marks_and_checked_tapes(capsys, engine, tmp_path, tape_models):
+    assert cli.main(["fit-chapters"]) == 1
+    assert "nothing to learn from yet" in capsys.readouterr().out
+    source = described(engine, tmp_path)
+    with Session(engine) as s:
+        src = s.get(Source, source.id)
+        assert src is not None
+        chapters.find_chapters(s, src)  # grouped, not yet judged: teaches nothing
+        assert cli.main(["fit-chapters"]) == 1
+        capsys.readouterr()
+        chapters.mark(s, src, 1, False, author="Ada")
+        chapters.rename(s, src, 0, "Grandma's birthday", author="Ada")
+        chapters.find_chapters(s, src)
+    assert cli.main(["fit-chapters"]) == 0
+    out = capsys.readouterr().out
+    assert "1 boundaries judged on 1 tapes (tape.mkv)" in out
+    assert "agree with you now 0%" in out
+    assert cli.main(["fit-chapters", "--json", "--prior", "5"]) == 0
+    fitted = json.loads(capsys.readouterr().out)
+    assert (fitted["boundaries"], fitted["agreement_now"]) == (1, 0.0)
+    assert fitted["fitted"]["black"] < chapters.PARAMETERS["black"]  # the black was not a new occasion here
+    assert cli.main(["chapters", str(source.id)]) == 0
+    assert "Grandma's birthday (yours)" in capsys.readouterr().out
+    with Session(engine) as s:  # the mark taken back, not grouped again yet: the old grouping's labels no longer hold
+        src = s.get(Source, source.id)
+        assert src is not None
+        chapters.mark(s, src, 1, None, author="Ada")
+    assert cli.main(["fit-chapters"]) == 1
+    assert "nothing to learn from yet" in capsys.readouterr().out

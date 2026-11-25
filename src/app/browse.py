@@ -82,6 +82,10 @@ class Scene(ApiModel):
     speech: str | None = Field(
         description="what is said in it (doubtful segments left out); None before the transcript"
     )
+    mark: bool | None = Field(
+        description="the person's word on whether a chapter starts at it: True starts one, False keeps it with the "
+        "chapter before, None leaves it to the grouping"
+    )
 
 
 class ChapterName(ApiModel):
@@ -107,6 +111,7 @@ class Chapter(ApiModel):
     confidence: float | None = Field(description="that the boundary before it starts a chapter; None for the first")
     reasons: list[str] = Field(description="why the boundary before it is one, in words")
     name: ChapterName | None
+    title: str | None = Field(description="the person's title for it, which wins over the name's; None for none")
 
 
 class Analysis(ApiModel):
@@ -132,6 +137,9 @@ class Scenes(ApiModel):
     waiting: str | None
     scenes: list[Scene]
     chapters: list[Chapter] | None = Field(description="None before the scenes are grouped into chapters")
+    regrouping: bool = Field(
+        description="the person's marks are newer than the chapters shown: they are being grouped again"
+    )
 
 
 class Word(ApiModel):
@@ -212,6 +220,7 @@ def scenes_of(db: Session, source: Source) -> Scenes:
     told = describe.current_descriptions(db, source)
     grouped_chapters = chapters.current(db, source) if grouped is not None else None
     names = chapters.current_names(db, source) if grouped_chapters is not None else {}
+    marks = chapters.marks(db, source)
     analysis = Analysis(
         proxy=_asset(db, source, "proxy") is not None,
         thumbnails=thumbs is not None,
@@ -225,7 +234,12 @@ def scenes_of(db: Session, source: Source) -> Scenes:
     )
     if grouped is None or cut is None:
         return Scenes(
-            source=Described.of(source), analysis=analysis, waiting=_waiting(source, cut), scenes=[], chapters=None
+            source=Described.of(source),
+            analysis=analysis,
+            waiting=_waiting(source, cut),
+            scenes=[],
+            chapters=None,
+            regrouping=False,
         )
     thumb_times = (
         []
@@ -259,6 +273,7 @@ def scenes_of(db: Session, source: Source) -> Scenes:
                 description=_description(told.get(sc["start"])),
                 faces=None if faces is None else describe.people_in(faces.payload, cut.payload, sc),
                 speech=speech.said_in(said.payload, start, end) if said is not None else ("" if not sound else None),
+                mark=marks.get(sc["start"]) if i else None,
             )
         )
     return Scenes(
@@ -266,11 +281,12 @@ def scenes_of(db: Session, source: Source) -> Scenes:
         analysis=analysis,
         waiting=None,
         scenes=out,
-        chapters=None if grouped_chapters is None else _chapters(grouped_chapters, names),
+        chapters=None if grouped_chapters is None else _chapters(grouped_chapters, names, chapters.titles(db, source)),
+        regrouping=grouped_chapters is not None and not chapters.follows_marks(db, source, grouped_chapters),
     )
 
 
-def _chapters(grouped: Result, names: dict[str, Result]) -> list[Chapter]:
+def _chapters(grouped: Result, names: dict[str, Result], titles: dict[str, str]) -> list[Chapter]:
     starts = {b["scene"]: b for b in grouped.payload["boundaries"]}
     out: list[Chapter] = []
     for i, ch in enumerate(grouped.payload["chapters"]):
@@ -287,6 +303,7 @@ def _chapters(grouped: Result, names: dict[str, Result]) -> list[Chapter]:
                 name=None
                 if named is None
                 else ChapterName.model_validate({**named.payload["name"], "model": named.model}),
+                title=titles.get(ch["start"]),
             )
         )
     return out
