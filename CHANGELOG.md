@@ -16,6 +16,7 @@ Jonathan asked for chapters first, then any tape page updates, then reels as a s
 - `pyproject.toml`, `uv.lock`: strata-python `>=0.2.19`. `web/package.json`, `package-lock.json`: strata-react `^1.3.15`.
 - Tests: `tests/unit/test_chapters.py` (marks, titles, fitting, the routes, the command), `test_jobs.py`, `test_derived.py`; `web/tests/integration/TapeScreen.test.tsx` (confirm, start, undo, join, rename, refusals, regrouping), `web/tests/unit/logic.test.ts`.
 - `web/tests/visual/baselines/`: the tape page moves (the confirm line, the new buttons, a thirteenth step); `screens-tape--corrected` and `--regrouping` are new.
+- `web/strata-visual.config.ts`: the tape route waits, with the window as tall as the page, until every thumbnail has loaded. Three baseline runs on CI wrote `tape--default--wide` with the lower filmstrips loaded and compared it with them as skeletons: strata-react 1.3.15's runner waits 3 s for pictures and then shoots, and sixty MSW-answered thumbnails can take longer on the runner (strata-react #331, fixed on its main but not released). It could not be reproduced here, even with the page's CPU slowed twentyfold. To be removed after the next strata-react release.
 - `docs/progress.md`, `docs/implementation-plan.md`, `docs/overview.md` §6, `README.md`, `AGENTS.md`.
 
 **A tape's chapters: its scenes grouped by occasion and named, as two stages of the tape pipeline (branch `claude/project-thread-fejz06`)**
