@@ -28,7 +28,10 @@
 //   page through `mediaRef`: a frame of a strip, a scene's Play button, a word of the transcript and
 //   the waveform all seek it. The scenes are the player's spans; the chapters are its seek bar's marks
 //   and the waveform's, and the contents under it (strata-react's `MediaContents`), the one playing
-//   marked, so a person sees which occasion they are in and jumps to another in one press.
+//   marked, so a person sees which occasion they are in and jumps to another in one press. The seek bar
+//   marks the scenes too (fainter), each named on hover, and the player's skip buttons step by scene and
+//   by chapter, and a frame at a time at the tape's rate (strata-react #387). Stacked on a narrower screen,
+//   a playing tape floats in a corner once the player scrolls off the top, so the picture stays in sight.
 // - On a wide screen the player, its sound and the contents stay in a column of their own beside the
 //   chapters and scenes (sticky, as tall as the window), so the picture is in sight while a person reads
 //   and presses down a long tape; narrower, the column stacks above as before. The scene being played
@@ -71,6 +74,7 @@ import {
   MediaContents,
   type MediaContentsItem,
   type MediaElementState,
+  type MediaMark,
   MediaPlayer,
   type MediaSpanData,
   PageHeader,
@@ -101,6 +105,7 @@ import {
   type Transcript,
   type WorkflowRun,
 } from '../api'
+import { framesPerSecond } from './SourcesScreen'
 
 /** Under this the cut before a scene is as likely a shot change as a new scene: say so. */
 export const UNSURE = 0.65
@@ -207,15 +212,28 @@ export function transcriptGroups(t: Transcript, scenes: Scene[]): TranscriptGrou
   return groups.filter(g => g.phrases.length)
 }
 
+/** The tape's frame rate for the player's frame steps (the proxy keeps it: deinterlaced a frame at a time), or none. */
+export function frameRate(source: Source): number | undefined {
+  return framesPerSecond(source.video?.rate ?? null) ?? undefined
+}
+
 /** The waveform's marks: each chapter's start once there are chapters (the scenes are the player's spans), else each scene's. */
 export function soundMarks(scenes: Scene[], chapters: Chapter[] | null): WaveformMark[] {
   if (chapters?.length) return chapters.map(c => ({ time: c.start, label: chapterName(c), kind: 'chapter' }))
   return scenes.map(s => ({ time: s.start, label: sceneName(s), kind: 'chapter' }))
 }
 
-/** The seek bar's marks: where each chapter after the first starts (the first is the bar's start). */
-export function chapterMarks(chapters: Chapter[] | null): { time: number; label: string }[] {
-  return (chapters ?? []).filter(c => c.start > 0).map(c => ({ time: c.start, label: chapterName(c) }))
+/**
+ * The seek bar's marks, which are also what the player's skip buttons step through: each chapter after the first (the first
+ * is the bar's start) and each scene that does not start a chapter, as a fainter scene mark. So Next scene and Next chapter
+ * skim the tape as a person would; a tape with no chapters yet skips by scene and by a minute.
+ */
+export function seekMarks(scenes: Scene[], chapters: Chapter[] | null): MediaMark[] {
+  const starts = new Set((chapters ?? []).map(c => c.start))
+  return [
+    ...(chapters ?? []).filter(c => c.start > 0).map(c => ({ time: c.start, label: chapterName(c), kind: 'chapter' as const })),
+    ...scenes.filter(s => s.start > 0 && !starts.has(s.start)).map(s => ({ time: s.start, label: sceneName(s), kind: 'scene' as const })),
+  ].sort((a, b) => a.time - b.time)
 }
 
 /** The chapters as the contents beside the player: each one's name, span, and its scenes counted. */
@@ -337,7 +355,7 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
   const spans = useMemo<MediaSpanData[]>(() => scenes.map(s => ({ start: s.start, end: s.end, kind: 'scene' })), [scenes])
   const spanKinds = useMemo(() => ({ scene: { label: 'Scene', behaviour: 'off' as const } }), [])
   const marks = useMemo(() => soundMarks(scenes, data.chapters), [scenes, data.chapters])
-  const barMarks = useMemo(() => chapterMarks(data.chapters), [data.chapters])
+  const barMarks = useMemo(() => seekMarks(scenes, data.chapters), [scenes, data.chapters])
   const contents = useMemo(() => chapterContents(data.chapters), [data.chapters])
   // Pressing a chapter in the contents plays it; where the player stays in sight beside the list (its column is sticky on
   // a wide screen) the chapter's heading is also brought into view. Stacked, scrolling would take the player away.
@@ -380,6 +398,8 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
             spans={spans}
             spanKinds={spanKinds}
             marks={barMarks}
+            fps={frameRate(source)}
+            float
             mediaRef={player}
             onTimeUpdate={onTime}
             className="w-full max-w-2xl"

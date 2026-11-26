@@ -2,6 +2,15 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-26
+
+**The tape player skips by scene and chapter, steps frames and floats (branch `claude/project-thread-t8kdgj`)**
+Jonathan, looking at the tape page: the seek bar should show scene and chapter marks with tooltips that jump when pressed, the player should have frame-step and skip buttons (by scene and chapter, or by time for a file without them), and the player should float while the page scrolls. Built in strata-react (#387, PR #388) and taken up here.
+- `web/src/screens/TapeScreen.tsx`: `seekMarks` (each chapter after the first and each scene that does not start a chapter, as `kind: "scene"`) replaces `chapterMarks`; the player takes them, `fps` from the tape's rate (`frameRate`; the proxy keeps the source's rate) and `float`. The file comment says so.
+- `web/package.json`, `web/package-lock.json`: strata-react to the release with #387 (a version bump of an existing dependency).
+- `web/tests/unit/logic.test.ts`, `web/tests/integration/TapeScreen.test.tsx`: the marks, the rate, and the skip and frame buttons on the tape page.
+- `web/tests/visual/baselines/`: 29 tape page shots move (the player's new skip and frame buttons; the mock's browser copy is 2 s long, so no marks fall inside it), rewritten on the CI runner by `update-visual-baselines.yml` and looked at. PR #22.
+
 ## 2026-11-25
 
 **Polishing the tape page and the Sources list: the player beside the chapters, each tape's analysis in the list (branch `claude/project-thread-t8kdgj`)**

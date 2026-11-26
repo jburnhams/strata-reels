@@ -9,14 +9,15 @@ import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
 import {
   aspectOf,
   chapterContents,
-  chapterMarks,
   chapterName,
   checkOf,
   describeFaces,
   describeJobNow,
   describeMark,
   describeScenes,
+  frameRate,
   sceneName,
+  seekMarks,
   soundMarks,
   transcriptGroups,
 } from '../../src/screens/TapeScreen'
@@ -114,12 +115,17 @@ describe('the tape page', () => {
       'Chapter 3: The evening in front of the television',
     ])
     expect(soundMarks(tapeScenes.scenes, null)).toHaveLength(6)
-    // The seek bar's marks leave out the first chapter, which starts where the bar does; the contents keep every one.
-    expect(chapterMarks(tapeScenes.chapters).map(m => m.label)).toEqual([
-      'Chapter 2: Christmas dinner',
-      'Chapter 3: The evening in front of the television',
+    // The seek bar's marks leave out the first chapter, which starts where the bar does (the contents keep every one), and
+    // add each scene that does not start a chapter, as a scene.
+    expect(seekMarks(tapeScenes.scenes, tapeScenes.chapters).map(m => [m.label, m.kind])).toEqual([
+      ['Scene 2', 'scene'],
+      ['Scene 3', 'scene'],
+      ['Chapter 2: Christmas dinner', 'chapter'],
+      ['Scene 5', 'scene'],
+      ['Chapter 3: The evening in front of the television', 'chapter'],
     ])
-    expect(chapterMarks(null)).toEqual([])
+    expect(seekMarks(tapeScenes.scenes, null).every(m => m.kind === 'scene')).toBe(true)
+    expect(seekMarks([], null)).toEqual([])
     expect(chapterContents(tapeScenes.chapters).map(c => [c.title, c.detail])).toEqual([
       ['Chapter 1: Christmas morning', format.count(3, 'scene')],
       ['Chapter 2: Christmas dinner', format.count(2, 'scene')],
@@ -157,6 +163,8 @@ describe('the tape page', () => {
     expect(aspectOf(initialSources[0])).toBe('4/3')
     expect(aspectOf(initialSources[1])).toBe('1920/1080')
     expect(aspectOf(initialSources[2])).toBeUndefined()
+    expect(frameRate(initialSources[0])).toBe(25)
+    expect(frameRate(initialSources[2])).toBeUndefined()
     expect(aspectOf({ ...initialSources[0], video: { ...initialSources[0].video!, height: 480 } })).toBe('4/3')
     expect(aspectOf({ ...initialSources[0], video: { ...initialSources[0].video!, height: 400 } })).toBe('720/400')
   })

@@ -123,6 +123,13 @@ describe('a tape', () => {
     expect(within(list).getByRole('listitem', { name: 'Scene 4' })).toHaveAttribute('aria-current', 'time')
   })
 
+  it('skips the tape by its scenes and chapters, and a frame at a time at the tape’s rate', async () => {
+    openApp('/sources/5')
+    const playback = within(await screen.findByRole('toolbar', { name: 'Playback' }))
+    for (const name of ['Previous chapter', 'Previous scene', 'Back one frame', 'Forward one frame', 'Next scene', 'Next chapter'])
+      expect(playback.getByRole('button', { name })).toBeInTheDocument()
+  })
+
   it('brings a chapter into view beside the player where the player column stays in sight, and not where it is stacked', async () => {
     const scrolled: string[] = []
     const was = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
