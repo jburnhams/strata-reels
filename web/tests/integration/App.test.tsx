@@ -7,6 +7,7 @@ describe('the app frame', () => {
     const menu = screen.getByRole('navigation', { name: 'Main' })
     expect(within(menu).getByRole('link', { name: 'Sources' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByRole('heading', { level: 1, name: 'Sources' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/sources')
 
     await user.click(within(menu).getByRole('link', { name: 'Settings' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument()
@@ -19,7 +20,7 @@ describe('the app frame', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'No such page' })).toBeInTheDocument()
     expect(screen.getByText('There is nothing at /old/bookmark')).toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: 'Go to sources' }))
-    expect(router.state.location.pathname).toBe('/')
+    expect(router.state.location.pathname).toBe('/sources')
   })
 
   it('renders in the dark scheme', async () => {

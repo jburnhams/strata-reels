@@ -39,7 +39,23 @@ export const keys = {
   peaks: (id: number) => ['sources', id, 'peaks'] as const,
   jobs: ['jobs'],
   run: (id: number) => ['sources', id, 'run'] as const,
+  runs: ['sources', 'runs'],
 } as const
 
 /** The tape pipeline's name for a source (src/app/jobs.py `subject_of`). */
 export const subjectOf = (id: number) => `source:${String(id)}`
+
+/** The queue's task states that mean a job has ended (strata-python's queue). */
+export const FINISHED = ['done', 'failed', 'cancelled'] as const
+
+/** Every tape's run (`GET /api/workflows/tape/subjects`), all pages, keyed by source id. */
+export async function allRuns(): Promise<Map<number, WorkflowRun>> {
+  const runs = new Map<number, WorkflowRun>()
+  let after: string | undefined
+  do {
+    const page = await api.get('/api/workflows/tape/subjects', { query: { limit: 200, ...(after ? { after } : {}) } })
+    for (const run of page.items) runs.set(Number(run.subject.replace(/^source:/, '')), run)
+    after = page.next ?? undefined
+  } while (after)
+  return runs
+}

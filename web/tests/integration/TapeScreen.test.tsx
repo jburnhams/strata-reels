@@ -108,6 +108,42 @@ describe('a tape', () => {
     expect(within(list).getByRole('listitem', { name: 'Scene 4' })).toHaveAttribute('aria-current', 'time')
   })
 
+  it('lists the chapters beside the player, marks the one playing, and plays one from its start', async () => {
+    const { user } = openApp('/sources/5')
+    const contents = await screen.findByRole('list', { name: 'Chapters of the tape' })
+    const items = within(contents).getAllByRole('listitem')
+    expect(items.map(i => i.getAttribute('aria-current'))).toEqual(['time', null, null])
+    await user.click(within(contents).getByRole('button', { name: /^Play Chapter 2: Christmas dinner, from 40:12$/ }))
+    expect(
+      within(contents)
+        .getAllByRole('listitem')
+        .map(i => i.getAttribute('aria-current')),
+    ).toEqual([null, 'time', null])
+    const list = screen.getByRole('list', { name: 'Chapters' })
+    expect(within(list).getByRole('listitem', { name: 'Scene 4' })).toHaveAttribute('aria-current', 'time')
+  })
+
+  it('brings a chapter into view beside the player where the player column stays in sight, and not where it is stacked', async () => {
+    const scrolled: string[] = []
+    const was = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.id)
+    }
+    const { user } = openApp('/sources/5')
+    const contents = await screen.findByRole('list', { name: 'Chapters of the tape' })
+    await user.click(within(contents).getByRole('button', { name: /^Play Chapter 3/ }))
+    expect(scrolled).toEqual([])
+    // A wide screen: the stylesheet makes the column sticky.
+    const sticky = document.createElement('style')
+    sticky.textContent = 'section[aria-label="Player"] { position: sticky; }'
+    document.head.append(sticky)
+    await user.click(within(contents).getByRole('button', { name: /^Play Chapter 2/ }))
+    expect(scrolled).toEqual(['chapter-1-heading'])
+    sticky.remove()
+    if (was) Object.defineProperty(Element.prototype, 'scrollIntoView', was)
+    else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+  })
+
   it('draws the tape’s quiet sound scaled to fit, with each scene marked', async () => {
     const { user } = openApp('/sources/5')
     const sound = await screen.findByRole('slider', { name: 'Sound of the tape' })

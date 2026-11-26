@@ -4,6 +4,20 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-25
 
+**Polishing the tape page and the Sources list: the player beside the chapters, each tape's analysis in the list (branch `claude/project-thread-t8kdgj`)**
+Jonathan asked for the tape page's UI updates after the chapters, with what reels needs from strata-react raised there as issues (strata-react #371, #372, #373, built in strata-react PR #375 and taken up here at its release). Reviewed against the spec's review interface (M1) and correction loop (§6): the page answered well but made a person scroll away from the picture to read a long tape, never said which occasion was playing, and the Sources list said nothing about which tape needed the person.
+- `web/src/screens/TapeScreen.tsx`: on a wide screen the player, its sound and the chapters as contents (`MediaContents`, the one playing marked, pressing one plays it and, while the column is sticky, brings its heading into view) sit in a sticky column beside the scenes; stacked below that width as before. The chapters are marks on the player's seek bar (`MediaPlayer marks`); the scene being played carries the bar the contents and the transcript use. New `chapterMarks`, `chapterContents`; the scope line names chapters.
+- `web/src/screens/SourcesScreen.tsx`: an Analysis column (`WorkflowSummary` over every tape's run, `GET /api/workflows/tape/subjects`, read as its own query, all pages, again every 5 s while a job runs; sorts what needs the person first), and the finding counts tapes to check, stopped and analysing. `followRuns`.
+- Review fixes (Codex, both real): a failed read of the runs said nothing and showed dashes, so it now shows `LoadError` with Try again above the table (the list stays); the redirect from `/` kept no search, so an old `/?sort=length.desc` link lost its sort, and it now carries the search.
+- `web/src/api.ts`: `allRuns`, `keys.runs`, and `FINISHED` (moved from the tape page).
+- `web/src/routes.tsx`, `web/src/screens/Layout.tsx`, `web/src/screens/NotFoundScreen.tsx`: the list is `/sources` and `/` sends the person there, so the menu marks Sources on a tape's page too (it marked nothing before); a route with `handle: { wide: true }` (the tape page) takes `max-w-7xl` instead of the reading width.
+- `web/src/mocks/tape.ts`, `web/src/mocks/handlers.ts`: `otherRuns` (a tape analysing, one failed, one confirmed) and the runs list handler.
+- `web/strata-visual.config.ts`: the sources route is `/sources`; the scroll-through is on again, as strata-react 1.3.18 shows a picture it has loaded at once on a remount (#352), which is why it was off.
+- `web/stories/sources.stories.tsx`: routes moved to `/sources`.
+- `web/tests/integration/{App,SourcesScreen,TapeScreen}.test.tsx`, `web/tests/unit/logic.test.ts`: the new column, paging, the contents, the sticky scroll, the redirect.
+- `web/package.json`, `web/package-lock.json`: strata-react `^1.3.22`: the release with #371-#373, and strata-react #379, which stopped seek bar marks past the end of the 2-second mock copy from making the page 790,000 px wide (Chromium could not capture it). A version bump, no new dependency.
+- `web/tests/visual/baselines/`: 98 rewritten on the CI runner by "Update visual baselines". The tape shots change most: two columns on the wide shots, the chapter contents and the playing scene's bar, and pictures below the window are now loaded in the route shots. The sources shots gain the Analysis column and the new finding. The rest (jobs, system, settings, not-found) move by a few pixels from strata-react 1.3.15 to 1.3.22, which these baselines had not yet been taken on. I looked at the jobs and tape shots before committing.
+
 **strata-python 0.2.22: low priority jobs go through strata-models' bulk endpoint (branch `claude/models-bulk`)**
 strata-models now takes a normal or low priority job only on its bulk endpoint; 0.2.22's client sends them there (as a call of one), so this app's `priority="low"` calls keep working after the service restarts.
 - `pyproject.toml`, `uv.lock`: strata-python 0.2.22 or later.
