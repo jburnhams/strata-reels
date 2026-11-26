@@ -9,7 +9,7 @@ Jonathan, looking at the tape page: the seek bar should show scene and chapter m
 - `web/src/screens/TapeScreen.tsx`: `seekMarks` (each chapter after the first and each scene that does not start a chapter, as `kind: "scene"`) replaces `chapterMarks`; the player takes them, `fps` from the tape's rate (`frameRate`; the proxy keeps the source's rate) and `float`. The file comment says so.
 - `web/package.json`, `web/package-lock.json`: strata-react to the release with #387 (a version bump of an existing dependency).
 - `web/tests/unit/logic.test.ts`, `web/tests/integration/TapeScreen.test.tsx`: the marks, the rate, and the skip and frame buttons on the tape page.
-- `web/tests/visual/baselines/`: the tape page's player shots move (the new buttons and marks), rewritten on the CI runner.
+- `web/tests/visual/baselines/`: 29 tape page shots move (the player's new skip and frame buttons; the mock's browser copy is 2 s long, so no marks fall inside it), rewritten on the CI runner by `update-visual-baselines.yml` and looked at. PR #22.
 
 ## 2026-11-25
 
