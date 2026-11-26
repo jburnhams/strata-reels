@@ -18,6 +18,11 @@ Jonathan asked for the tape page's UI updates after the chapters, with what reel
 - `web/package.json`, `web/package-lock.json`: strata-react `^1.3.22`: the release with #371-#373, and strata-react #379, which stopped seek bar marks past the end of the 2-second mock copy from making the page 790,000 px wide (Chromium could not capture it). A version bump, no new dependency.
 - `web/tests/visual/baselines/`: 98 rewritten on the CI runner by "Update visual baselines". The tape shots change most: two columns on the wide shots, the chapter contents and the playing scene's bar, and pictures below the window are now loaded in the route shots. The sources shots gain the Analysis column and the new finding. The rest (jobs, system, settings, not-found) move by a few pixels from strata-react 1.3.15 to 1.3.22, which these baselines had not yet been taken on. I looked at the jobs and tape shots before committing.
 
+**strata-python 0.2.22: low priority jobs go through strata-models' bulk endpoint (branch `claude/models-bulk`)**
+strata-models now takes a normal or low priority job only on its bulk endpoint; 0.2.22's client sends them there (as a call of one), so this app's `priority="low"` calls keep working after the service restarts.
+- `pyproject.toml`, `uv.lock`: strata-python 0.2.22 or later.
+- `.github/workflows/` `integration.yml`: on Windows, when Chocolatey leaves no ffmpeg (its feed answered 504 on 2026-11-25, and choco still exited 0), fall back to BtbN's static build, as strata-360's workflow already does.
+
 **Correcting the chapters on the tape page: marks, titles and a check, and the weights fitted on them (branch `claude/project-thread-fejz06`)**
 Jonathan asked for chapters first, then any tape page updates, then reels as a service on the GPU machine. On the real tape the first chapters had a wrong name from a misheard line, two places in one chapter and one opening split in two, so this lets the person correct them where they read them, as overrides, with the check as a workflow gate. No dependency added; strata-python 0.2.19 and strata-react 1.3.15 are updates in range.
 - `src/app/overrides.py`: target `tape` (a source as a whole). `tests/unit/test_overrides.py`: its refusal names it.
