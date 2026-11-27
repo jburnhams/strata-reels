@@ -20,6 +20,12 @@ export type Scene = Schema<'Scene'>
 export type Chapter = Schema<'Chapter'>
 export type Transcript = Schema<'Transcript'>
 export type Peaks = Schema<'Peaks'>
+/** A tape's faces as the People tab shows them (src/app/people.py): groups of tracks to name, people named. */
+export type People = Schema<'People'>
+export type FaceGroup = Schema<'Group'>
+export type Person = Schema<'Person'>
+/** Someone the face store knows already, to add a group to. */
+export type Known = Schema<'Known'>
 export type Job = Schema<'Task'>
 export type JobsPage = Schema<'Page_Task_'>
 /** A tape's way through its pipeline (`jobs.TAPE`), from strata-python's shared workflow routes. */
@@ -46,6 +52,8 @@ export const keys = {
   scenes: (id: number) => ['sources', id, 'scenes'] as const,
   transcript: (id: number) => ['sources', id, 'transcript'] as const,
   peaks: (id: number) => ['sources', id, 'peaks'] as const,
+  people: (id: number) => ['sources', id, 'people'] as const,
+  known: ['people'],
   jobs: ['jobs'],
   run: (id: number) => ['sources', id, 'run'] as const,
   runs: ['sources', 'runs'],

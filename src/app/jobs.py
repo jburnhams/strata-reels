@@ -29,9 +29,14 @@ Stages (each finds its result stored, and makes nothing, when the same request r
   recipe, so a changed recipe makes them again. Peaks only for a source with sound (the stage says it skipped).
 - `shots`, then `keyframes` (pictures of each shot), then `scenes` (the shots grouped), then `faces` (on the
   keyframes): strata-models' `shot-boundaries`, `image-embed` and `face-detect`.
+- `face_tracks`, `store_faces`, then the gate `name_people`, then `cast` (`people`): the faces followed through each
+  shot by strata-models' `face-tracks`, their stills kept in its face store, the person naming them a group at a time
+  (the gate approves itself once nothing is left to decide, or the person approves it to skip the rest), and who is
+  in each scene. The person's answers about faces are the `cast` stage's input (`face_said`), so a later name reaches
+  the scenes; the descriptions wait for the cast, so they can say who does what.
 - `transcript`: the whole source's speech from strata-models' `transcribe`, for a source with sound.
-- `describe`: a description of each scene, which needs the scenes and the transcript, so every description has its
-  speech.
+- `describe`: a description of each scene, which needs the scenes, the transcript and the cast, so every description
+  has its speech and its named people.
 - `chapters`: the scenes grouped by occasion (`chapters.group`, this app's own code over the scenes' pictures and
   descriptions), then `name_chapters`: a title and summary for each from strata-models' `chapter-name`. The person's
   chapter marks are one of the tape's inputs (`chapter_marks`), so a mark groups the chapters again.
@@ -58,7 +63,7 @@ from strata_python.tasks.queue import Handler, Job, Queue, Worker
 from strata_python.workflow import Context, Pipeline, gate, request_key, step
 from strata_python.workflow.store import DbStore, enqueue
 
-from app import chapters, db, derived, describe, scenes, shots, speech
+from app import chapters, db, derived, describe, people, scenes, shots, speech
 from app.models import JOBS, STAGES, Result, Source
 
 log = logging.getLogger(__name__)
@@ -99,13 +104,18 @@ def inputs_of(subject: str) -> dict[str, Any]:
 
 def inputs_in(engine: Engine, subject: str) -> dict[str, Any]:
     """`inputs_of` on a given database (the server's, which it opened itself). The person's chapter marks are an input
-    of the `chapters` stage, so a new mark groups the chapters again (and names those that changed)."""
+    of the `chapters` stage, so a new mark groups the chapters again (and names those that changed); their answers
+    about the tape's faces (`people.said_key`) are the `cast` stage's, so a name given after the gate reaches the scenes."""
     source_id = source_id_of(subject)
     with Session(engine) as s:
         source = s.get(Source, source_id)
         if source is None:
             raise KeyError(f"there is no source {source_id}")
-        return {"fingerprint": source.fingerprint, "chapter_marks": chapters.marks_key(chapters.marks(s, source))}
+        return {
+            "fingerprint": source.fingerprint,
+            "chapter_marks": chapters.marks_key(chapters.marks(s, source)),
+            "face_said": people.said_key(s, source),
+        }
 
 
 def _source(s: Session, ctx: Context) -> Source:
@@ -181,6 +191,32 @@ def _faces(ctx: Context) -> dict[str, Any]:
         return _found(ctx, r, new, faces=sum(len(f["faces"]) for f in r.payload["frames"]))
 
 
+def _face_tracks(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        source = _source(s, ctx)
+        _same_footage(source.path, source.fingerprint)
+        r, new = people.track(s, source, job_id=ctx.app.job_id)
+        return _found(ctx, r, new, tracks=len(r.payload["tracks"]))
+
+
+def _store_faces(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        r, new = people.store(s, _source(s, ctx), job_id=ctx.app.job_id)
+        return _found(ctx, r, new, tracks=len(r.payload["faces"]))
+
+
+def _all_named(ctx: Context) -> bool:
+    """The `name_people` gate's policy: approved once no track of the tape is left for the person to decide."""
+    with Session(_records()) as s:
+        return not people.is_open(s, _source(s, ctx))
+
+
+def _cast(ctx: Context) -> dict[str, Any]:
+    with Session(_records(), expire_on_commit=False) as s:
+        r, new = people.cast(s, _source(s, ctx), job_id=ctx.app.job_id)
+        return _found(ctx, r, new, people=len(r.payload["names"]))
+
+
 def _transcript(ctx: Context) -> dict[str, Any]:
     with Session(_records(), expire_on_commit=False) as s:
         source = _source(s, ctx)
@@ -236,8 +272,12 @@ TAPE = Pipeline(
         step("keyframes", _keyframes, needs=("shots",), version=_version(shots.KEYFRAMES), resources=("disk",), label="Take pictures of each shot"),
         step("scenes", _scenes, needs=("shots", "keyframes"), version=scenes.VERSION, label="Group the shots into scenes"),
         step("faces", _faces, needs=("keyframes",), version=_version(describe.FACE_FIELDS), label="Find the faces"),
+        step("face_tracks", _face_tracks, needs=("shots",), version=_version(people.ASK), resources=("disk",), label="Follow the faces"),
+        step("store_faces", _store_faces, needs=("face_tracks",), version=_version(people.TAG), label="Keep the faces"),
+        gate("name_people", needs=("store_faces",), auto=_all_named, label="Name the people"),
+        step("cast", _cast, needs=("name_people", "scenes", "keyframes"), keys=("face_said",), version=people.VERSION, label="Find who is in each scene"),
         step("transcript", _transcript, needs=("hash",), version=_version(speech.PARAMETERS), label="Write down what is said"),
-        step("describe", _describe, needs=("scenes", "transcript"), version=_version(describe.PRESET, describe.FRAMES, speech.SAID_CHARS), label="Describe the scenes"),
+        step("describe", _describe, needs=("scenes", "transcript", "cast"), version=_version(describe.PRESET, describe.FRAMES, speech.SAID_CHARS), label="Describe the scenes"),
         step("chapters", _chapters, needs=("scenes", "describe"), keys=("chapter_marks",), version=_version(chapters.VERSION, chapters.PARAMETERS), label="Group the scenes into chapters"),
         step("name_chapters", _name_chapters, needs=("chapters",), version=_version(chapters.NAME_PRESET, chapters.NAME_VERSION, chapters.NAMED_SCENES, chapters.SAID_CHARS), label="Name the chapters"),
         gate("check_chapters", needs=("name_chapters",), label="Check the chapters"),
@@ -252,7 +292,7 @@ def store() -> DbStore:
 
 # The stages that stand on what is outside the pipeline's keys: a file in the app's home (which can be deleted) or
 # strata-models' model and settings (which can change). Each checks those against its stored result when it runs.
-RECHECKED = ("proxy", "thumbnails", "peaks", "shots", "transcript")
+RECHECKED = ("proxy", "thumbnails", "peaks", "shots", "transcript", "cast")  # cast: a person renamed elsewhere
 
 
 def ingest_later(q: Queue, source: Source | int, *, again: bool = False, by: str | None = None) -> int:

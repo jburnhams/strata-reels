@@ -7,9 +7,13 @@ import { clipsOf, renderOf, sideAReel, tapeReel } from '../../src/mocks/reels'
 import {
   fresh,
   otherRuns,
+  peopleWaiting,
   pinMockClock,
+  tapePeople,
+  tapePeopleNaming,
   tapeRunChecked,
   tapeRunDone,
+  tapeRunNaming,
   tapeRunPartWay,
   tapeScenes,
   tapeTranscript,
@@ -20,11 +24,13 @@ import { aspectNumber, describeReel, describeRender, describeRevision, editOf, s
 import { describeReels, parseLength } from '../../src/screens/ReelsScreen'
 import { describePicture, describeSources, followRuns, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, describeSystem, homeDisk } from '../../src/screens/SystemScreen'
+import { describeGroup, describePeople, namingOf, noFaces, personName } from '../../src/screens/TapePeople'
 import {
   aspectOf,
   chapterContents,
   chapterName,
   checkOf,
+  describeCast,
   describeFaces,
   describeJobNow,
   describeMark,
@@ -308,5 +314,50 @@ describe('reels', () => {
     expect(describeRender({ state: 'done', error: null, bytes: null })).toBe('Rendered to one file.')
     expect(describeRender({ state: 'cancelled', error: null, bytes: null })).toBe('The render was cancelled.')
     expect(describeRender({ state: 'running', error: null, bytes: null })).toMatch(/^Cutting/)
+  })
+})
+
+describe('the people on a tape', () => {
+  it('says who is named, what is left to answer and what was set aside', () => {
+    expect(describePeople(tapePeople)).toBe(
+      `${format.count(3, 'person', 'people')} named; ${format.count(4, 'track')} skipped; ${format.count(1, 'track')} not faces; ${format.count(9, 'track')} too small or unsure to ask about.`,
+    )
+    expect(describePeople({ ...tapePeopleNaming, people: [], skipped: 0, not_faces: 0, hidden: 0 })).toBe(
+      `Nobody named yet; ${format.count(3, 'group')} of faces to answer.`,
+    )
+    expect(describePeople(peopleWaiting())).toBe('Faces are followed once the shots are found.')
+  })
+
+  it('tells a tape with no faces from one not followed yet or all answered', () => {
+    expect(noFaces({ ...peopleWaiting(), waiting: null })).toBe(true)
+    expect(noFaces(peopleWaiting())).toBe(false)
+    expect(noFaces(tapePeople)).toBe(false)
+    expect(noFaces({ ...peopleWaiting(), waiting: null, hidden: 2 })).toBe(false)
+  })
+
+  it('reads the naming gate from the run', () => {
+    expect(namingOf(tapeRunNaming)).toBe('waiting')
+    expect(namingOf(tapeRunDone)).toBe('done')
+    expect(namingOf({ stages: [] })).toBeNull()
+    expect(
+      namingOf({ stages: tapeRunNaming.stages.map(s => (s.name === 'name_people' ? { ...s, state: 'blocked' as const } : s)) }),
+    ).toBeNull()
+  })
+
+  it('names a person, or says who they are without one', () => {
+    expect(personName({ id: 4, name: 'Uncle Pete' })).toBe('Uncle Pete')
+    expect(personName({ id: 7, name: null })).toBe('Person 7')
+    expect(describeGroup({ seconds: 252, first: 31 })).toBe('On screen for 4:12, first at 0:31')
+  })
+
+  it('lists the people in a scene', () => {
+    expect(describeCast([{ id: 1, name: 'Tom', seconds: 3 }])).toBe('Tom')
+    expect(
+      describeCast([
+        { id: 1, name: 'Tom', seconds: 3 },
+        { id: 2, name: null, seconds: 2 },
+        { id: 3, name: 'Ella', seconds: 1 },
+      ]),
+    ).toBe('Tom, someone unnamed and Ella')
   })
 })

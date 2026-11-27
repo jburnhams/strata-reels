@@ -27,13 +27,19 @@ STAGES = [
     "keyframes",
     "scenes",
     "faces",
+    "face_tracks",
+    "store_faces",
+    "name_people",
+    "cast",
     "transcript",
     "describe",
     "chapters",
     "name_chapters",
     "check_chapters",
 ]
-RAN = STAGES[:-1]  # the stages that run; the last is the person's check (a gate)
+RAN = STAGES[
+    :-1
+]  # done on a tape with nobody to name (the people gate approves itself); the last is the person's check
 WAITING = {"state": "waiting", "waiting": ["check_chapters"], "failed": []}
 
 
@@ -66,7 +72,12 @@ def made(source: Source) -> dict[str, object]:
 
 def test_the_stages_are_in_the_order_they_need_each_other():
     assert [s.name for s in jobs.TAPE.stages] == STAGES
-    assert jobs.TAPE["describe"].needs == ("scenes", "transcript")  # every description has its speech
+    assert jobs.TAPE["describe"].needs == (
+        "scenes",
+        "transcript",
+        "cast",
+    )  # every description has its speech and people
+    assert jobs.TAPE["cast"].needs == ("name_people", "scenes", "keyframes")  # the scenes' people wait for their names
     assert jobs.TAPE["chapters"].needs == ("scenes", "describe")  # chapters are grouped on what the scenes show
     assert jobs.TAPE.resources == ["disk"]  # two tapes are never read from one drive at once
     assert jobs.source_id_of(jobs.subject_of(12)) == 12
@@ -87,6 +98,7 @@ def test_a_new_tape_runs_every_stage_in_one_job_and_once(engine: Engine, tmp_pat
     digest = hashlib.sha256(content).hexdigest()
     assert sha256_of(engine, source.id) == digest
     assert made(source) == {"hash": None} | dict.fromkeys(RAN[1:-3], True) | {
+        "name_people": None,  # a gate: approved by its policy, nothing made
         "describe": 2,
         "chapters": True,
         "name_chapters": 2,
@@ -111,7 +123,8 @@ def test_a_cleared_stage_runs_again_and_finds_its_result_stored(engine: Engine, 
     # the shots and what follows them ran again, each finding the same request stored; the rest were not touched
     assert made(source) == {"hash": None, "proxy": True, "thumbnails": True, "peaks": True, "transcript": True} | {
         "shots": False, "keyframes": False, "scenes": False, "faces": False, "describe": 0,
-        "chapters": False, "name_chapters": 0,
+        "chapters": False, "name_chapters": 0, "face_tracks": False, "store_faces": False, "name_people": None,
+        "cast": False,
     }  # fmt: skip
 
 
@@ -208,7 +221,10 @@ def test_the_workflow_routes_show_a_tape_and_run_it_again(client: TestClient, en
     # the person says the chapters are right: the gate holds, and the tape is done
     checked = client.post(f"/api/workflows/tape/subjects/{subject}/stages/check_chapters/approve", json={}).json()
     assert checked["state"] == "done"
-    assert {s["name"]: s["last"]["by"] for s in checked["stages"] if s["gate"]} == {"check_chapters": "person"}
+    assert {s["name"]: s["last"]["by"] for s in checked["stages"] if s["gate"]} == {
+        "name_people": "auto",  # nobody on this tape to name
+        "check_chapters": "person",
+    }
     assert jobs.checked(jobs.store(), source)
     (hashed,) = client.get(f"/api/workflows/tape/subjects/{subject}/stages/hash").json()
     assert hashed["data"] == {"sha256": hashlib.sha256(b"\x05" * 200_000).hexdigest()}
@@ -235,7 +251,8 @@ def test_a_tape_added_again_checks_each_step_against_what_is_stored(engine: Engi
     assert job.state == "done"
     assert made(source) == {"hash": None, "proxy": True, "thumbnails": False, "peaks": False, "shots": True} | {
         "transcript": False, "keyframes": True, "scenes": True, "faces": True, "describe": 2,
-        "chapters": True, "name_chapters": 2,
+        "chapters": True, "name_chapters": 2, "face_tracks": True, "store_faces": True, "name_people": None,
+        "cast": True,
     }  # fmt: skip
     cleared = [r for r in jobs.store().history(jobs.subject_of(source)) if r.status == "cleared"]
     assert {r.by for r in cleared} == {"ada"}

@@ -7,20 +7,26 @@
 // state: `server.use(sourcesError)` in a test, `msw.use(sourcesError)` in a story's beforeEach,
 // `states: { error: [sourcesError] }` in the visual config.
 import { delay, HttpResponse, http } from 'msw'
-import type { Chapter, ReelDetail, Render, Revision, Scenes, Source, WorkflowRun } from '../api'
+import type { Chapter, People, ReelDetail, Render, Revision, Scenes, Source, WorkflowRun } from '../api'
 import { initialSources, systemModelsDown as modelsDown, systemNearlyFull as nearlyFull, readSource, systemStatus } from './fixtures'
 import { clipsOf, initialReels, initialRenders, listed, renderOf, revisionOf } from './reels'
 import {
+  faceSvg,
   fresh,
   jobsPage,
+  knownPeople,
   otherRuns,
+  peopleWaiting,
   proxyWebm,
   tapeId,
   tapePeaks,
+  tapePeople,
+  tapePeopleNaming,
   tapeRun,
   tapeRunChecked,
   tapeRunDone,
   tapeRunFailed,
+  tapeRunNaming,
   tapeRunPartWay,
   tapeScenes,
   tapeScenesPartWay,
@@ -40,6 +46,15 @@ export const mock = {
   titles: {} as Record<number, string>,
   reels: structuredClone(initialReels) as ReelDetail[],
   renders: structuredClone(initialRenders) as Render[],
+  /** Each tape's faces, where a test has put them (or answered a group); otherwise the tape (5) is all named. */
+  people: {} as Record<number, People>,
+  known: structuredClone(knownPeople),
+}
+
+/** Puts the tape where its people wait to be named: three groups to answer, the describe step waiting for them. */
+export function startNaming() {
+  mock.people[tapeId] = structuredClone(tapePeopleNaming)
+  mock.runs[tapeId] = tapeRunNaming
 }
 
 /** Back to the healthy state: call between tests and stories. */
@@ -51,6 +66,8 @@ export function resetMock() {
   mock.titles = {}
   mock.reels = structuredClone(initialReels)
   mock.renders = structuredClone(initialRenders)
+  mock.people = {}
+  mock.known = structuredClone(knownPeople)
 }
 
 /** A reel's numbers again after a change, as `reels.detail` counts them. */
@@ -110,6 +127,10 @@ const runOf = (id: number): WorkflowRun =>
     : tapeRun(id, {
         scenes: 'ready',
         faces: 'ready',
+        face_tracks: 'ready',
+        store_faces: 'blocked',
+        name_people: 'blocked',
+        cast: 'blocked',
         transcript: 'ready',
         describe: 'blocked',
         chapters: 'blocked',
@@ -136,6 +157,9 @@ export const paths = {
   retry: '/api/jobs/:id/retry',
   chapterMark: '/api/sources/:id/scenes/:scene/chapter-mark',
   chapterTitle: '/api/sources/:id/scenes/:scene/chapter-title',
+  people: '/api/sources/:id/people',
+  faceCrop: '/api/sources/:id/faces/:face/crop',
+  known: '/api/people',
   runs: '/api/workflows/tape/subjects',
   run: '/api/workflows/tape/subjects/:subject',
   runAgain: '/api/workflows/tape/subjects/:subject/run',
@@ -160,6 +184,8 @@ const noReel = (id: unknown) => notFound(`there is no reel ${String(id)}`)
 /** A version among the reel's current and open ones. */
 const versionOf = (r: ReelDetail, rev: unknown): Revision | undefined =>
   [r.current, ...r.open].find(v => v?.id === Number(rev)) ?? undefined
+/** A source's faces as the server would answer them now. */
+const peopleOf = (id: number): People => mock.people[id] ?? (id === tapeId ? structuredClone(tapePeople) : peopleWaiting())
 const subjectId = (subject: unknown) => Number(/^source:(\d+)$/.exec(decodeURIComponent(String(subject)))?.[1] ?? Number.NaN)
 
 export const handlers = [
@@ -209,6 +235,57 @@ export const handlers = [
     else if (!title.trim()) return refused('a chapter’s title needs a word or more')
     else mock.titles[chapter.scenes[0]] = title.trim()
     return HttpResponse.json(correctedScenes())
+  }),
+  // src/app/people.py as the routes answer it: an answer takes its group off the list and counts its tracks; once
+  // nothing is left to answer, the gate approves itself and the tape's job goes on.
+  http.get(at(paths.people), ({ params }) => {
+    const found = sourceOf(params.id)
+    return found ? HttpResponse.json(peopleOf(found.id)) : notFound(`there is no source ${String(params.id)}`)
+  }),
+  http.post(at(paths.people), async ({ params, request }) => {
+    const found = sourceOf(params.id)
+    if (!found) return notFound(`there is no source ${String(params.id)}`)
+    const b = (await request.json()) as {
+      tracks: string[]
+      answer: 'name' | 'not-faces' | 'skip'
+      name?: string | null
+      person?: number | null
+    }
+    const p = peopleOf(found.id)
+    const group = p.groups.find(g => g.tracks.join() === b.tracks.join())
+    if (!group) return refused(`${b.tracks.join(', ')} are not tracks of this tape left to answer`)
+    if (b.answer === 'name') {
+      if (!b.name?.trim() && b.person == null) return refused('a name, or a person known already, is needed to name them')
+      let who = b.person == null ? undefined : mock.known.find(k => k.id === b.person)
+      if (b.person != null && !who) return notFound(`there is no person ${b.person}`)
+      if (!who) {
+        who = { id: Math.max(0, ...mock.known.map(k => k.id)) + 1, name: b.name!.trim(), faces: 0 }
+        mock.known.push(who)
+      }
+      who.faces += group.faces.length
+      const had = p.people.find(x => x.id === who.id)
+      if (had) Object.assign(had, { tracks: had.tracks + group.tracks.length, seconds: had.seconds + group.seconds })
+      else p.people.push({ id: who.id, name: who.name, tracks: group.tracks.length, seconds: group.seconds, face: group.faces[0] ?? null })
+      p.people.sort((x, y) => y.seconds - x.seconds)
+      p.named += group.tracks.length
+    } else if (b.answer === 'skip') p.skipped += group.tracks.length
+    else p.not_faces += group.tracks.length
+    p.groups = p.groups.filter(g => g !== group)
+    p.open = Math.max(0, p.open - group.tracks.length)
+    if (!p.groups.length) {
+      p.done = true
+      if (mock.runs[found.id] === tapeRunNaming) mock.runs[found.id] = tapeRunDone
+    }
+    mock.people[found.id] = p
+    return HttpResponse.json(p)
+  }),
+  http.get(
+    at(paths.faceCrop),
+    ({ params }) => new HttpResponse(faceSvg(Number(params.face)), { headers: { 'Content-Type': 'image/svg+xml' } }),
+  ),
+  http.get(at(paths.known), ({ request }) => {
+    const q = new URL(request.url).searchParams.get('q')?.toLowerCase()
+    return HttpResponse.json(mock.known.filter(k => !q || k.name.toLowerCase().includes(q)))
   }),
   http.get(at(paths.transcript), ({ params }) =>
     Number(params.id) === tapeId
@@ -273,6 +350,11 @@ export const handlers = [
   http.post(at(paths.approve), ({ params }) => {
     const id = subjectId(params.subject)
     if (!sourceOf(id)) return notFound(`there is no source ${String(id)}`)
+    if (params.stage === 'name_people') {
+      mock.people[id] = { ...peopleOf(id), done: true }
+      mock.runs[id] = tapeRunDone
+      return HttpResponse.json(fresh(mock.runs[id]))
+    }
     if (params.stage !== 'check_chapters') return refused(`${String(params.stage)} is a stage, not a gate: it is run, not approved`)
     mock.runs[id] = tapeRunChecked
     return HttpResponse.json(fresh(mock.runs[id]))
@@ -402,6 +484,20 @@ export const scenesRegrouping = http.get(at(paths.scenes), () =>
 )
 /** The tape before its scenes are grouped. */
 export const scenesWaiting = http.get(at(paths.scenes), () => HttpResponse.json(waitingScenes(tapeId)))
+/** The people waiting to be named: three groups left, and the tape's run waiting at the gate. */
+export const peopleNaming = [
+  http.get(at(paths.people), () => HttpResponse.json(tapePeopleNaming)),
+  http.get(at(paths.run), () => HttpResponse.json(fresh(tapeRunNaming))),
+  http.get(at(paths.scenes), () =>
+    HttpResponse.json({
+      ...tapeScenes,
+      analysis: { ...tapeScenes.analysis, cast: false, described: 0, chapters: false, named: 0 },
+      chapters: null,
+      scenes: tapeScenes.scenes.map(s => ({ ...s, description: null, people: null })),
+    }),
+  ),
+]
+export const peopleLoading = http.get(at(paths.people), () => delay('infinite'))
 export const transcriptWaiting = http.get(at(paths.transcript), () =>
   HttpResponse.json({ language: null, model: null, waiting: 'Listening for speech (the transcript step).', segments: [] }),
 )

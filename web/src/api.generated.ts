@@ -105,6 +105,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Known */
+        get: operations["get_known_api_people_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reels": {
         parameters: {
             query?: never;
@@ -363,6 +380,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources/{source_id}/faces/{face_id}/crop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Face Crop */
+        get: operations["get_face_crop_api_sources__source_id__faces__face_id__crop_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/{source_id}/keyframes/{name}": {
         parameters: {
             query?: never;
@@ -391,6 +425,24 @@ export interface paths {
         get: operations["get_peaks_api_sources__source_id__peaks_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get People */
+        get: operations["get_people_api_sources__source_id__people_get"];
+        put?: never;
+        /** Post People */
+        post: operations["post_people_api_sources__source_id__people_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -627,6 +679,11 @@ export interface components {
          * @description Which of the source's results exist, for the page's finding and its waiting words.
          */
         Analysis: {
+            /**
+             * Cast
+             * @description who is in each scene is known (the people are named, or skipped)
+             */
+            cast: boolean;
             /** Chapters */
             chapters: boolean;
             /** Described */
@@ -648,6 +705,24 @@ export interface components {
              * @description None for a source with no sound
              */
             transcript: boolean | null;
+        };
+        /**
+         * AnswerIn
+         * @description The person's answer for a group of a tape's face tracks: name them (a new person called `name`, or `person`, known
+         *     already), say they are not faces, or skip them.
+         */
+        AnswerIn: {
+            /**
+             * Answer
+             * @enum {string}
+             */
+            answer: "name" | "not-faces" | "skip";
+            /** Name */
+            name?: string | null;
+            /** Person */
+            person?: number | null;
+            /** Tracks */
+            tracks: string[];
         };
         /**
          * Approval
@@ -863,6 +938,11 @@ export interface components {
             summary: string;
             /** Tags */
             tags: string[];
+            /**
+             * Who
+             * @description who does what (preset v3; empty before it)
+             */
+            who: components["schemas"]["Who"][];
         };
         /**
          * Folder
@@ -891,6 +971,30 @@ export interface components {
             /** Url */
             url: string;
         };
+        /**
+         * Group
+         * @description Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it.
+         */
+        Group: {
+            /**
+             * Faces
+             * @description the face store's ids of a few of its stills, best first, for crops
+             */
+            faces: number[];
+            /**
+             * First
+             * @description when its first track starts, seconds into the tape
+             */
+            first: number;
+            /**
+             * Seconds
+             * @description how long its faces are on screen, all its tracks together
+             */
+            seconds: number;
+            suggested: components["schemas"]["Suggestion"] | null;
+            /** Tracks */
+            tracks: string[];
+        };
         /** Guess */
         Guess: {
             /** Because */
@@ -902,6 +1006,33 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * InScene
+         * @description Someone the family named, seen in a scene.
+         */
+        InScene: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
+            /**
+             * Seconds
+             * @description how long their face is on screen in the scene
+             */
+            seconds: number;
+        };
+        /**
+         * Known
+         * @description A person the face store knows, to add a group to.
+         */
+        Known: {
+            /** Faces */
+            faces: number;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
         };
         /**
          * MarkIn
@@ -941,6 +1072,56 @@ export interface components {
             min: number[];
             /** Seconds */
             seconds: number;
+        };
+        /**
+         * People
+         * @description The tape's faces as the People tab shows them. `waiting` says, in a sentence, what they wait for while there are
+         *     none yet; `done` is the person's word that the naming is finished (the gate).
+         */
+        People: {
+            /** Done */
+            done: boolean;
+            /** Groups */
+            groups: components["schemas"]["Group"][];
+            /**
+             * Hidden
+             * @description tracks whose faces are all too small or unsure to name
+             */
+            hidden: number;
+            /** Named */
+            named: number;
+            /** Not Faces */
+            not_faces: number;
+            /**
+             * Open
+             * @description tracks nobody has decided about
+             */
+            open: number;
+            /** People */
+            people: components["schemas"]["Person"][];
+            /** Skipped */
+            skipped: number;
+            /** Waiting */
+            waiting: string | null;
+        };
+        /**
+         * Person
+         * @description Someone named on this tape.
+         */
+        Person: {
+            /**
+             * Face
+             * @description one of their stills here, for a crop
+             */
+            face: number | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
+            /** Seconds */
+            seconds: number;
+            /** Tracks */
+            tracks: number;
         };
         /** Picture */
         Picture: {
@@ -1203,6 +1384,11 @@ export interface components {
              */
             mark: boolean | null;
             /**
+             * People
+             * @description the named people seen in it, longest first; None before the cast
+             */
+            people: components["schemas"]["InScene"][] | null;
+            /**
              * Reasons
              * @description why the cut before it is a boundary, in words
              */
@@ -1354,6 +1540,18 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Suggestion */
+        Suggestion: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
+            /**
+             * Share
+             * @description of the confirmed faces nearest the group, the part that are this person's
+             */
+            share: number;
+        };
         /**
          * Task
          * @description A job or task row as an API answers it.
@@ -1440,6 +1638,16 @@ export interface components {
             rate: string | null;
             /** Width */
             width: number | null;
+        };
+        /** Who */
+        Who: {
+            /** Does */
+            does: string;
+            /**
+             * Person
+             * @description a name the family gave, or who they are (a woman, a boy of about five)
+             */
+            person: string;
         };
         /** Word */
         Word: {
@@ -1642,6 +1850,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_known_api_people_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Known"][];
                 };
             };
             /** @description Validation Error */
@@ -2212,6 +2451,38 @@ export interface operations {
             };
         };
     };
+    get_face_crop_api_sources__source_id__faces__face_id__crop_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+                face_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_keyframe_api_sources__source_id__keyframes__name__get: {
         parameters: {
             query?: never;
@@ -2262,6 +2533,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Peaks"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_people_api_sources__source_id__people_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["People"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_people_api_sources__source_id__people_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["People"];
                 };
             };
             /** @description Validation Error */

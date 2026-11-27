@@ -57,7 +57,7 @@ def test_before_the_hash_the_scenes_say_what_they_wait_for(client: TestClient, e
     assert got["waiting"] == "Reading the whole file first, to know it by its content."
     assert got["analysis"] == {
         "proxy": False, "thumbnails": False, "peaks": False, "shots": None, "transcript": False, "faces": False,
-        "described": 0, "chapters": False, "named": 0,
+        "cast": False, "described": 0, "chapters": False, "named": 0,
     }  # fmt: skip
     assert got["source"]["name"] == "tape.mkv"
     assert client.get(f"/api/sources/{sid}").json()["id"] == sid
@@ -84,7 +84,7 @@ def test_each_scene_has_its_pictures_speech_description_and_faces(client: TestCl
     assert got["waiting"] is None
     assert got["analysis"] == {
         "proxy": True, "thumbnails": True, "peaks": True, "shots": 3, "transcript": True, "faces": True,
-        "described": 2, "chapters": False, "named": 0,
+        "cast": False, "described": 2, "chapters": False, "named": 0,
     }  # fmt: skip
     first, second = got["scenes"]
     assert (first["index"], first["start"], first["end"], first["shots"]) == (0, 0.0, 10.0, 2)

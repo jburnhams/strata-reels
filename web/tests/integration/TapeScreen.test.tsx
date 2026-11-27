@@ -25,7 +25,8 @@ describe('a tape', () => {
     const first = scenes[0]
     expect(within(first).getByRole('toolbar', { name: 'Frames of scene 1' })).toBeInTheDocument()
     expect(first).toHaveTextContent('Two children stand by a decorated tree and wave at the camera.')
-    expect(first).toHaveTextContent(/Up to 2\sfaces/)
+    expect(first).toHaveTextContent('Tom, Ella and Grandma Rose')
+    expect(scenes[2]).toHaveTextContent(/Up to 1\sface/)
     expect(first).toHaveTextContent('“Is it on? Is the red light on?')
     expect(within(scenes[4]).getByText('Not described yet.')).toBeInTheDocument()
     expect(within(scenes[4]).getByText(/Start unsure \(47%\)/)).toBeInTheDocument()
@@ -231,7 +232,7 @@ describe('a tape', () => {
     await user.click(screen.getByRole('tab', { name: 'Steps' }))
     expect(router.state.location.search).toBe('?view=steps')
     const steps = await screen.findByRole('list', { name: 'Steps of the analysis' })
-    expect(within(steps).getAllByRole('listitem')).toHaveLength(13) // twelve steps, then the person's check
+    expect(within(steps).getAllByRole('listitem')).toHaveLength(17) // fifteen steps and the person's two (the people's names, the chapters' check)
     const faces = within(steps)
       .getAllByRole('listitem')
       .find(li => li.textContent?.includes('Find the faces'))!

@@ -25,7 +25,7 @@ describe('Sources', () => {
     const table = await screen.findByRole('grid', { name: /Sources/ })
     const row = (name: RegExp) => within(table).getByRole('row', { name })
     await waitFor(() => expect(row(/christmas-1996/)).toHaveTextContent(/Needs review\s*Check the chapters/))
-    expect(row(/beach\.mp4/)).toHaveTextContent(/Analysing\s*Find the shots, step 5 of 13/)
+    expect(row(/beach\.mp4/)).toHaveTextContent(/Analysing\s*Find the shots, step 5 of 17/)
     expect(row(/interview\.wav/)).toHaveTextContent(/Failed\s*Find the faces/)
     expect(row(/wedding-1994-side-a/)).toHaveTextContent('Done')
     expect(row(/wedding-1994-side-b/)).toHaveTextContent(/Part done/)
