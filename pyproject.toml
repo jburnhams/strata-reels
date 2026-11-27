@@ -79,4 +79,4 @@ file = "src/app/strata-db.toml"
 # The face-tracks and group-tracks clients and the fake face store (strata-python PR #93), until its release: then
 # this goes and the range above names that release.
 [tool.uv.sources]
-strata-python = { git = "https://github.com/jburnhams/strata-python", rev = "2ea66c770a6b9bee5d97e641dba7534d1b83f20a" }
+strata-python = { git = "https://github.com/jburnhams/strata-python", rev = "5a647f7f067d8998528bef6012da9c383b2ecafd" }
