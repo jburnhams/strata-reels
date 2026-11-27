@@ -35,6 +35,13 @@ and accepted by the person; pins, bans and locks are overrides on the reel that 
     POST /api/reels/{reel}/constraints {kind: pin|ban, scene} or {kind: lock, clip}
     DELETE /api/reels/{reel}/constraints/{id}
 
+Renders (`renders`, spec S8): a revision rendered from the tape by ffmpeg on the job queue, frame exact, with a manifest:
+
+    POST /api/reels/{reel}/revisions/{rev}/render   queue its render (or find the one made from the same clips): 201
+    GET /api/reels/{reel}/renders                   every render of the reel, newest first, with its job's state
+    GET /api/reels/{reel}/renders/{id}              one, with its manifest once made
+    GET /api/reels/{reel}/renders/{id}/file         the file, as a download named after the reel
+
 From strata-python's `add_jobs`: GET /api/jobs (newest first, filtered by state, kind or domain), GET
 /api/jobs/counts, GET /api/jobs/{id}, POST /api/jobs/{id}/cancel and POST /api/jobs/{id}/retry, which strata-react's
 `JobsTable` reads.
@@ -73,7 +80,7 @@ from strata_python.tasks.web import add_jobs
 from strata_python.workflow.store import DbStore
 from strata_python.workflow.web import add_workflow
 
-from app import __version__, browse, chapters, db, jobs, planner, reels, settings, sources, system
+from app import __version__, browse, chapters, db, jobs, planner, reels, renders, settings, sources, system
 
 # A thumbnail or keyframe URL carries its result's key (`?v=`, browse.py), so a new recipe is a new URL and the browser
 # may keep the old one for good. The proxy's URL is the tape's, whichever proxy is current, so it is checked each time.
@@ -272,6 +279,33 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
         reel = reels.get(s, reel_id)
         reels.unconstrain(s, reel, override_id)
         return reels.detail(s, reel)
+
+    # Renders (spec S8, `renders`): a revision rendered by ffmpeg on the job queue, with its manifest.
+    @app.post("/api/reels/{reel_id}/revisions/{revision_id}/render", status_code=201)
+    def post_render(reel_id: int, revision_id: int, s: DbSession) -> renders.RenderOut:
+        reel = reels.get(s, reel_id)
+        q = jobs.queue(records.engine())
+        return renders.out(s, q, renders.request(s, q, reel, reels.revision(s, reel, revision_id)))
+
+    @app.get("/api/reels/{reel_id}/renders")
+    def get_renders(reel_id: int, s: DbSession) -> list[renders.RenderOut]:
+        q = jobs.queue(records.engine())
+        return [renders.out(s, q, r) for r in renders.of_reel(s, reels.get(s, reel_id))]
+
+    @app.get("/api/reels/{reel_id}/renders/{render_id}")
+    def get_render(reel_id: int, render_id: int, s: DbSession) -> renders.RenderOut:
+        return renders.out(s, jobs.queue(records.engine()), renders.get(s, reels.get(s, reel_id), render_id))
+
+    @app.get("/api/reels/{reel_id}/renders/{render_id}/file", response_class=FileResponse)
+    def get_render_file(reel_id: int, render_id: int, s: DbSession) -> FileResponse:
+        reel = reels.get(s, reel_id)
+        # A render's file never changes (a new one is a new render), so the browser may keep it.
+        return FileResponse(
+            renders.file_of(s, reel, render_id),
+            media_type="video/mp4",
+            filename=f"{reel.name}.mp4",
+            headers={"Cache-Control": IMMUTABLE},
+        )
 
     add_jobs(app, lambda: jobs.queue(records.engine()))
     add_workflow(

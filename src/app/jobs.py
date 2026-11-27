@@ -319,7 +319,14 @@ def advance_tape(job: Job) -> dict[str, Any]:
     return TAPE.advance(store(), subject, inputs, tape, stopping=lambda: job.stopping).as_json()
 
 
-HANDLERS: dict[str, Handler] = {TAPE.kind: advance_tape}
+def render_reel(job: Job) -> dict[str, Any]:
+    """The `render` job (`renders.run`): imported here when it runs, since `renders` reads this module's records."""
+    from app import renders
+
+    return renders.run(job)
+
+
+HANDLERS: dict[str, Handler] = {TAPE.kind: advance_tape, "render": render_reel}
 
 
 def stages_of(job: Job) -> dict[str, str]:
@@ -410,6 +417,16 @@ def _records() -> Engine:
         if url not in _engines:
             _engines[url] = db.PROJECT.open(url)
         return _engines[url]
+
+
+def records() -> Engine:
+    """This process's engine on the app's database (a job other than the tape's, such as a render, opens it here)."""
+    return _records()
+
+
+def same_footage(path: str, fingerprint: str) -> None:
+    """Refuse a source whose file is missing or is no longer the footage it was added as (before reading it)."""
+    _same_footage(path, fingerprint)
 
 
 def close_records() -> None:

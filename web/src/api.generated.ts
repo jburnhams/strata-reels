@@ -191,6 +191,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reels/{reel_id}/renders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Renders */
+        get: operations["get_renders_api_reels__reel_id__renders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/renders/{render_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Render */
+        get: operations["get_render_api_reels__reel_id__renders__render_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/renders/{render_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Render File */
+        get: operations["get_render_file_api_reels__reel_id__renders__render_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reels/{reel_id}/revisions/{revision_id}": {
         parameters: {
             query?: never;
@@ -236,6 +287,23 @@ export interface paths {
         put?: never;
         /** Post Reject */
         post: operations["post_reject_api_reels__reel_id__revisions__revision_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/revisions/{revision_id}/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Render */
+        post: operations["post_render_api_reels__reel_id__revisions__revision_id__render_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1012,6 +1080,55 @@ export interface components {
         /** ReelsSettings */
         ReelsSettings: Record<string, never>;
         /**
+         * RenderOut
+         * @description A render of a revision: its job's state while it is made, then its file. `url` downloads it once `done`.
+         */
+        RenderOut: {
+            /** Bytes */
+            bytes: number | null;
+            /**
+             * Created
+             * Format: date-time
+             */
+            created: string;
+            /** Duration Seconds */
+            duration_seconds: number | null;
+            /**
+             * Error
+             * @description why the job failed, in its words
+             */
+            error: string | null;
+            /** Finished */
+            finished: string | null;
+            /** Id */
+            id: number;
+            /** Job Id */
+            job_id: number | null;
+            /**
+             * Manifest
+             * @description what made the file (spec S8); None until it is made
+             */
+            manifest: {
+                [key: string]: unknown;
+            } | null;
+            /** Reel Id */
+            reel_id: number;
+            /** Revision Id */
+            revision_id: number;
+            /** Sha256 */
+            sha256: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "done" | "failed" | "cancelled";
+            /**
+             * Url
+             * @description the file, relative to the app's base; None until it is made
+             */
+            url: string | null;
+        };
+        /**
          * RevisionOut
          * @description One revision of a reel. `state`: `proposal` (can be accepted), `stale` (made on a revision that is no longer the
          *     current one: plan again), `current`, `past` (was current) or `rejected`.
@@ -1735,6 +1852,99 @@ export interface operations {
             };
         };
     };
+    get_renders_api_reels__reel_id__renders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_render_api_reels__reel_id__renders__render_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+                render_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_render_file_api_reels__reel_id__renders__render_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+                render_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_revision_api_reels__reel_id__revisions__revision_id__get: {
         parameters: {
             query?: never;
@@ -1818,6 +2028,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_render_api_reels__reel_id__revisions__revision_id__render_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+                revision_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderOut"];
                 };
             };
             /** @description Validation Error */
