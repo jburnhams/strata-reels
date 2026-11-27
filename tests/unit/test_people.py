@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from strata_python.clients import faces as fs
 from strata_python.clients import models as sm
 
-from app import describe, jobs, people, scenes, shots, sources, speech
+from app import describe, jobs, overrides, people, scenes, shots, sources, speech
 from app.models import Source
 
 
@@ -79,13 +79,14 @@ def test_every_still_goes_into_the_face_store_under_the_tapes_tag(engine, tmp_pa
         assert kept.payload["tag"] == "strata-reels:" + "ab" * 8
         assert {k: len(v) for k, v in kept.payload["faces"].items()} == {"1": 2, "2": 2, "3": 2, "4": 2}
         assert people.store(s, src) == (kept, False)
+        tracking = kept.parameters["tracks"]
     store = tape_faces.faces
     assert store.tags == {"strata-reels": True}  # other apps see these faces only when they ask for them
     assert len(store.images) == 8
     first = store.images[1]
     assert (first["app"], first["ref"], first["width"], first["height"]) == (
         "strata-reels",
-        "abababababababab/t1/1.000",
+        f"abababababababab/{tracking[:16]}/t1/1.000",  # a new tracking never answers an earlier one's picture
         720,
         576,
     )
@@ -125,6 +126,14 @@ def test_naming_a_group_skipping_one_and_the_gate(engine, tmp_path, tape_faces, 
     with Session(engine) as s:
         assert not people.is_open(s, src)  # the gate's policy lets the tape on
         assert len(people.said_key(s, src)) == 2  # both answers are the cast stage's input
+        kept = people.current_store(s, src)
+        assert kept is not None
+        assert people.skipped(s, src, kept) == {"3", "4"}
+        # a skip from another tracking is of other tracks, whatever their numbers
+        overrides.add(
+            s, "tape", src.id, people.SKIP, {"tracks": ["1"], "tracking": "an-earlier-tracking"}, author="ada"
+        )
+        assert people.skipped(s, src, kept) == {"3", "4"}
     bad = client.post(f"/api/sources/{sid}/people", json={"tracks": ["9"], "answer": "skip"})
     assert (bad.status_code, bad.json()["detail"]) == (400, "no track 9 on tape.mkv")
     nameless = client.post(f"/api/sources/{sid}/people", json={"tracks": ["1"], "answer": "name"})

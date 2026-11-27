@@ -141,4 +141,20 @@ describe('the people on a tape', () => {
     await group()
     expect(screen.queryByRole('button', { name: 'Skip the rest' })).toBeNull()
   })
+
+  it('says when the people named before cannot be read, rather than listing nobody', async () => {
+    startNaming()
+    server.use(http.get('*/api/people', () => new HttpResponse(null, { status: 503 })))
+    openApp('/sources/5?view=people')
+    const asked = await group()
+    expect(await within(asked).findByRole('alert')).toBeInTheDocument()
+    expect(within(asked).queryByRole('combobox', { name: 'Or someone named before' })).toBeNull()
+  })
+
+  it('says nobody else is named yet when the only person known is the one suggested', async () => {
+    startNaming()
+    server.use(http.get('*/api/people', () => HttpResponse.json([{ id: 4, name: 'Uncle Pete', faces: 12 }])))
+    openApp('/sources/5?view=people')
+    expect(await within(await group()).findByText('Nobody else is named on any tape yet.')).toBeInTheDocument()
+  })
 })

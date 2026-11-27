@@ -29,6 +29,7 @@ does what.
 import dataclasses
 import json
 import os
+import uuid
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Literal
@@ -70,14 +71,17 @@ def track(db: Session, source: Source, *, job_id: int | None = None) -> tuple[Re
         raise KeyError(f"{source.name} has no shots yet: its faces are followed shot by shot")
     params = {**ASK, "shots": found.cache_key}
     now = sm.role_settings(ROLE)
+    key: str | None = None
     if now is not None:
         planned = results.Provenance(role=ROLE, model=now.model, settings_hash=now.settings_hash)
         key = results.cache_key("face-tracks", [source.sha256], planned, params)
         stored = results.find(db, key)
         if stored is not None and os.path.isfile(_file(stored)):
             return stored, False
-    # the folder is the request's, before strata-models says which model served it: a new model's tracks replace it
-    rel = os.path.join(derived.folder(results.cache_key("face-tracks", [source.sha256], FOLDER, params)), "face-tracks")
+    # Each result keeps its own files (results are append-only): the folder is the planned model and settings' key, so
+    # a changed model writes beside the old tracks, not over them; with the plan unknown, a folder of its own.
+    folder_key = key or results.cache_key("face-tracks", [source.sha256], FOLDER, {**params, "nonce": uuid.uuid4().hex})
+    rel = os.path.join(derived.folder(folder_key), "face-tracks")
     folder = os.path.join(settings.SETTINGS.home(), rel)
     os.makedirs(folder, exist_ok=True)
     cuts = [float(mediatime.rational(s["start"])) for s in found.payload["shots"][1:]]
@@ -157,9 +161,11 @@ def still_size(width: int, height: int, max_side: int = MAX_SIDE) -> tuple[int, 
     return max(2, round(width * k / 2) * 2), max(2, round(height * k / 2) * 2)
 
 
-def ref_of(source: Source, track_id: int, time: float) -> str:
+def ref_of(source: Source, tracking: str, track_id: int, time: float) -> str:
+    """A still's reference in the face store: the tape, the tracking it came from (its result's cache key, so a new
+    tracking never answers an earlier one's stored picture), the track and the time."""
     assert source.sha256 is not None  # noqa: S101
-    return f"{source.sha256[:16]}/t{track_id}/{time:.3f}"
+    return f"{source.sha256[:16]}/{tracking[:16]}/t{track_id}/{time:.3f}"
 
 
 def store(db: Session, source: Source, *, job_id: int | None = None) -> tuple[Result, bool]:
@@ -196,7 +202,7 @@ def store(db: Session, source: Source, *, job_id: int | None = None) -> tuple[Re
             }
             img = fs.index(
                 APP,
-                ref_of(source, t.id, st.time),
+                ref_of(source, tracked.cache_key, t.id, st.time),
                 os.path.join(folder, os.path.basename(st.image)),
                 tags=[tape_tag(source)],
                 faces=[found],
@@ -243,8 +249,16 @@ class Decided:
         return [k for k, s in self.status.items() if s == "open"]
 
 
-def skipped(db: Session, source: Source) -> set[str]:
-    return {str(k) for o in overrides.active(db, "tape", source.id) if o.kind == SKIP for k in o.value["tracks"]}
+def skipped(db: Session, source: Source, kept: Result) -> set[str]:
+    """The tracks the person skipped, of the tracking `kept` (a face-store result) was made from: a track id is only
+    the same track within one tracking, so a skip from an earlier one does not hide a new track that has its number."""
+    tracking = kept.parameters["tracks"]
+    return {
+        str(k)
+        for o in overrides.active(db, "tape", source.id)
+        if o.kind == SKIP and o.value.get("tracking") == tracking
+        for k in o.value["tracks"]
+    }
 
 
 def said_key(db: Session, source: Source) -> list[int]:
@@ -345,7 +359,7 @@ def people_of(db: Session, source: Source, *, done: bool) -> People:
         )
     faces: dict[str, list[int]] = kept.payload["faces"]
     said = decisions(faces, kept.payload["tag"])
-    first = decide(faces, said, skipped(db, source))
+    first = decide(faces, said, skipped(db, source, kept))
     got = tracks_of(tracked)
     by_id = {str(t.id): t for t in got.tracks}
     open_keys = first.open()
@@ -360,7 +374,7 @@ def people_of(db: Session, source: Source, *, done: bool) -> People:
         if open_keys
         else fs.TrackGroups([], [])
     )
-    state = decide(faces, said, skipped(db, source), grouped.hidden)
+    state = decide(faces, said, skipped(db, source, kept), grouped.hidden)
     groups = [
         Group(
             tracks=g.tracks,
@@ -437,7 +451,9 @@ def answer(
         raise ValueError(f"no track {', '.join(unknown) or '(none given)'} on {source.name}")
     ids = [f for k in tracks for f in faces[k]]
     if what == "skip":
-        return overrides.add(db, "tape", source.id, SKIP, {"tracks": list(tracks)}, author=author)
+        return overrides.add(
+            db, "tape", source.id, SKIP, {"tracks": list(tracks), "tracking": kept.parameters["tracks"]}, author=author
+        )
     if what == "not-faces":
         batch = fs.assign(ids, None, app=APP, status="rejected", note=source.name)
         who = None
@@ -459,7 +475,7 @@ def is_open(db: Session, source: Source) -> bool:
     if kept is None:
         return True
     faces: dict[str, list[int]] = kept.payload["faces"]
-    first = decide(faces, decisions(faces, kept.payload["tag"]), skipped(db, source))
+    first = decide(faces, decisions(faces, kept.payload["tag"]), skipped(db, source, kept))
     if not first.open():
         return False
     tracked = current_tracks(db, source)
@@ -543,7 +559,7 @@ def cast(db: Session, source: Source, *, job_id: int | None = None) -> tuple[Res
     if keys is None:
         raise KeyError(f"{source.name} has no keyframes yet")
     faces: dict[str, list[int]] = kept.payload["faces"]
-    state = decide(faces, decisions(faces, kept.payload["tag"]), skipped(db, source))
+    state = decide(faces, decisions(faces, kept.payload["tag"]), skipped(db, source, kept))
     names = {who: fs.identity(who, app=APP).name for who in sorted(set(state.person.values()))}
     rate = mediatime.Rate.parse(cut.payload["rate"])
     frames = [(int(f["frame"]), float(rate.time_of(int(f["frame"])))) for f in keys.payload["frames"]]

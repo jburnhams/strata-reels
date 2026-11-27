@@ -215,10 +215,8 @@ function GroupAnswer({
 }) {
   const [name, setName] = useState('')
   const [problem, setProblem] = useState<string>()
-  const [chosen, setChosen] = useState('')
   const known = useLoad({ queryKey: keys.known, queryFn: () => api.get('/api/people') })
   const suggested = group.suggested
-  const others = (known.status === 'ready' ? known.data : []).filter((k: Known) => k.id !== suggested?.id)
   const headingId = `group-${group.tracks[0]}-heading`
   const named = (e: FormEvent) => {
     e.preventDefault()
@@ -280,33 +278,16 @@ function GroupAnswer({
           />
         </Field>
       </form>
-      {others.length > 0 && (
-        <Field
-          label="Or someone named before"
-          action={
-            <Button
-              variant="outline"
-              disabled={!chosen}
-              onClick={() => {
-                // enabled only once a listed person is chosen
-                const k = others.find(o => String(o.id) === chosen)!
-                onAnswer({ answer: 'name', person: k.id, who: personName(k) })
-              }}
-            >
-              Add to them
-            </Button>
-          }
-        >
-          <NativeSelect value={chosen} onChange={e => setChosen(e.target.value)}>
-            <option value="">Choose a person</option>
-            {others.map(k => (
-              <option key={k.id} value={k.id}>
-                {personName(k)} ({format.count(k.faces, 'face')})
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-      )}
+      {/* A read of its own: while it loads, or if it fails, the person sees so (and can try again) instead of an empty
+          list that reads as nobody known, which would make a second Grandma. */}
+      <DataView
+        state={known}
+        isEmpty={people => people.every(k => k.id === suggested?.id)}
+        skeleton={<Skeleton className="h-10 w-full" />}
+        empty={<p className="type-body-sm text-muted-foreground">Nobody else is named on any tape yet.</p>}
+      >
+        {people => <KnownChoice others={people.filter(k => k.id !== suggested?.id)} onAnswer={onAnswer} />}
+      </DataView>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={() => onAnswer({ answer: 'skip' })}>
           Skip
@@ -316,6 +297,38 @@ function GroupAnswer({
         </Button>
       </div>
     </section>
+  )
+}
+
+/** Adding the group to someone the face store knows already. */
+function KnownChoice({ others, onAnswer }: { others: Known[]; onAnswer: (said: Answer) => void }) {
+  const [chosen, setChosen] = useState('')
+  return (
+    <Field
+      label="Or someone named before"
+      action={
+        <Button
+          variant="outline"
+          disabled={!chosen}
+          onClick={() => {
+            // enabled only once a listed person is chosen
+            const k = others.find(o => String(o.id) === chosen)!
+            onAnswer({ answer: 'name', person: k.id, who: personName(k) })
+          }}
+        >
+          Add to them
+        </Button>
+      }
+    >
+      <NativeSelect value={chosen} onChange={e => setChosen(e.target.value)}>
+        <option value="">Choose a person</option>
+        {others.map(k => (
+          <option key={k.id} value={k.id}>
+            {personName(k)} ({format.count(k.faces, 'face')})
+          </option>
+        ))}
+      </NativeSelect>
+    </Field>
   )
 }
 

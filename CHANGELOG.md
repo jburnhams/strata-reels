@@ -4,6 +4,12 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Review of the people stage (PR #26): each tracking keeps its own files, refs and skips; known people as a read of their own (branch `claude/project-thread-l890x5`)**
+Codex found four real problems in PR #26.
+- `src/app/people.py`: the tracks' folder is keyed on the planned model and settings, so a changed model writes beside the earlier result's files rather than over them (results are append-only); a still's face-store reference names the tracking it came from, so a new tracking never answers an earlier one's stored picture; a skip records its tracking and `skipped` reads only the current one's, since track numbers are only the same track within one tracking.
+- `web/src/screens/TapePeople.tsx`: the people named before are a `DataView` of their own, so while they load or if the read fails the person sees so (with Try again), rather than an empty list that reads as nobody known.
+- `tests/unit/test_people.py`, `web/tests/integration/TapePeople.test.tsx`: the reference, a skip from another tracking, the known people failing and being only the one suggested.
+
 **The people on a tape: faces followed, named a group at a time, and who does what in each scene (branch `claude/project-thread-l890x5`)**
 Jonathan asked to use strata-models' new face tracking and recognition, with a stage after ingest that waits until every face is named or skipped, for better descriptions of who does what, and what other tracking is needed. The grouping and suggestion went into strata-models (PR #160, `POST /api/faces/group-tracks`, preset `scene-describe-v3`) and the client and test double into strata-python (PR #93); until strata-python's release, `pyproject.toml` takes it from that branch's commit (moved to the one with the review's fixes to the fake face store).
 - `src/app/people.py` (**new**): `track` (strata-models' `face-tracks` over the tape, cut at the shot starts, stills under `derived/<key>/face-tracks/`), `store` (the stills kept in the face store under the opt-in tape tag), `people_of` (the groups left to answer, with a suggestion, and the people named), `answer` (name, add to someone known, not faces, or skip; each logged as an override), `is_open` (the gate's policy), `cast` (who is in each scene, seconds and where on each keyframe) and `for_describer`.
