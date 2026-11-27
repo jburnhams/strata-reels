@@ -2,7 +2,17 @@ import { readFileSync } from 'node:fs'
 import { colorSchemeScript, format } from 'strata-react'
 import { describe, expect, it } from 'vitest'
 import { initialSources, systemModelsDown, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
-import { otherRuns, tapeRunChecked, tapeRunDone, tapeRunPartWay, tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
+import {
+  fresh,
+  otherRuns,
+  pinMockClock,
+  tapeRunChecked,
+  tapeRunDone,
+  tapeRunPartWay,
+  tapeScenes,
+  tapeTranscript,
+  waitingScenes,
+} from '../../src/mocks/tape'
 import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
 import { describePicture, describeSources, followRuns, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, describeSystem, homeDisk } from '../../src/screens/SystemScreen'
@@ -84,6 +94,17 @@ describe('the System finding', () => {
     // a poll that failed says nothing new about the services: the server is the news
     expect(describeSystem(systemModelsDown, false)).toBe(describeDisk(systemModelsDown, false))
     expect(describeSystem({ ...systemStatus, services: [] })).toBe(describeDisk(systemStatus))
+  })
+})
+
+describe('the mock clock', () => {
+  it('keeps "minutes ago" the same against a pinned now, as the visual suite pins it', () => {
+    const ago = 33 * 60_000
+    const fixture = { t: new Date(Date.now() - ago).toISOString() }
+    pinMockClock('2026-11-09T09:00:00Z')
+    const moved = Date.parse(fresh(fixture).t)
+    expect(Date.parse('2026-11-09T09:00:00Z') - moved).toBeGreaterThan(ago - 5000)
+    expect(Date.parse('2026-11-09T09:00:00Z') - moved).toBeLessThanOrEqual(ago)
   })
 })
 

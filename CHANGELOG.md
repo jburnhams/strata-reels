@@ -13,10 +13,10 @@ Jonathan asked to update to the latest strata-python and strata-react and use th
 - `web/src/screens/SystemScreen.tsx`: `SystemPanel` (server facts with Sources as the app's own fact, the home folder's meter on strata-react's `diskThresholds`, strata-models Up or Down with its reason) replaces the page's own Running list and meter; the read is `useLoad({ poll })` with `usePoll` every minute and `PauseButton` in the header; "What fills the disk" keeps the `CompositionBar`. The finding (`describeSystem`) says first when strata-models is down. `ofSize` and the page's own thresholds are gone (the panel has both).
 - `web/src/mocks/fixtures.ts`, `web/src/mocks/handlers.ts`: strata-models up in the fixture, `systemModelsDown`, and the unread disk is a home folder with no sizes (as the server sends it) rather than no folders.
 - `web/stories/system.stories.tsx`: a `ModelsDown` story.
-- `web/strata-visual.config.ts`: the clock is frozen at the fixtures' morning (`time`), since the panel's uptime and the "Updated" time read it.
+- `web/strata-visual.config.ts`, `web/src/mocks/tape.ts`: the page's clock is frozen at the fixtures' morning (`time`), since the panel's uptime and the "Updated" time read it, and the route handlers' "now" is pinned to the same moment (`pinMockClock`): they run in Node on the real clock, so the first baseline run showed the jobs as added "in 2 weeks".
 - `web/tests/utils/setup.ts`: `setupStrataTests({ afterEach })` replaces `installLayoutShims` and the hand-written `cleanup`.
 - `tests/unit/test_server.py`, `web/tests/unit/logic.test.ts`, `web/tests/integration/SystemScreen.test.tsx`: strata-models down (hermetic) and up (`fake_models`), the finding, the panel's parts and pausing.
-- `web/tests/visual/baselines/`: the System shots move (the panel's layout, Services, the pause control), rewritten on the CI runner by `update-visual-baselines.yml`.
+- `web/tests/visual/baselines/`: the System shots move (the panel's layout, Services, the pause control), rewritten on the CI runner by `update-visual-baselines.yml` and looked at. PR #23.
 
 ## 2026-11-26
 

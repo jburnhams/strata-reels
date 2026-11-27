@@ -12,10 +12,15 @@
 // baselines. Look at a diff in tests/visual/output/ before accepting it.
 import { defineVisualConfig } from 'strata-react/visual'
 import { handlers } from './src/mocks/handlers'
+import { pinMockClock } from './src/mocks/tape'
+
+// The fixtures' morning: the System page's uptime and "Updated" time read the page's clock, and the jobs'
+// "minutes ago" read it against the handlers' times, which run in Node and are pinned to the same moment.
+const TIME = '2026-11-09T09:00:00Z'
+pinMockClock(TIME)
 
 export default defineVisualConfig({
-  // The fixtures' morning: the System page's uptime and "Updated" time read the clock.
-  time: '2026-11-09T09:00:00Z',
+  time: TIME,
   storybook: 'storybook-static',
   app: {
     dir: 'dist-visual',
