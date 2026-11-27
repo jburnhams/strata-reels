@@ -113,6 +113,23 @@ def test_accepting_is_compare_and_swap_on_the_current_revision(engine, tmp_path,
             reels.revision(s, reel, 99)
 
 
+def test_accept_and_reject_read_the_proposal_again_under_the_lock(engine, tmp_path, tape_models):
+    sid = analysed(engine, tmp_path)
+    with Session(engine) as one, Session(engine) as two:
+        src = one.get(Source, sid)
+        assert src is not None
+        reel, rev = reels.create(one, src, Fraction(8))
+        assert rev.rejected is None  # loaded in this session before the other rejects it
+        reels.reject(two, reels.get(two, reel.id), rev.id)
+        with pytest.raises(ValueError, match="was rejected"):
+            reels.accept(one, reel.id, rev.id, author="ada")
+        other = reels.propose(one, reel, seed=5)
+        assert other.accepted is None
+        reels.accept(two, reel.id, other.id, author="ada")
+        with pytest.raises(ValueError, match="was accepted"):
+            reels.reject(one, reel, other.id)
+
+
 def test_pins_bans_and_locks_hold_through_every_plan(engine, tmp_path, tape_models):
     sid = analysed(engine, tmp_path)
     with Session(engine) as s:

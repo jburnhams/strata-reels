@@ -344,8 +344,8 @@ def accept(db: Session, reel_id: int, revision_id: int, *, author: str) -> Revis
     """Make a proposal the reel's current revision, if its base still is (compare-and-swap under the reel's row lock).
     Conflict (409) when the reel has moved on since it was made; ValueError for a rejected one; accepting the current
     revision again changes nothing."""
-    reel = lock_row(db, Reel, reel_id)
-    rev = revision(db, reel, revision_id)
+    rev = _locked(db, reel_id, revision_id)
+    reel = get(db, reel_id)
     if rev.accepted is not None:
         db.rollback()
         return rev
@@ -365,14 +365,25 @@ def accept(db: Session, reel_id: int, revision_id: int, *, author: str) -> Revis
     return rev
 
 
-def reject(db: Session, reel: Reel, revision_id: int) -> Revision:
-    """Set a proposal aside. ValueError for one that was accepted."""
+def _locked(db: Session, reel_id: int, revision_id: int) -> Revision:
+    """The revision, read again after taking the reel's row lock: one this session loaded before the lock may be older
+    than the accept or reject that held it."""
+    reel = lock_row(db, Reel, reel_id)
     rev = revision(db, reel, revision_id)
+    db.refresh(rev)
+    return rev
+
+
+def reject(db: Session, reel: Reel, revision_id: int) -> Revision:
+    """Set a proposal aside. ValueError for one that was accepted. Under the same row lock as `accept`, so the two
+    cannot both succeed on one proposal."""
+    rev = _locked(db, reel.id, revision_id)
     if rev.accepted is not None:
+        db.rollback()
         raise ValueError(f"revision {rev.id} was accepted: it stays in the reel's history")
     if rev.rejected is None:
         rev.rejected = _now()
-        db.commit()
+    db.commit()
     return rev
 
 
