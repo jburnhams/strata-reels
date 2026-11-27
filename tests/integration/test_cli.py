@@ -119,7 +119,7 @@ def _colour(path: str) -> list[float]:
 
 
 def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp_path, fake_models):
-    """Step 2 end to end with the real ffmpeg: red for 4 s, dark red for 3 s, black for 1 s, blue for 4 s. strata-models
+    """Steps 2 to 5 end to end with the real ffmpeg: red for 4 s, dark red for 3 s, black for 1 s, blue for 4 s. strata-models
     is stood in for (it is another service) and answers the cuts at their known frames; the keyframes are cut from the
     real file, and their stand-in vectors are their real average colours, so the grouping sees what the pictures show:
     red and dark red are one scene, the black is the gap, blue is another. Step 3 on top: the speech, the faces and a
@@ -198,3 +198,13 @@ def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp
     assert [(ch["start"], ch["end"], ch["name"]["title"]) for ch in named] == [
         ("0", "7", "a red picture"), ("8", "12", "a blue picture"),
     ]  # fmt: skip
+    # step 5 on top: a reel of both scenes (all a 10 s reel can take), accepted: the red one less half a second at
+    # each end, onto frames; the blue one whole, since trimming it would leave less than the shortest clip
+    made = json.loads(cli("reel", "1", "--target", "10", "--accept", "--json").stdout)
+    assert (made["state"], made["duration_seconds"]) == ("current", 9.96)
+    assert [(c["start"], c["end"], c["scene"]) for c in made["clips"]] == [("13/25", "162/25", "0"), ("8", "12", "8")]
+    assert [c["at_seconds"] for c in made["clips"]] == [0.0, 5.96]
+    shorter = json.loads(cli("reel", "1", "--target", "4", "--json").stdout)
+    assert (shorter["state"], shorter["base_id"]) == ("proposal", made["id"])
+    # 4 s of the red scene, from a quarter second before "Look at the red wall" (onto a frame)
+    assert [(c["start"], c["end"]) for c in shorter["clips"]] == [("18/25", "118/25")]

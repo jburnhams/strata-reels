@@ -4,6 +4,18 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**The first automatic reel: revisions, proposals and the baseline planner (branch `claude/project-thread-unzfte`)**
+Jonathan agreed the next step: a reel stored as revisions, with a simple picker that fits scenes to a target length and keeps his locks and bans when it plans again (plan step 5). The reel screens, gapless preview and ffmpeg render are being built in parallel on this model, so this change has the API and the CLI and no screen; faces are left out (the planner reads the describer's counts of people, not the faces step).
+- `src/app/planner.py` (**new**): the baseline planner, a pure function from the scenes (span, chapter, description, phrases said), the target, the rate, the person's constraints and a seed to the clips in tape order, every cut on a frame and the total within the target; scores with reasons, coverage of chapters over repetition, trims around speech, and conflicts for what it cannot keep (a later word wins between a ban and a pin or lock).
+- `src/app/reels.py` (**new**): reels and revisions (create, propose, accept by compare-and-swap and reject, both under the reel's row lock with the revision read again after it, so the two cannot both succeed on one proposal: a review finding on the PR), the scenes read for the planner from the stored results, pins, bans and locks as overrides on the reel, clip ids from a hash of the source's content and the exact range, and the API's models.
+- `src/app/models.py`: `Reel` and `Revision`. `src/app/migrations/20261127_0cd49ccee9b9_reels_and_revisions.py` (**new**): their tables.
+- `src/app/overrides.py`: `reel` is a target.
+- `src/app/server/app.py`: `/api/reels` (list, create), `/api/reels/{reel}`, `.../revisions/{rev}` (with seconds and the timeline position of each clip, for the preview), `.../plan`, `.../accept` (409 when stale), `.../reject`, `.../constraints` (POST, DELETE).
+- `src/app/cli.py`: `reel` (plan, `--seed`, `--new`, `--accept`, `--json`) and `reels`.
+- `web/openapi.json`, `web/src/api.generated.ts`: regenerated.
+- `tests/unit/test_planner.py` (**new**, with a property test that any plan fits its length on frames inside its scenes), `tests/unit/test_reels.py` (**new**), `tests/unit/test_overrides.py` (the new target), `tests/integration/test_cli.py` (a reel of the real two-scene file, accepted, and a shorter proposal on it).
+- `docs/overview.md` (the revision as built), `docs/implementation-plan.md` (step 5 started), `docs/progress.md`, `README.md`, `AGENTS.md`: the commands and modules.
+
 **strata-python 0.2.24 and strata-react 1.3.26, and the System page on the shared panel (branch `claude/project-thread-7wxr1m`)**
 Jonathan asked to update to the latest strata-python and strata-react and use their new features. Neither release since reels' last (0.2.22, 1.3.23) adds anything reels needs on its own (strata-python: speaker embeddings and camera picture readers; strata-react: a clock for 3D replays, key scopes, theming hooks, its Vite+ build), so the bump is version-only for most of the app; what changed is where reels still had hand-written copies of shared parts: the System page drew its own server facts and disk meter beside strata-react's `SystemPanel`, polled with a bare `refetchInterval` where strata-react has `usePoll` and `PauseButton`, did not say whether strata-models (which does every analysis step) was up, and typed its own fields by hand; the test setup did its own cleanup where `setupStrataTests` does it.
 - `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.24,<0.3` (0.2.24).

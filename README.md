@@ -18,6 +18,8 @@ uv run app work                           # run the queued jobs here until none 
 uv run app scenes 1                       # source 1's scenes, with each one's summary and faces (strata-models must be running)
 uv run app chapters 1                     # source 1's chapters: its scenes grouped by occasion, each with its name (or yours)
 uv run app fit-chapters                   # what your chapter marks and confirmed tapes say the grouping's weights should be
+uv run app reel 1 --target 2:00           # a highlight reel of source 1, 2 minutes long (a proposal; --accept makes it current, --seed N another version)
+uv run app reels                          # every reel, with its current revision
 uv run app serve                          # starts the FastAPI + React app on http://127.0.0.1:8360/
 ```
 
