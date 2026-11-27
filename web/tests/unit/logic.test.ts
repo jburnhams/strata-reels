@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { colorSchemeScript, format } from 'strata-react'
 import { describe, expect, it } from 'vitest'
+import type { Revision } from '../../src/api'
 import { initialSources, systemModelsDown, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
+import { clipsOf, renderOf, sideAReel, tapeReel } from '../../src/mocks/reels'
 import {
   fresh,
   otherRuns,
@@ -14,6 +16,8 @@ import {
   waitingScenes,
 } from '../../src/mocks/tape'
 import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
+import { aspectNumber, describeReel, describeRender, describeRevision, editOf, shownOf } from '../../src/screens/ReelScreen'
+import { describeReels, parseLength } from '../../src/screens/ReelsScreen'
 import { describePicture, describeSources, followRuns, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, describeSystem, homeDisk } from '../../src/screens/SystemScreen'
 import {
@@ -248,5 +252,61 @@ describe('the jobs page', () => {
     expect(describeMore({ items: Array(200), total: null })).toBe(
       'Showing the newest 200. Choose Failed or Waiting to find older ones that need you.',
     )
+  })
+})
+
+describe('reels', () => {
+  it('reads a length as a clock or seconds', () => {
+    expect(parseLength('2:00')).toBe(120)
+    expect(parseLength(' 90 ')).toBe(90)
+    expect(parseLength('1:02:30')).toBe(3750)
+    expect(parseLength('0')).toBeNull()
+    expect(parseLength('2m')).toBeNull()
+    expect(parseLength('1:2:3:4')).toBeNull()
+  })
+
+  it('counts the reels and the ones waiting', () => {
+    expect(describeReels([])).toBe('No reels yet.')
+    expect(describeReels([{ proposals: 0 }])).toBe(`${format.count(1, 'reel')}.`)
+    expect(describeReels([{ proposals: 1 }, { proposals: 0 }])).toBe(
+      `${format.count(2, 'reel')}. ${format.count(1, 'reel')} has a version for you to accept.`,
+    )
+  })
+
+  it('says which version is current and what waits, out of date apart', () => {
+    expect(describeReel(tapeReel)).toBe(
+      `Version 2 is current: 2:00 in ${format.count(12, 'clip')}. ${format.count(1, 'proposal')} to accept or reject.`,
+    )
+    expect(describeReel({ current: null, open: [], proposals: 0 })).toBe('No version is accepted yet.')
+    expect(describeReel({ ...tapeReel, proposals: 0 })).toMatch(/1\sproposal out of date\.$/)
+    expect(describeRevision(tapeReel.current as Revision)).toBe(
+      `Version 2: 2:00 in ${format.count(12, 'clip')}, planned by baseline (seed 0), accepted by person.`,
+    )
+  })
+
+  it('shows the version the URL names, else the current one, else the newest proposal', () => {
+    expect(shownOf(tapeReel, '3')?.id).toBe(3)
+    expect(shownOf(tapeReel, '99')?.id).toBe(2)
+    expect(shownOf(tapeReel, '')?.id).toBe(2)
+    expect(shownOf(sideAReel, '')?.id).toBe(5)
+    expect(shownOf({ current: null, open: [] }, '')).toBeNull()
+  })
+
+  it('plays each clip from its tape’s browser copy, in seconds', () => {
+    const [first] = editOf(clipsOf(2, 40, 600, 10))
+    expect(first).toMatchObject({ src: '/api/sources/5/proxy', start: 40, end: 50, label: 'From 0:40 on the tape' })
+    expect(aspectNumber(initialSources[0])).toBeCloseTo(4 / 3)
+    expect(aspectNumber(undefined)).toBeCloseTo(16 / 9)
+    expect(aspectNumber({ ...initialSources[0], video: null })).toBeCloseTo(16 / 9)
+  })
+
+  it('says what a render is doing in words', () => {
+    const rev = tapeReel.current as Revision
+    expect(describeRender(renderOf(1, rev, 'done'))).toBe(`Rendered to one file of ${format.bytes(182_400_000)}.`)
+    expect(describeRender(renderOf(1, rev, 'failed'))).toMatch(/has changed since it was added/)
+    expect(describeRender({ state: 'failed', error: null, bytes: null })).toBe('The render stopped.')
+    expect(describeRender({ state: 'done', error: null, bytes: null })).toBe('Rendered to one file.')
+    expect(describeRender({ state: 'cancelled', error: null, bytes: null })).toBe('The render was cancelled.')
+    expect(describeRender({ state: 'running', error: null, bytes: null })).toMatch(/^Cutting/)
   })
 })

@@ -6,11 +6,13 @@
 // page path with the app (src/app/server/app.py), so a reload or a shared link opens that screen,
 // and anything a person would link to (sort, tab, page) lives in the URL's search. The sources list is
 // /sources and a tape is /sources/<id> under it, so the menu marks Sources on a tape's page too; the
-// app's root sends the person there, with its search, so an older link such as /?sort=length.desc keeps its sort.
+// app's root sends the person there (reels are /reels and /reels/<id> the same way), with its search, so an older link such as /?sort=length.desc keeps its sort.
 import { Navigate, type RouteObject, useLocation } from 'react-router'
 import { JobsScreen } from './screens/JobsScreen'
 import { Layout } from './screens/Layout'
 import { NotFoundScreen } from './screens/NotFoundScreen'
+import { ReelScreen } from './screens/ReelScreen'
+import { ReelsScreen } from './screens/ReelsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { SourcesScreen } from './screens/SourcesScreen'
 import { SystemScreen } from './screens/SystemScreen'
@@ -28,6 +30,8 @@ export const routes: RouteObject[] = [
       { index: true, element: <ToSources /> },
       { path: 'sources', element: <SourcesScreen /> },
       { path: 'sources/:id', element: <TapeScreen />, handle: { wide: true } },
+      { path: 'reels', element: <ReelsScreen /> },
+      { path: 'reels/:id', element: <ReelScreen />, handle: { wide: true } },
       { path: 'jobs', element: <JobsScreen /> },
       { path: 'system', element: <SystemScreen /> },
       { path: 'settings', element: <SettingsScreen /> },

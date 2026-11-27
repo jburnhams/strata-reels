@@ -3,12 +3,13 @@
 // marked with aria-current. Each screen supplies its own PageHeader inside <Outlet />. Screens are a
 // reading width; a route with `handle: { wide: true }` (the tape page, whose player sits beside its
 // chapters on a wide screen) takes the width a desktop has.
-import { Film, ListChecks, Server, Settings } from 'lucide-react'
+import { Clapperboard, Film, ListChecks, Server, Settings } from 'lucide-react'
 import { Outlet, useMatches } from 'react-router'
 import { AppShell, type NavItem } from 'strata-react'
 
 export const nav: NavItem[] = [
   { to: '/sources', label: 'Sources', icon: Film },
+  { to: '/reels', label: 'Reels', icon: Clapperboard },
   { to: '/jobs', label: 'Jobs', icon: ListChecks },
   { to: '/system', label: 'System', icon: Server },
   { to: '/settings', label: 'Settings', icon: Settings },
