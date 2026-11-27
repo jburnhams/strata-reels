@@ -16,7 +16,7 @@ Jonathan asked to update to the latest strata-python and strata-react and use th
 - `web/strata-visual.config.ts`, `web/src/mocks/tape.ts`: the page's clock is frozen at the fixtures' morning (`time`), since the panel's uptime and the "Updated" time read it, and the route handlers' "now" is pinned to the same moment (`pinMockClock`): they run in Node on the real clock, so the first baseline run showed the jobs as added "in 2 weeks".
 - `web/tests/utils/setup.ts`: `setupStrataTests({ afterEach })` replaces `installLayoutShims` and the hand-written `cleanup`.
 - `tests/unit/test_server.py`, `web/tests/unit/logic.test.ts`, `web/tests/integration/SystemScreen.test.tsx`: strata-models down (hermetic) and up (`fake_models`), the finding, the panel's parts and pausing.
-- `web/tests/visual/baselines/`: the System shots move (the panel's layout, Services, the pause control), rewritten on the CI runner by `update-visual-baselines.yml` and looked at. PR #23.
+- `web/tests/visual/baselines/`: the System shots move (the panel's layout, Services, the pause control), rewritten on the CI runner by `update-visual-baselines.yml` and looked at (18 shots, two of them new for `ModelsDown`). The first run also moved the four jobs route shots to "in 2 weeks" (the clock above); the second, after the pin, put them back pixel for pixel as on main, and re-recorded `tape--default--phone--light` for a 3×6 px edge of the playhead, within tolerance before. PR #23.
 
 ## 2026-11-26
 
