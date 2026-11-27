@@ -4,6 +4,40 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Reels on the released strata-python 0.2.25 and strata-react 1.3.27 (branch `claude/project-thread-oc0aq8`)**
+Both upstream PRs merged and were released, so the temporary git pin and local pack are gone.
+- `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.25,<0.3` from PyPI; `[tool.uv.sources]` removed. `AGENTS.md`: the range.
+- `web/package.json`, `web/package-lock.json`: `strata-react ^1.3.27`, the first release with `EditListPlayer`.
+
+**The Reels screens: a reel previewed with no gap, accepted and rendered (branch `claude/project-thread-oc0aq8`)**
+The rest of item 2: a reel is watchable in the app. The preview is strata-react's new `EditListPlayer` (strata-react PR #398), which plays the version's clips from the tape's browser copy as one film, with the hidden element sought ahead and brought forward at each cut. Until strata-react's release with it is out, the screens were built against a local pack of that branch; `web/package.json` moves to that release before this merges. One thing found on the way: a `DataTable` whose `columns` are made anew on every render remounts its cells, and a `RowAction` press that moves focus to the row then loses its button between the pointer going down and up, so the columns here are memoised (worth a line in strata-react's docs).
+- `web/src/screens/ReelsScreen.tsx` (**new**): the reels, with how many wait to be accepted, and Make a reel (a tape and a length as a clock or seconds; the server's refusal, such as a tape whose scenes are not grouped, under the tape), which opens the new reel.
+- `web/src/screens/ReelScreen.tsx` (**new**): the version shown (`?version=`, else the current one, else the newest proposal) in the player, its state, plan and conflicts; Accept (the filled button on a proposal), Reject and Plan another version (the next seed); a stale proposal says to plan again; the open proposals with Preview; the clips with Play; the version's file: Render, the job's state while it waits or runs, why it failed, then the download and its SHA-256.
+- `web/src/routes.tsx`, `web/src/screens/Layout.tsx`: `/reels` and `/reels/:id` (wide), and Reels in the menu.
+- `web/src/api.ts`: `Reel`, `ReelDetail`, `Revision`, `Clip`, `Render` and their query keys.
+- `web/src/mocks/reels.ts` (**new**), `web/src/mocks/handlers.ts`: two reels (one with a current version, a proposal and a file; one not accepted, its plan short of its length), every reel route as the server answers it (create, plan, accept with its 409, reject, render, the renders), and the states for stories and tests.
+- `web/tests/integration/ReelScreens.test.tsx` (**new**), `web/tests/unit/logic.test.ts`: the list, making a reel and its refusals, preview, Play, accept, reject, plan, render and its failures, a stale proposal, the server down; the words of each finding.
+- `web/stories/reels.stories.tsx`, `web/stories/reel.stories.tsx` (**new**), `web/strata-visual.config.ts`: the screens in each state, and the two routes in the app target; their baselines in `web/tests/visual/baselines/`. Every existing screen's baseline moved only by the new menu item (each diff looked at). They were written in Chromium 158 (this machine's; the proxy blocks Playwright's download of 159), so `.strata-visual.json` says 158; if CI's 159 differs, `update-visual-baselines.yml` rewrites them on the runner.
+- `README.md`, `docs/implementation-plan.md`: the screens, and step 6 started.
+
+**Review of the render (PR #25): a shared file's manifest names its own version (branch `claude/project-thread-oc0aq8`)**
+A second revision with the same clips shares the first one's file, and had copied its manifest whole, so it named the other revision. Also takes strata-python's fix for the sound at each cut, which ran half a frame early.
+- `src/app/renders.py`: a shared render's manifest has this reel, revision and key, no job, and `made_by` naming the render (reel and revision) that made the file and whose `manifest.json` is beside it.
+- `tests/unit/test_renders.py`: the shared render's manifest says its own revision and who made the file; the first one's is unchanged.
+- `pyproject.toml`, `uv.lock`: strata-python from the commit with the sound fix, still until its release.
+
+**Render a reel's revision to a file, frame exact, with a manifest (branch `claude/project-thread-oc0aq8`)**
+Item 2 of the plan Jonathan agreed on 2026-11-27: make a reel watchable, through a preview without gaps and an ffmpeg render (spec S8). This part is the render. It is built on the reel model from `claude/project-thread-unzfte`, and its migration follows that one. The ffmpeg side, which cuts stretches of files and joins them, is shared, so it went into strata-python as `strata_python.render` (strata-python PR #91). Until that release is out, `pyproject.toml` takes strata-python from its commit. The reel screens with the preview come in a later commit, on strata-react's new `EditListPlayer` (strata-react PR #398).
+- `src/app/renders.py` (**new**): `request` (finds the render of the same clips, whose file is still there, or the one being made; otherwise it adds a row and queues a `render` job holding `disk`), `make` (checks each tape against the fingerprint it was added with, renders from the raw tape into `renders/<key>/reel.mp4`, and writes `manifest.json` beside it), `run` (the job) and `out` (`RenderOut`: the job's state, then the file's URL, SHA-256, length and manifest). The key is a hash of the clips, the sources' SHA-256, strata-python's render recipe and the output settings. The manifest is strata-python's (ffmpeg and x264 builds, the command, each cut's frames and edit time, the file's SHA-256), plus the reel, the revision, its key and each clip, with local paths replaced by `source:<id>` and `reel.mp4`.
+- `src/app/models.py`: `Render`. `src/app/migrations/20261127_3a740f8560a6_renders.py` (**new**): its table.
+- `src/app/jobs.py`: the `render` handler, plus public `records()` and `same_footage()` for jobs other than the tape's.
+- `src/app/server/app.py`: `POST /api/reels/{reel}/revisions/{rev}/render`, `GET /api/reels/{reel}/renders`, `GET .../renders/{id}` and `GET .../renders/{id}/file` (a download named after the reel).
+- `src/app/cli.py`: `render REEL [--revision N] [--work] [--json]`.
+- `web/openapi.json`, `web/src/api.generated.ts`: regenerated.
+- `tests/unit/test_renders.py` (**new**: queued, made by its job, found again, the same clips shared by another revision, a deleted file made again, a changed tape failing in words, the routes, the refusals and the command). `tests/unit/conftest.py`: a stand-in for `strata_python.render` at the ffmpeg edge. `tests/integration/test_cli.py`: a real render of a clip whose frames carry their number, checked frame by frame.
+- `pyproject.toml`, `uv.lock`: strata-python from the commit that adds `render`, until it is released.
+- `AGENTS.md`, `docs/implementation-plan.md`: the module, the command, and step 7's render as built.
+
 **The first automatic reel: revisions, proposals and the baseline planner (branch `claude/project-thread-unzfte`)**
 Jonathan agreed the next step: a reel stored as revisions, with a simple picker that fits scenes to a target length and keeps his locks and bans when it plans again (plan step 5). The reel screens, gapless preview and ffmpeg render are being built in parallel on this model, so this change has the API and the CLI and no screen; faces are left out (the planner reads the describer's counts of people, not the faces step).
 - `src/app/planner.py` (**new**): the baseline planner, a pure function from the scenes (span, chapter, description, phrases said), the target, the rate, the person's constraints and a seed to the clips in tape order, every cut on a frame and the total within the target; scores with reasons, coverage of chapters over repetition, trims around speech, and conflicts for what it cannot keep (a later word wins between a ban and a pin or lock).

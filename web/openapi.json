@@ -1136,6 +1136,149 @@
     "title": "ReelsSettings",
     "type": "object"
    },
+   "RenderOut": {
+    "description": "A render of a revision: its job's state while it is made, then its file. `url` downloads it once `done`.",
+    "properties": {
+     "bytes": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bytes"
+     },
+     "created": {
+      "format": "date-time",
+      "title": "Created",
+      "type": "string"
+     },
+     "duration_seconds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Seconds"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "why the job failed, in its words",
+      "title": "Error"
+     },
+     "finished": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Finished"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "job_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Job Id"
+     },
+     "manifest": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "what made the file (spec S8); None until it is made",
+      "title": "Manifest"
+     },
+     "reel_id": {
+      "title": "Reel Id",
+      "type": "integer"
+     },
+     "revision_id": {
+      "title": "Revision Id",
+      "type": "integer"
+     },
+     "sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sha256"
+     },
+     "state": {
+      "enum": [
+       "queued",
+       "running",
+       "done",
+       "failed",
+       "cancelled"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the file, relative to the app's base; None until it is made",
+      "title": "Url"
+     }
+    },
+    "required": [
+     "id",
+     "reel_id",
+     "revision_id",
+     "job_id",
+     "state",
+     "error",
+     "created",
+     "finished",
+     "url",
+     "sha256",
+     "bytes",
+     "duration_seconds",
+     "manifest"
+    ],
+    "title": "RenderOut",
+    "type": "object"
+   },
    "RevisionOut": {
     "description": "One revision of a reel. `state`: `proposal` (can be accepted), `stale` (made on a revision that is no longer the\ncurrent one: plan again), `current`, `past` (was current) or `rejected`.",
     "properties": {
@@ -2675,6 +2818,138 @@
     "summary": "Post Plan"
    }
   },
+  "/api/reels/{reel_id}/renders": {
+   "get": {
+    "operationId": "get_renders_api_reels__reel_id__renders_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/RenderOut"
+         },
+         "title": "Response Get Renders Api Reels  Reel Id  Renders Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Renders"
+   }
+  },
+  "/api/reels/{reel_id}/renders/{render_id}": {
+   "get": {
+    "operationId": "get_render_api_reels__reel_id__renders__render_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "render_id",
+      "required": true,
+      "schema": {
+       "title": "Render Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RenderOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Render"
+   }
+  },
+  "/api/reels/{reel_id}/renders/{render_id}/file": {
+   "get": {
+    "operationId": "get_render_file_api_reels__reel_id__renders__render_id__file_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "render_id",
+      "required": true,
+      "schema": {
+       "title": "Render Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Render File"
+   }
+  },
   "/api/reels/{reel_id}/revisions/{revision_id}": {
    "get": {
     "operationId": "get_revision_api_reels__reel_id__revisions__revision_id__get",
@@ -2817,6 +3092,54 @@
      }
     },
     "summary": "Post Reject"
+   }
+  },
+  "/api/reels/{reel_id}/revisions/{revision_id}/render": {
+   "post": {
+    "operationId": "post_render_api_reels__reel_id__revisions__revision_id__render_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "revision_id",
+      "required": true,
+      "schema": {
+       "title": "Revision Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RenderOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Render"
    }
   },
   "/api/settings": {

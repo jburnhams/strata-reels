@@ -2,11 +2,12 @@
 tests/conftest.py and the strata-python plugin)."""
 
 import os
+from fractions import Fraction
 
 import pytest
 from hypothesis import HealthCheck, settings
 from probes import FACES, SHOTS, SPEECH, describe_scene, embeddings, name_chapter
-from strata_python import derive, media, mediatime
+from strata_python import derive, files, media, mediatime, render
 
 settings.register_profile(
     "unit", deadline=None, max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture]
@@ -61,6 +62,33 @@ def made(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
         calls.append((os.path.basename(src), "peaks"))
         return derive.Peaks(per_second, [-0.5, -0.25], [0.5, 0.25])
 
+    def rendered(cuts, out, *, output=None, progress=None, **_):
+        # strata_python.render's stand-in: a file and the Rendered it would describe (strata-python tests the real one
+        # against ffmpeg; tests/integration renders a real clip through the app).
+        calls.append(("+".join(os.path.basename(c.path) for c in cuts), "render"))
+        if progress is not None:
+            progress(1.0)
+        body = repr([(c.path, str(c.span.start), str(c.span.end), c.gain_db) for c in cuts]).encode()
+        with open(out, "wb") as f:
+            f.write(body)
+        frames = sum(len(c.span.frames(mediatime.Rate.parse(25))) for c in cuts)
+        made = render.Rendered(
+            probe=media.Probe.from_json(os.fspath(out), PROXY_PROBE),
+            frames=frames,
+            duration=Fraction(frames, 25),
+            rate=mediatime.Rate.parse(25),
+            width=768,
+            height=576,
+            command=["-i", *[c.path for c in cuts], "-f", "mp4", os.fspath(out)],
+            ffmpeg="test (x264 core 0)",
+            sha256=files.sha256_hex(out),
+            bytes=len(body),
+            cuts=[{"path": c.path, "span": c.span.to_json()} for c in cuts],
+            output=(output or render.Output()).to_json(),
+        )
+        return made
+
+    monkeypatch.setattr(render, "render", rendered)
     for name, fn in [
         ("interlacing", interlacing),
         ("proxy", proxy),

@@ -4,7 +4,7 @@ queues each one's ingest: the content hash, then the proxy, thumbnails, peaks, s
 them, `scenes` lists a source's scenes (from its shots, once the jobs have run, with each one's description and
 faces), `chapters` its chapters (the scenes grouped by occasion, each with its name or the person's title),
 `reel` plans a highlight reel of a tape to a length (a new proposal on the tape's latest reel, or a new reel) and
-`reels` lists them, `fit-chapters` what the person's chapter corrections say the grouping's weights should be, `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
+`reels` lists them, `render` renders a reel's revision to a file with its manifest, `fit-chapters` what the person's chapter corrections say the grouping's weights should be, `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
 itself while it is up)."""
 
 import argparse
@@ -19,7 +19,7 @@ from strata_python import cli as shared
 from strata_python import mediatime
 from strata_python.tasks import Conflict
 
-from app import __version__, chapters, db, describe, jobs, planner, reels, scenes, settings, shots, sources
+from app import __version__, chapters, db, describe, jobs, planner, reels, renders, scenes, settings, shots, sources
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -231,6 +231,38 @@ def cmd_reels(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_render(args: argparse.Namespace) -> int:
+    """Queue the render of a reel's revision (its current one by default); `--work` runs the queue here until it is done."""
+    with db.opened() as engine:
+        q = jobs.queue(engine)
+        with Session(engine) as s:
+            try:
+                reel = reels.get(s, args.reel)
+                rev = reels.revision(s, reel, args.revision) if args.revision else reels.current(s, reel)
+                if rev is None:
+                    raise ValueError(f"reel {reel.id} has no accepted revision: name one with --revision")
+                row = renders.request(s, q, reel, rev)
+            except (KeyError, ValueError) as e:
+                print(f"  {e.args[0] if isinstance(e, KeyError) else e}", file=sys.stderr)
+                return 1
+            if args.work and row.file is None:
+                jobs.work(q)
+                s.refresh(row)
+            shown = renders.out(s, q, row)
+    jobs.close_records()
+    if args.json:
+        print(shown.model_dump_json(indent=1))
+        return 0
+    if shown.state == "done":
+        print(f"  render #{shown.id} of revision {shown.revision_id}: {renders.path_of(row)}")
+        print(f"  {shown.bytes} bytes, sha256 {shown.sha256}")
+    else:
+        print(f"  render #{shown.id} of revision {shown.revision_id}: {shown.state} (job #{shown.job_id})")
+        if shown.error:
+            print(f"  {shown.error}")
+    return 1 if shown.state == "failed" else 0
+
+
 def cmd_jobs(args: argparse.Namespace) -> int:
     with db.opened() as engine:
         page = jobs.queue(engine).page(limit=args.limit)
@@ -299,6 +331,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     rl = sub.add_parser("reels", help="list the reels")
     rl.add_argument("--json", action="store_true")
     rl.set_defaults(fn=cmd_reels)
+    rn = sub.add_parser("render", help="render a reel's revision to a file, frame exact, with a manifest beside it")
+    rn.add_argument("reel", type=int)
+    rn.add_argument("--revision", type=int, help="which revision (default the reel's current one)")
+    rn.add_argument("--work", action="store_true", help="run the queue here until it is made (else the server does)")
+    rn.add_argument("--json", action="store_true")
+    rn.set_defaults(fn=cmd_render)
     jo = sub.add_parser("jobs", help="list the job queue, newest first")
     jo.add_argument("--limit", type=int, default=50)
     jo.add_argument("--json", action="store_true")

@@ -208,3 +208,56 @@ def test_work_splits_a_tape_into_shots_and_groups_them_into_scenes(cli: Cli, tmp
     assert (shorter["state"], shorter["base_id"]) == ("proposal", made["id"])
     # 4 s of the red scene, from a quarter second before "Look at the red wall" (onto a frame)
     assert [(c["start"], c["end"]) for c in shorter["clips"]] == [("18/25", "118/25")]
+
+
+def test_render_cuts_a_revision_from_the_raw_tape_frame_exact(cli: Cli, tmp_path):
+    """The render end to end with the real ffmpeg: a 4 s clip whose frames carry their number in their brightness, a
+    revision of three clips written as the planner writes them, then `render --work`; the file holds exactly those
+    frames in that order, and its manifest names the revision and the file's SHA-256."""
+    import hashlib
+    import subprocess
+
+    from app import db
+    from app.models import Reel, Revision
+
+    tape = tmp_path / "tape.mkv"
+    subprocess.run(
+        [
+            *("ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:size=160x120:rate=25:d=4"),
+            *("-f", "lavfi", "-i", "sine=frequency=440:sample_rate=16000:duration=4"),
+            *("-vf", "geq=lum='16+2*N':cb=128:cr=128", "-c:v", "ffv1", "-c:a", "pcm_s16le", str(tape)),
+        ],
+        check=True,
+    )
+    cli("add", str(tape))
+    cli("work")  # the hash (the shots wait for strata-models, which is not here)
+    spans = [("13/25", "1"), ("3", "86/25"), ("1/5", "2/5")]
+    with db.session() as s:
+        reel = Reel(source_id=1, name="Test reel", target="2")
+        s.add(reel)
+        s.flush()
+        clips = [
+            {"id": f"c{i}", "source_id": 1, "start": a, "end": b, "scene": "0", "gain_db": 0.0, "score": 1.0,
+             "reasons": [], "locked": False, "pinned": False}
+            for i, (a, b) in enumerate(spans)
+        ]  # fmt: skip
+        s.add(
+            Revision(
+                reel_id=reel.id, base_id=None, author="test", planner={"name": "test", "version": 1, "seed": 0},
+                inputs={}, clips=clips, conflicts=[], target="2", duration="33/25", key="test",
+            )
+        )  # fmt: skip
+        s.commit()
+    shown = json.loads(cli("render", "1", "--revision", "1", "--work", "--json").stdout)
+    assert shown["state"] == "done"
+    path = os.path.join(settings.SETTINGS.home(), "renders", shown["manifest"]["app"]["key"], "reel.mp4")
+    assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == shown["sha256"] == shown["manifest"]["file"]["sha256"]
+    stats = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", path, "-vf", "signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-",
+         "-f", "null", "-"],
+        check=True, capture_output=True, text=True,
+    ).stdout  # fmt: skip
+    numbers = [round((float(x.split("=")[1]) - 16) / 2) for x in stats.splitlines() if "YAVG" in x]
+    assert numbers == [*range(13, 25), *range(75, 86), *range(5, 10)]
+    assert shown["manifest"]["app"]["revision"] == 1
+    assert str(tape) not in json.dumps(shown["manifest"])

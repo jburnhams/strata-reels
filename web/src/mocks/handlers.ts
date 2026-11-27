@@ -7,8 +7,9 @@
 // state: `server.use(sourcesError)` in a test, `msw.use(sourcesError)` in a story's beforeEach,
 // `states: { error: [sourcesError] }` in the visual config.
 import { delay, HttpResponse, http } from 'msw'
-import type { Chapter, Scenes, Source, WorkflowRun } from '../api'
+import type { Chapter, ReelDetail, Render, Revision, Scenes, Source, WorkflowRun } from '../api'
 import { initialSources, systemModelsDown as modelsDown, systemNearlyFull as nearlyFull, readSource, systemStatus } from './fixtures'
+import { clipsOf, initialReels, initialRenders, listed, renderOf, revisionOf } from './reels'
 import {
   fresh,
   jobsPage,
@@ -37,6 +38,8 @@ export const mock = {
   /** The person's chapter marks on the tape, by scene index, and titles, by the index of the chapter's first scene. */
   marks: {} as Record<number, boolean>,
   titles: {} as Record<number, string>,
+  reels: structuredClone(initialReels) as ReelDetail[],
+  renders: structuredClone(initialRenders) as Render[],
 }
 
 /** Back to the healthy state: call between tests and stories. */
@@ -46,7 +49,19 @@ export function resetMock() {
   mock.runs = {}
   mock.marks = {}
   mock.titles = {}
+  mock.reels = structuredClone(initialReels)
+  mock.renders = structuredClone(initialRenders)
 }
+
+/** A reel's numbers again after a change, as `reels.detail` counts them. */
+function recount(r: ReelDetail): ReelDetail {
+  r.current_id = r.current?.id ?? null
+  r.clips = r.current?.clips.length ?? null
+  r.duration_seconds = r.current?.duration_seconds ?? null
+  r.proposals = r.open.filter(v => v.state === 'proposal').length
+  return r
+}
+const nextRevision = () => Math.max(0, ...mock.reels.flatMap(r => [r.current?.id ?? 0, ...r.open.map(v => v.id)])) + 1
 
 /** The tape's scenes with the person's marks and titles, grouped again at once (the server's job does it a moment
  *  later): a chapter starts where the grouping or a mark says so; one with the scenes of a named chapter keeps its name. */
@@ -125,6 +140,14 @@ export const paths = {
   run: '/api/workflows/tape/subjects/:subject',
   runAgain: '/api/workflows/tape/subjects/:subject/run',
   approve: '/api/workflows/tape/subjects/:subject/stages/:stage/approve',
+  reels: '/api/reels',
+  reel: '/api/reels/:id',
+  plan: '/api/reels/:id/plan',
+  accept: '/api/reels/:id/revisions/:rev/accept',
+  reject: '/api/reels/:id/revisions/:rev/reject',
+  render: '/api/reels/:id/revisions/:rev/render',
+  renders: '/api/reels/:id/renders',
+  renderFile: '/api/reels/:id/renders/:render/file',
 } as const
 
 const refused = (detail: string, status = 400) => HttpResponse.json({ detail }, { status })
@@ -132,6 +155,11 @@ const notFound = (detail: string) => HttpResponse.json({ detail }, { status: 404
 const sourceOf = (id: unknown) => mock.sources.find(s => s.id === Number(id))
 const down = () => new HttpResponse(null, { status: 503, statusText: 'Service Unavailable' })
 /** A subject's source id, as `jobs.source_id_of` reads it (`source:5`, escaped or not). */
+const reelOf = (id: unknown) => mock.reels.find(r => r.id === Number(id))
+const noReel = (id: unknown) => notFound(`there is no reel ${String(id)}`)
+/** A version among the reel's current and open ones. */
+const versionOf = (r: ReelDetail, rev: unknown): Revision | undefined =>
+  [r.current, ...r.open].find(v => v?.id === Number(rev)) ?? undefined
 const subjectId = (subject: unknown) => Number(/^source:(\d+)$/.exec(decodeURIComponent(String(subject)))?.[1] ?? Number.NaN)
 
 export const handlers = [
@@ -249,6 +277,86 @@ export const handlers = [
     mock.runs[id] = tapeRunChecked
     return HttpResponse.json(fresh(mock.runs[id]))
   }),
+  // src/app/reels.py and renders.py as the routes answer them. Only the tape (5) has grouped scenes to cut from.
+  http.get(at(paths.reels), () => HttpResponse.json(mock.reels.map(listed))),
+  http.post(at(paths.reels), async ({ request }) => {
+    const { source_id, target_seconds, name } = (await request.json()) as { source_id: number; target_seconds: number; name?: string }
+    const source = sourceOf(source_id)
+    if (!source) return notFound(`there is no source ${source_id}`)
+    if (source.id !== 5) return notFound(`${source.name} has no scenes yet: a reel is cut from them`)
+    if (!(target_seconds > 0)) return refused(`a reel's length is above 0 seconds, not ${target_seconds}`)
+    const id = Math.max(0, ...mock.reels.map(r => r.id)) + 1
+    const rev = revisionOf(nextRevision(), id, 'proposal', clipsOf(Math.max(1, Math.round(target_seconds / 10)), 40, 600, 10))
+    const reel = recount({
+      id,
+      name: name ?? `${source.name}, ${Math.floor(target_seconds / 60)}:${String(target_seconds % 60).padStart(2, '0')}`,
+      source_id: source.id,
+      source_name: source.name,
+      target_seconds,
+      created: '2026-11-27T09:00:00Z',
+      current_id: null,
+      current: null,
+      open: [rev],
+      proposals: 1,
+      clips: null,
+      duration_seconds: null,
+      constraints: [],
+    })
+    mock.reels = [...mock.reels, reel]
+    return HttpResponse.json(reel, { status: 201 })
+  }),
+  http.get(at(paths.reel), ({ params }) => {
+    const r = reelOf(params.id)
+    return r ? HttpResponse.json(r) : noReel(params.id)
+  }),
+  http.post(at(paths.plan), async ({ params, request }) => {
+    const r = reelOf(params.id)
+    if (!r) return noReel(params.id)
+    const { seed } = (await request.json()) as { seed: number }
+    const rev = revisionOf(nextRevision(), r.id, 'proposal', clipsOf(9 + (seed % 4), 70 + seed * 13, 650, 12), seed)
+    r.open = [rev, ...r.open]
+    recount(r)
+    return HttpResponse.json(rev, { status: 201 })
+  }),
+  // Compare-and-swap, as reels.accept: a stale proposal is a 409; the others made on the old current go stale.
+  http.post(at(paths.accept), ({ params }) => {
+    const r = reelOf(params.id)
+    if (!r) return noReel(params.id)
+    const v = r.open.find(x => x.id === Number(params.rev))
+    if (!v) return notFound(`reel ${r.id} has no open proposal ${String(params.rev)}`)
+    if (v.state === 'stale')
+      return refused(`The reel has changed since this proposal was made (its current revision is ${r.current_id}): plan it again.`, 409)
+    r.open = r.open.filter(x => x !== v).map(x => ({ ...x, state: 'stale' as const }))
+    r.current = { ...v, state: 'current', accepted: '2026-11-27T09:05:00Z', accepted_by: 'person' }
+    recount(r)
+    return HttpResponse.json(r.current)
+  }),
+  http.post(at(paths.reject), ({ params }) => {
+    const r = reelOf(params.id)
+    if (!r) return noReel(params.id)
+    const v = r.open.find(x => x.id === Number(params.rev))
+    if (!v) return refused(`revision ${String(params.rev)} is not an open proposal: only a proposal can be rejected`)
+    r.open = r.open.filter(x => x !== v)
+    recount(r)
+    return HttpResponse.json({ ...v, state: 'rejected' })
+  }),
+  // A render is queued; one already made for the version is answered again.
+  http.post(at(paths.render), ({ params }) => {
+    const r = reelOf(params.id)
+    if (!r) return noReel(params.id)
+    const v = versionOf(r, params.rev)
+    if (!v) return notFound(`reel ${r.id} has no revision ${String(params.rev)}`)
+    const made = mock.renders.find(x => x.revision_id === v.id && (x.state === 'done' || x.state === 'queued' || x.state === 'running'))
+    if (made) return HttpResponse.json(made, { status: 201 })
+    const row = renderOf(Math.max(0, ...mock.renders.map(x => x.id)) + 1, v, 'queued')
+    mock.renders = [row, ...mock.renders]
+    return HttpResponse.json(row, { status: 201 })
+  }),
+  http.get(at(paths.renders), ({ params }) => {
+    const r = reelOf(params.id)
+    return r ? HttpResponse.json(mock.renders.filter(x => x.reel_id === r.id)) : noReel(params.id)
+  }),
+  http.get(at(paths.renderFile), () => new HttpResponse(proxyWebm, { headers: { 'Content-Type': 'video/mp4' } })),
 ]
 
 // States. A request that never answers is "loading"; 503 is a server that is down. The app's query
@@ -331,4 +439,30 @@ export const runWaiting = http.get(at(paths.run), () =>
       }),
     ),
   ),
+)
+
+export const reelsLoading = http.get(at(paths.reels), () => delay('infinite'))
+export const reelsEmpty = http.get(at(paths.reels), () => HttpResponse.json([]))
+export const reelsError = http.get(at(paths.reels), down)
+export const reelLoading = http.get(at(paths.reel), () => delay('infinite'))
+export const reelError = http.get(at(paths.reel), down)
+/** The tape's reel with its current version's render waiting on the queue. */
+export const renderQueued = http.get(at(paths.renders), () =>
+  HttpResponse.json([renderOf(1, initialReels[0].current as Revision, 'queued')]),
+)
+/** The render failed: the tape changed on disk since it was added. */
+export const renderFailed = http.get(at(paths.renders), () =>
+  HttpResponse.json([renderOf(1, initialReels[0].current as Revision, 'failed')]),
+)
+/** The proposal on the tape's reel made on an older version: it cannot be accepted. */
+export const reelStale = http.get(at(paths.reel), () =>
+  HttpResponse.json({ ...initialReels[0], proposals: 0, open: initialReels[0].open.map(v => ({ ...v, state: 'stale' })) }),
+)
+/** Accepting answers 409: someone accepted another version meanwhile. */
+export const acceptConflict = http.post(at(paths.accept), () =>
+  refused('The reel has changed since this proposal was made (its current revision is 4): plan it again.', 409),
+)
+/** Rendering is refused: a clip's tape is not hashed yet. */
+export const renderRefused = http.post(at(paths.render), () =>
+  refused("a clip's tape (source 5) is not hashed yet: render it after the hash step"),
 )

@@ -28,6 +28,15 @@ export type WorkflowRun = Schema<'WorkflowRun'>
  *  AppNumbers), merged into one schema by `add_system`. */
 export type SystemStatus = Schema<'StrataReelsSystemInfo'>
 
+/** A reel in the list, and one with its versions (src/app/reels.py). */
+export type Reel = Schema<'ReelOut'>
+export type ReelDetail = Schema<'ReelDetail'>
+/** One version of a reel: its clips, and whether it is a proposal, the current one, past or rejected. */
+export type Revision = Schema<'RevisionOut'>
+export type Clip = Schema<'Clip'>
+/** A version rendered to a file (src/app/renders.py): its job's state, then the file and its manifest. */
+export type Render = Schema<'RenderOut'>
+
 export const api = createTypedApi<paths>()
 
 /** The query keys the screens share, so a write can invalidate every read it changes. */
@@ -40,6 +49,9 @@ export const keys = {
   jobs: ['jobs'],
   run: (id: number) => ['sources', id, 'run'] as const,
   runs: ['sources', 'runs'],
+  reels: ['reels'],
+  reel: (id: number) => ['reels', id] as const,
+  renders: (id: number) => ['reels', id, 'renders'] as const,
 } as const
 
 /** The tape pipeline's name for a source (src/app/jobs.py `subject_of`). */

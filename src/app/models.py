@@ -174,3 +174,23 @@ class Revision(Base):
     accepted: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     accepted_by: Mapped[str | None] = mapped_column(String(200), default=None)  # who made it the current revision
     rejected: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class Render(Base):
+    """A revision rendered to a file (`renders`, spec S8): made when it is asked for, stamped once when its job ends
+    with the file (under the app's home), its SHA-256 and the manifest of what made it. `key` is the clips', sources'
+    and recipe's hash, so the same clips are rendered once."""
+
+    __tablename__ = "renders"
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    reel_id: Mapped[int] = mapped_column(ForeignKey("reels.id"))
+    revision_id: Mapped[int] = mapped_column(ForeignKey("revisions.id"), index=True)
+    key: Mapped[str] = mapped_column(String(64), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), default=None)
+    file: Mapped[str | None] = mapped_column(String(200), default=None)  # relative to the app's home
+    sha256: Mapped[str | None] = mapped_column(String(64), default=None)
+    bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    manifest: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default_factory=_now)
+    finished: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), default=None)
