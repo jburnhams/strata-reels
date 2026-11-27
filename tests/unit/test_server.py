@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
-from strata_python.testing import assert_openapi_current
+from strata_python.testing import FakeModels, assert_openapi_current
 
 from app import __version__
 from app.server import app as server_app
@@ -45,6 +45,9 @@ def test_no_settings_yet_the_system_page_and_server_main(client: TestClient, mon
     assert home["name"] == "home"
     assert home["total_bytes"] >= home["free_bytes"] > 0
     assert s["home_bytes"] >= 0
+    (models,) = s["services"]  # nothing answers STRATA_MODELS_URL in a hermetic test: down, with the reason
+    assert (models["name"], models["ok"]) == ("strata-models", False)
+    assert models["detail"]
 
     runs: list[tuple[str, int, str]] = []
     monkeypatch.setattr(uvicorn, "run", lambda app, host, port, log_level: runs.append((host, port, log_level)))
@@ -73,3 +76,8 @@ def test_sources_api_lists_adds_and_refuses(client: TestClient, tmp_path):
     assert again.status_code == 200  # already a source, known by its content: ffprobe is not run
     assert again.json()["video"]["rate"] == "25/1"
     assert [s["name"] for s in client.get("/api/sources").json()] == ["tape.mkv"]
+
+
+def test_the_system_page_says_strata_models_is_up(client: TestClient, fake_models: FakeModels):
+    (models,) = client.get("/api/system").json()["services"]
+    assert (models["name"], models["ok"], models["detail"]) == ("strata-models", True, None)

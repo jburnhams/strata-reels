@@ -1,21 +1,40 @@
 import { createQueryClient } from 'strata-react'
 import { describe, expect, it } from 'vitest'
 import { keys } from '../../src/api'
-import { systemStatus } from '../../src/mocks/fixtures'
-import { systemError, systemNearlyFull, systemUnread } from '../../src/mocks/handlers'
-import { openApp, screen } from '../utils/render'
+import { initialSources, systemStatus } from '../../src/mocks/fixtures'
+import { systemError, systemModelsDown, systemNearlyFull, systemUnread } from '../../src/mocks/handlers'
+import { openApp, screen, within } from '../utils/render'
 import { server } from '../utils/server'
 
 describe('System', () => {
   it('answers with the data disk and shows what fills it', async () => {
     openApp('/system')
     expect(await screen.findByText(/^Everything is running\. The data disk is 59% full/)).toBeInTheDocument()
-    const meter = screen.getByRole('meter', { name: 'Data disk space used' })
+    const meter = screen.getByRole('meter', { name: 'home folder disk space used' })
     expect(meter).toHaveAttribute('aria-valuenow', String(512e9 - 210.4e9))
     expect(screen.getByRole('table', { name: /in all/ })).toHaveTextContent('This app’s data')
-    expect(screen.getByText('Answering')).toBeInTheDocument()
     expect(screen.getByText('/home/ada/.reels')).toBeInTheDocument()
     expect(screen.getByText('1427b94c0ffe')).toBeInTheDocument() // the source commit the server runs
+    expect(screen.getByRole('region', { name: 'Services' })).toHaveTextContent(/strata-models\s*Up\s*version 0\.4\.2/)
+    expect(within(screen.getByRole('region', { name: 'Server' })).getByText('Sources').nextSibling).toHaveTextContent(
+      String(initialSources.length),
+    )
+  })
+
+  it('says strata-models is down, with its reason, before the disk', async () => {
+    server.use(systemModelsDown)
+    openApp('/system')
+    expect(await screen.findByText(/^strata-models is not answering, so no tape is analysed until it is\./)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Services' })).toHaveTextContent(/Down.*Connection refused/)
+  })
+
+  it('stops reading again while paused, and says when it last read', async () => {
+    const { user } = openApp('/system')
+    expect(await screen.findByText(/^Updated \d/)).toBeInTheDocument()
+    const pause = screen.getByRole('button', { name: 'Pause updates' })
+    await user.click(pause)
+    expect(pause).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/^Paused\. Last updated \d/)).toBeInTheDocument()
   })
 
   it('names the threshold a nearly full disk has crossed, and what to do', async () => {
@@ -29,8 +48,9 @@ describe('System', () => {
     server.use(systemUnread)
     openApp('/system')
     expect(await screen.findByText('Everything is running. The data disk could not be read.')).toBeInTheDocument()
-    expect(screen.getByText('The disk could not be read.')).toBeInTheDocument()
+    expect(screen.getByText('Not measured')).toBeInTheDocument()
     expect(screen.queryByRole('meter')).toBeNull()
+    expect(screen.queryByRole('table', { name: /in all/ })).toBeNull()
     expect(screen.getByText('Installed package')).toBeInTheDocument()
   })
 
@@ -54,7 +74,7 @@ describe('System, when a poll fails after a good one', () => {
     server.use(systemError)
     openApp('/system', { client })
     expect(await screen.findByText(/These readings are from (\w+ )?08:50\./)).toBeInTheDocument()
-    expect(screen.getByText('Not answering')).toBeInTheDocument()
-    expect(screen.getByRole('meter', { name: 'Data disk space used' })).toBeInTheDocument()
+    expect(screen.getByText(/^The server is not answering\./)).toBeInTheDocument()
+    expect(screen.getByRole('meter', { name: 'home folder disk space used' })).toBeInTheDocument()
   })
 })

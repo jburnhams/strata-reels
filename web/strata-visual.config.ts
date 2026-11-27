@@ -14,6 +14,8 @@ import { defineVisualConfig } from 'strata-react/visual'
 import { handlers } from './src/mocks/handlers'
 
 export default defineVisualConfig({
+  // The fixtures' morning: the System page's uptime and "Updated" time read the clock.
+  time: '2026-11-09T09:00:00Z',
   storybook: 'storybook-static',
   app: {
     dir: 'dist-visual',

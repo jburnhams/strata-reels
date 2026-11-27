@@ -53,6 +53,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from strata_python import web
+from strata_python.client import ServiceClient
+from strata_python.clients import models
 from strata_python.db.web import DbSession, add_database
 from strata_python.tasks.web import add_jobs
 from strata_python.workflow.store import DbStore
@@ -102,12 +104,22 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
     if run_jobs != "off":
         _run_jobs(app, jobs.Runner(records, isolate=run_jobs == "processes"))
 
-    def numbers() -> dict[str, object]:
+    # Annotated with its model, so the schema names the page's fields (`StrataReelsSystemInfo`) and the web app's
+    # type is generated, not written beside it.
+    def numbers() -> system.AppNumbers:
         with Session(records.engine()) as s:
             n = sources.count(s)
-        return system.AppNumbers(sources=n, home_bytes=system.folder_bytes(settings.SETTINGS.home())).model_dump()
+        return system.AppNumbers(sources=n, home_bytes=system.folder_bytes(settings.SETTINGS.home()))
 
-    web.add_system(app, __version__, commit=COMMIT, folders={"home": settings.SETTINGS.home}, extra=numbers)
+    # strata-models does every analysis step, so the System page says whether it is up (its health, probed per read).
+    web.add_system(
+        app,
+        __version__,
+        commit=COMMIT,
+        folders={"home": settings.SETTINGS.home},
+        services={"strata-models": ServiceClient(models.url, app="strata-reels")},
+        extra=numbers,
+    )
 
     @app.get("/api/sources")
     def get_sources(s: DbSession) -> list[sources.Described]:

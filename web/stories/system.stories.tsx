@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { keys } from '../src/api'
 import { systemStatus } from '../src/mocks/fixtures'
-import { systemError, systemLoading, systemNearlyFull, systemUnread } from '../src/mocks/handlers'
+import { systemError, systemLoading, systemModelsDown, systemNearlyFull, systemUnread } from '../src/mocks/handlers'
 import { AppAt } from './app-at'
 
 const meta = {
@@ -16,6 +16,7 @@ type Story = StoryObj<typeof meta>
 
 export const Ready: Story = {}
 export const NearlyFull: Story = { beforeEach: ({ msw }) => msw.use(systemNearlyFull) }
+export const ModelsDown: Story = { beforeEach: ({ msw }) => msw.use(systemModelsDown) }
 export const Loading: Story = { beforeEach: ({ msw }) => msw.use(systemLoading) }
 export const ServerError: Story = { beforeEach: ({ msw }) => msw.use(systemError) }
 export const DiskUnread: Story = { beforeEach: ({ msw }) => msw.use(systemUnread) }
