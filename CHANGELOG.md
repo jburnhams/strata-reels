@@ -2,6 +2,22 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-27
+
+**strata-python 0.2.24 and strata-react 1.3.26, and the System page on the shared panel (branch `claude/project-thread-7wxr1m`)**
+Jonathan asked to update to the latest strata-python and strata-react and use their new features. Neither release since reels' last (0.2.22, 1.3.23) adds anything reels needs on its own (strata-python: speaker embeddings and camera picture readers; strata-react: a clock for 3D replays, key scopes, theming hooks, its Vite+ build), so the bump is version-only for most of the app; what changed is where reels still had hand-written copies of shared parts: the System page drew its own server facts and disk meter beside strata-react's `SystemPanel`, polled with a bare `refetchInterval` where strata-react has `usePoll` and `PauseButton`, did not say whether strata-models (which does every analysis step) was up, and typed its own fields by hand; the test setup did its own cleanup where `setupStrataTests` does it.
+- `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.24,<0.3` (0.2.24).
+- `src/app/server/app.py`: `add_system` gets `services={"strata-models": ServiceClient(models.url, ...)}`, so `GET /api/system` says whether strata-models answers its health check, and `numbers` returns `system.AppNumbers`, so the schema names the page's fields (`StrataReelsSystemInfo`).
+- `web/openapi.json`, `web/src/api.generated.ts`: regenerated. `web/src/api.ts`: `SystemStatus` is `Schema<'StrataReelsSystemInfo'>`, no hand-written fields.
+- `web/package.json`, `web/package-lock.json`: strata-react `^1.3.26` (a version bump of an existing dependency).
+- `web/src/screens/SystemScreen.tsx`: `SystemPanel` (server facts with Sources as the app's own fact, the home folder's meter on strata-react's `diskThresholds`, strata-models Up or Down with its reason) replaces the page's own Running list and meter; the read is `useLoad({ poll })` with `usePoll` every minute and `PauseButton` in the header; "What fills the disk" keeps the `CompositionBar`. The finding (`describeSystem`) says first when strata-models is down. `ofSize` and the page's own thresholds are gone (the panel has both).
+- `web/src/mocks/fixtures.ts`, `web/src/mocks/handlers.ts`: strata-models up in the fixture, `systemModelsDown`, and the unread disk is a home folder with no sizes (as the server sends it) rather than no folders.
+- `web/stories/system.stories.tsx`: a `ModelsDown` story.
+- `web/strata-visual.config.ts`, `web/src/mocks/tape.ts`: the page's clock is frozen at the fixtures' morning (`time`), since the panel's uptime and the "Updated" time read it, and the route handlers' "now" is pinned to the same moment (`pinMockClock`): they run in Node on the real clock, so the first baseline run showed the jobs as added "in 2 weeks".
+- `web/tests/utils/setup.ts`: `setupStrataTests({ afterEach })` replaces `installLayoutShims` and the hand-written `cleanup`.
+- `tests/unit/test_server.py`, `web/tests/unit/logic.test.ts`, `web/tests/integration/SystemScreen.test.tsx`: strata-models down (hermetic) and up (`fake_models`), the finding, the panel's parts and pausing.
+- `web/tests/visual/baselines/`: the System shots move (the panel's layout, Services, the pause control), rewritten on the CI runner by `update-visual-baselines.yml` and looked at (18 shots, two of them new for `ModelsDown`). The first run also moved the four jobs route shots to "in 2 weeks" (the clock above); the second, after the pin, put them back pixel for pixel as on main, and re-recorded `tape--default--phone--light` for a 3×6 px edge of the playhead, within tolerance before. PR #23.
+
 ## 2026-11-26
 
 **The tape player skips by scene and chapter, steps frames and floats (branch `claude/project-thread-t8kdgj`)**

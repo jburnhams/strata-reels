@@ -835,21 +835,22 @@ export interface components {
             /** Title */
             title: string;
         };
-        /**
-         * SystemInfo
-         * @description What `GET /api/system` answers: what is running, where its data is, and whether its services answer.
-         */
-        SystemInfo: {
+        /** StrataReelsSystemInfo */
+        StrataReelsSystemInfo: {
             /** Commit */
             commit: string | null;
             /** Folders */
             folders: components["schemas"]["Folder"][];
+            /** Home Bytes */
+            home_bytes: number;
             /** Platform */
             platform: string;
             /** Python */
             python: string;
             /** Services */
             services: components["schemas"]["ServiceStatus"][];
+            /** Sources */
+            sources: number;
             /**
              * Started At
              * Format: date-time
@@ -1571,7 +1572,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SystemInfo"];
+                    "application/json": components["schemas"]["StrataReelsSystemInfo"];
                 };
             };
         };

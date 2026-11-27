@@ -1053,9 +1053,8 @@
     "title": "StageRun",
     "type": "object"
    },
-   "SystemInfo": {
+   "StrataReelsSystemInfo": {
     "additionalProperties": true,
-    "description": "What `GET /api/system` answers: what is running, where its data is, and whether its services answer.",
     "properties": {
      "commit": {
       "anyOf": [
@@ -1075,6 +1074,10 @@
       "title": "Folders",
       "type": "array"
      },
+     "home_bytes": {
+      "title": "Home Bytes",
+      "type": "integer"
+     },
      "platform": {
       "title": "Platform",
       "type": "string"
@@ -1090,6 +1093,10 @@
       "title": "Services",
       "type": "array"
      },
+     "sources": {
+      "title": "Sources",
+      "type": "integer"
+     },
      "started_at": {
       "format": "date-time",
       "title": "Started At",
@@ -1101,6 +1108,8 @@
      }
     },
     "required": [
+     "sources",
+     "home_bytes",
      "version",
      "commit",
      "python",
@@ -1109,7 +1118,7 @@
      "folders",
      "services"
     ],
-    "title": "SystemInfo",
+    "title": "StrataReelsSystemInfo",
     "type": "object"
    },
    "Task": {
@@ -2350,7 +2359,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/SystemInfo"
+         "$ref": "#/components/schemas/StrataReelsSystemInfo"
         }
        }
       },

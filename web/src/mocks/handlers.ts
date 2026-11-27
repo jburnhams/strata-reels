@@ -8,7 +8,7 @@
 // `states: { error: [sourcesError] }` in the visual config.
 import { delay, HttpResponse, http } from 'msw'
 import type { Chapter, Scenes, Source, WorkflowRun } from '../api'
-import { initialSources, systemNearlyFull as nearlyFull, readSource, systemStatus } from './fixtures'
+import { initialSources, systemModelsDown as modelsDown, systemNearlyFull as nearlyFull, readSource, systemStatus } from './fixtures'
 import {
   fresh,
   jobsPage,
@@ -262,8 +262,15 @@ export const addFails = http.post(at(paths.sources), down)
 export const systemLoading = http.get(at(paths.system), () => delay('infinite'))
 export const systemError = http.get(at(paths.system), down)
 export const systemNearlyFull = http.get(at(paths.system), () => HttpResponse.json(nearlyFull))
+export const systemModelsDown = http.get(at(paths.system), () => HttpResponse.json(modelsDown))
 /** A server installed from a wheel (no source commit) whose home folder's disk could not be read. */
-export const systemUnread = http.get(at(paths.system), () => HttpResponse.json({ ...systemStatus, commit: null, folders: [] }))
+export const systemUnread = http.get(at(paths.system), () =>
+  HttpResponse.json({
+    ...systemStatus,
+    commit: null,
+    folders: [{ name: 'home', path: '/home/ada/.reels', exists: true, free_bytes: null, total_bytes: null }],
+  }),
+)
 
 export const scenesLoading = http.get(at(paths.scenes), () => delay('infinite'))
 export const scenesError = http.get(at(paths.scenes), down)

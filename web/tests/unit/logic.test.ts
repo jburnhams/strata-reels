@@ -1,11 +1,21 @@
 import { readFileSync } from 'node:fs'
 import { colorSchemeScript, format } from 'strata-react'
 import { describe, expect, it } from 'vitest'
-import { initialSources, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
-import { otherRuns, tapeRunChecked, tapeRunDone, tapeRunPartWay, tapeScenes, tapeTranscript, waitingScenes } from '../../src/mocks/tape'
+import { initialSources, systemModelsDown, systemNearlyFull, systemStatus } from '../../src/mocks/fixtures'
+import {
+  fresh,
+  otherRuns,
+  pinMockClock,
+  tapeRunChecked,
+  tapeRunDone,
+  tapeRunPartWay,
+  tapeScenes,
+  tapeTranscript,
+  waitingScenes,
+} from '../../src/mocks/tape'
 import { describeJob, describeMore, describeQueue, isBusy } from '../../src/screens/JobsScreen'
 import { describePicture, describeSources, followRuns, framesPerSecond } from '../../src/screens/SourcesScreen'
-import { describeDisk, homeDisk, ofSize } from '../../src/screens/SystemScreen'
+import { describeDisk, describeSystem, homeDisk } from '../../src/screens/SystemScreen'
 import {
   aspectOf,
   chapterContents,
@@ -64,7 +74,6 @@ describe('the System finding', () => {
     expect(
       homeDisk({ ...systemStatus, folders: [{ name: 'home', path: '/x', exists: false, free_bytes: null, total_bytes: null }] }),
     ).toBeUndefined()
-    expect(ofSize(301.6e9, 512e9)).toBe(`${format.bytes(301.6e9, 'GB')} of ${format.bytes(512e9, 'GB')}`)
     expect(describeDisk(systemStatus)).toBe(`Everything is running. The data disk is 59% full, with ${format.bytes(210.4e9)} free.`)
     expect(describeDisk(systemNearlyFull)).toMatch(/^The data disk is 96% full, .* Free space before adding more footage\.$/)
     const filling = { ...systemStatus, folders: [{ name: 'home', path: '/x', exists: true, total_bytes: 100, free_bytes: 15 }] }
@@ -75,6 +84,27 @@ describe('the System finding', () => {
     const unread = { ...systemStatus, folders: [] }
     expect(describeDisk(unread)).toBe('Everything is running. The data disk could not be read.')
     expect(describeDisk(unread, false)).toBe('The server is not answering.')
+  })
+
+  it('says first that strata-models is down, since no tape is analysed meanwhile', () => {
+    expect(describeSystem(systemStatus)).toBe(describeDisk(systemStatus))
+    expect(describeSystem(systemModelsDown)).toBe(
+      `strata-models is not answering, so no tape is analysed until it is. The data disk is 59% full, with ${format.bytes(210.4e9)} free.`,
+    )
+    // a poll that failed says nothing new about the services: the server is the news
+    expect(describeSystem(systemModelsDown, false)).toBe(describeDisk(systemModelsDown, false))
+    expect(describeSystem({ ...systemStatus, services: [] })).toBe(describeDisk(systemStatus))
+  })
+})
+
+describe('the mock clock', () => {
+  it('keeps "minutes ago" the same against a pinned now, as the visual suite pins it', () => {
+    const ago = 33 * 60_000
+    const fixture = { t: new Date(Date.now() - ago).toISOString() }
+    pinMockClock('2026-11-09T09:00:00Z')
+    const moved = Date.parse(fresh(fixture).t)
+    expect(Date.parse('2026-11-09T09:00:00Z') - moved).toBeGreaterThan(ago - 5000)
+    expect(Date.parse('2026-11-09T09:00:00Z') - moved).toBeLessThanOrEqual(ago)
   })
 })
 

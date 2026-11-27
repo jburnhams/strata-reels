@@ -362,13 +362,22 @@ export const tapePeaks: Peaks = (() => {
 // Times before now, so "20 minutes ago" reads the same in every run of the screenshots. They are made when this
 // module loads, which in the visual suite is minutes before the last page is shot, so the handlers move them on by
 // the time since (`fresh`), or "33 minutes ago" turns into "34" part way through a run.
+// The visual suite freezes the page's clock (strata-visual.config.ts `time`) but its route handlers run in Node on the
+// real one, so it pins the handlers' "now" to the same moment (`pinMockClock`); otherwise "33 minutes ago" reads "in
+// 2 weeks". In Storybook the handlers run in the page and read its frozen clock already.
 const loaded = Date.now()
+let pinned: number | null = null
 const at = (minutesAgo: number) => new Date(loaded - minutesAgo * 60_000).toISOString()
 const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/
 
-/** A copy of a fixture with every time in it moved on by the time since this module loaded. */
+/** Makes the handlers' "now" this moment, for every later `fresh` (the visual suite's frozen page clock). */
+export function pinMockClock(now: string | number | Date) {
+  pinned = new Date(now).getTime()
+}
+
+/** A copy of a fixture with every time in it moved on by the time since this module loaded (to the pinned now, if any). */
 export function fresh<T>(value: T): T {
-  const by = Date.now() - loaded
+  const by = (pinned ?? Date.now()) - loaded
   return JSON.parse(JSON.stringify(value), (_k, v: unknown) =>
     typeof v === 'string' && ISO.test(v) ? new Date(Date.parse(v) + by).toISOString() : v,
   ) as T

@@ -73,9 +73,23 @@ export const systemStatus: SystemStatus = {
   platform: 'Linux-6.8.0-x86_64-with-glibc2.39',
   started_at: '2026-11-09T08:00:00Z',
   folders: home(512 * GB, 210.4 * GB),
-  services: [],
+  services: [{ name: 'strata-models', url: 'http://127.0.0.1:8366', ok: true, version: '0.4.2', detail: null }],
   sources: initialSources.length,
   home_bytes: 18_432,
+}
+
+/** strata-models not answering, in strata-python's words for a refused connection. */
+export const systemModelsDown: SystemStatus = {
+  ...systemStatus,
+  services: [
+    {
+      name: 'strata-models',
+      url: 'http://127.0.0.1:8366',
+      ok: false,
+      version: null,
+      detail: 'could not reach http://127.0.0.1:8366/api/health: Connection refused',
+    },
+  ],
 }
 
 /** The same server with its disk past the "nearly full" threshold. */

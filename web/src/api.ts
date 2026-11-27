@@ -25,8 +25,8 @@ export type JobsPage = Schema<'Page_Task_'>
 /** A tape's way through its pipeline (`jobs.TAPE`), from strata-python's shared workflow routes. */
 export type WorkflowRun = Schema<'WorkflowRun'>
 /** `GET /api/system`: strata-python's SystemInfo plus this app's own numbers (src/app/system.py
- *  AppNumbers). Those are extra fields on the shared model, so the schema does not name them. */
-export type SystemStatus = Schema<'SystemInfo'> & { sources: number; home_bytes: number }
+ *  AppNumbers), merged into one schema by `add_system`. */
+export type SystemStatus = Schema<'StrataReelsSystemInfo'>
 
 export const api = createTypedApi<paths>()
 
