@@ -4,6 +4,11 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Reels on the released strata-python 0.2.25 and strata-react 1.3.27 (branch `claude/project-thread-oc0aq8`)**
+Both upstream PRs merged and were released, so the temporary git pin and local pack are gone.
+- `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.25,<0.3` from PyPI; `[tool.uv.sources]` removed. `AGENTS.md`: the range.
+- `web/package.json`, `web/package-lock.json`: `strata-react ^1.3.27`, the first release with `EditListPlayer`.
+
 **The Reels screens: a reel previewed with no gap, accepted and rendered (branch `claude/project-thread-oc0aq8`)**
 The rest of item 2: a reel is watchable in the app. The preview is strata-react's new `EditListPlayer` (strata-react PR #398), which plays the version's clips from the tape's browser copy as one film, with the hidden element sought ahead and brought forward at each cut. Until strata-react's release with it is out, the screens were built against a local pack of that branch; `web/package.json` moves to that release before this merges. One thing found on the way: a `DataTable` whose `columns` are made anew on every render remounts its cells, and a `RowAction` press that moves focus to the row then loses its button between the pointer going down and up, so the columns here are memoised (worth a line in strata-react's docs).
 - `web/src/screens/ReelsScreen.tsx` (**new**): the reels, with how many wait to be accepted, and Make a reel (a tape and a length as a clock or seconds; the server's refusal, such as a tape whose scenes are not grouped, under the tape), which opens the new reel.
