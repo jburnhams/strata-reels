@@ -105,6 +105,11 @@ def test_the_same_clips_on_another_revision_share_the_file_and_a_deleted_file_is
         shared = renders.request(s, q, reel, other)
         assert shared.id != first
         assert (shared.file, shared.job_id) == (s.get(Render, first).file, None)  # type: ignore[union-attr]
+        # the file is shared; what it is of is this revision's, with the render that made it named
+        assert shared.manifest is not None
+        assert shared.manifest["app"]["revision"] == other.id
+        assert shared.manifest["app"]["made_by"] == {"render": first, "reel": rid, "revision": revid}
+        assert s.get(Render, first).manifest["app"]["revision"] == revid  # type: ignore[union-attr,index]
         os.remove(renders.path_of(shared))
         remade = renders.request(s, q, reel, other)
         assert remade.file is None

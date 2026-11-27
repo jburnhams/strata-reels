@@ -17,6 +17,7 @@ it was added, joined with no gap (`strata_python.render`), and a manifest of exa
 - **It runs on the job queue** (kind `render`, one job per render, deduped, holding the `disk` resource like a tape's
   analysis), so a render of a long reel does not hold a request and the jobs page shows its progress."""
 
+import copy
 import datetime
 import hashlib
 import json
@@ -118,8 +119,19 @@ def request(db: Session, q: Queue, reel: Reel, rev: Revision) -> Render:
     )
     row = Render(reel_id=reel.id, revision_id=rev.id, key=key)
     if made is not None:
-        # The same clips were rendered for another revision: the same file, no job.
-        row.file, row.sha256, row.bytes, row.manifest = made.file, made.sha256, made.bytes, made.manifest
+        # The same clips were rendered for another revision: the same file, no job. The manifest's app part is this
+        # revision's, and says which render made the file (whose manifest.json is the one beside it).
+        manifest = copy.deepcopy(made.manifest) if made.manifest is not None else None
+        if manifest is not None:
+            manifest["app"] = {
+                **manifest["app"],
+                "reel": reel.id,
+                "revision": rev.id,
+                "revision_key": rev.key,
+                "job": None,
+                "made_by": {"render": made.id, "reel": made.reel_id, "revision": made.revision_id},
+            }
+        row.file, row.sha256, row.bytes, row.manifest = made.file, made.sha256, made.bytes, manifest
         row.finished = datetime.datetime.now(datetime.UTC)
         db.add(row)
         db.commit()
