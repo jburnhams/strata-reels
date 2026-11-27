@@ -128,3 +128,49 @@ class Override(Base):
     created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default_factory=_now)
     superseded_by: Mapped[int | None] = mapped_column(ForeignKey("overrides.id"), default=None)
     withdrawn: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class Reel(Base):
+    """A reel being made from a tape: the handle its revisions hang from (`reels`). The one mutable row of the edit:
+    its name and the length last asked for change, its revisions never do."""
+
+    __tablename__ = "reels"
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    # The tape it is cut from. R1 cuts one tape; each clip names its own source, so a reel of several can follow.
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"))
+    name: Mapped[str] = mapped_column(String(200))
+    target: Mapped[str] = mapped_column(String(40))  # the length last asked for, exact seconds (mediatime.text)
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default_factory=_now)
+
+
+class Revision(Base):
+    """An immutable version of a reel (overview §6, spec §3 EditGraph and Proposal): its clips in play order and
+    everything that made them (the planner, its seed and parameters, the results and overrides it read), so it can be
+    made again. A proposal is a revision not accepted yet, on its `base`; accepting is a compare-and-swap on the reel's
+    current revision (`reels.accept`), so a stale proposal is a conflict, never a silent overwrite. Never updated
+    except to stamp `accepted` or `rejected`."""
+
+    __tablename__ = "revisions"
+    __table_args__ = (Index("ix_revisions_reel", "reel_id", "accepted"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    reel_id: Mapped[int] = mapped_column(ForeignKey("reels.id"))
+    # The revision it was proposed on: the reel's current one at the time, None for a reel's first.
+    base_id: Mapped[int | None] = mapped_column(ForeignKey("revisions.id"))
+    author: Mapped[str] = mapped_column(String(200))  # the planner, or the person or agent who made it
+    # {name, version, seed, parameters}: which planner, so a new one can be told from the old by its revisions.
+    planner: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # {results: {kind: cache key}, overrides: [id, ...]}: what it read, the evidence a proposal names (spec §3).
+    inputs: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # The clip occurrences in play order (`reels.Clip`): each with its own id, its source and exact half-open range.
+    clips: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    conflicts: Mapped[list[dict[str, Any]]] = mapped_column(JSON)  # what it could not keep, each with its override
+    target: Mapped[str] = mapped_column(String(40))  # the length asked for, exact seconds
+    duration: Mapped[str] = mapped_column(String(40))  # the clips' sum, exact seconds
+    # hash(reel, base, planner, target, inputs): the same plan asked again on the same base finds this row.
+    key: Mapped[str] = mapped_column(String(64), index=True)
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default_factory=_now)
+    accepted: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    accepted_by: Mapped[str | None] = mapped_column(String(200), default=None)  # who made it the current revision
+    rejected: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), default=None)

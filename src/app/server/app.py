@@ -22,6 +22,19 @@ error answers ({detail, payload}) and the web app's pages. This app's own routes
     GET /api/sources/{id}/proxy       the browser copy, with range requests so the player can seek
     GET /api/sources/{id}/thumbnails/{name}, .../keyframes/{name}   a picture named in its result
 
+Reels (`reels`, plan step 5): a tape's highlight reel as immutable revisions, proposed by the planner (`planner`)
+and accepted by the person; pins, bans and locks are overrides on the reel that every plan keeps:
+
+    GET /api/reels[?source=id]        every reel, with its current revision's length
+    POST /api/reels {source_id, target_seconds, name?}   a new reel and its first proposal (404 before the scenes)
+    GET /api/reels/{reel}             the reel, its current revision, open proposals and constraints
+    GET /api/reels/{reel}/revisions/{rev}   one revision's clips (exact source ranges, with seconds for the page)
+    POST /api/reels/{reel}/plan {seed?, target_seconds?}   a new proposal on the current revision
+    POST /api/reels/{reel}/revisions/{rev}/accept   make it current: 409 when the reel moved on since it was made
+    POST /api/reels/{reel}/revisions/{rev}/reject
+    POST /api/reels/{reel}/constraints {kind: pin|ban, scene} or {kind: lock, clip}
+    DELETE /api/reels/{reel}/constraints/{id}
+
 From strata-python's `add_jobs`: GET /api/jobs (newest first, filtered by state, kind or domain), GET
 /api/jobs/counts, GET /api/jobs/{id}, POST /api/jobs/{id}/cancel and POST /api/jobs/{id}/retry, which strata-react's
 `JobsTable` reads.
@@ -60,7 +73,7 @@ from strata_python.tasks.web import add_jobs
 from strata_python.workflow.store import DbStore
 from strata_python.workflow.web import add_workflow
 
-from app import __version__, browse, chapters, db, jobs, settings, sources, system
+from app import __version__, browse, chapters, db, jobs, planner, reels, settings, sources, system
 
 # A thumbnail or keyframe URL carries its result's key (`?v=`, browse.py), so a new recipe is a new URL and the browser
 # may keep the old one for good. The proxy's URL is the tape's, whichever proxy is current, so it is checked each time.
@@ -88,6 +101,29 @@ class TitleIn(BaseModel):
     """The person's title for a chapter; None goes back to the name the namer gave it."""
 
     title: str | None
+
+
+class ReelIn(BaseModel):
+    """A new reel of a tape: its length in seconds, and a name (else the tape's and the length)."""
+
+    source_id: int
+    target_seconds: float
+    name: str | None = None
+
+
+class PlanIn(BaseModel):
+    """Plan the reel again: another seed for another version, or another length (which becomes the reel's)."""
+
+    seed: int = 0
+    target_seconds: float | None = None
+
+
+class ConstraintIn(BaseModel):
+    """A pin or ban names a scene (from 0, the tape's scenes now), a lock a clip of one of the reel's revisions."""
+
+    kind: planner.Kind
+    scene: int | None = None
+    clip: str | None = None
 
 
 WHO = "person"  # the apps have no logins yet: the same word the shared workflow routes record
@@ -191,6 +227,51 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
     def get_keyframe(source_id: int, name: str, s: DbSession) -> FileResponse:
         path = browse.file_of(s, one(s, source_id), "keyframes", name)
         return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": IMMUTABLE})
+
+    # Reels (plan step 5, `reels`): planning is a pure function of stored results, quick enough to answer in the request.
+    @app.get("/api/reels")
+    def get_reels(s: DbSession, source: int | None = None) -> list[reels.ReelOut]:
+        return [reels.reel_out(s, r) for r in reels.all_reels(s, None if source is None else one(s, source))]
+
+    @app.post("/api/reels", status_code=201)
+    def post_reel(b: ReelIn, s: DbSession) -> reels.ReelDetail:
+        reel, _ = reels.create(s, one(s, b.source_id), reels.length(b.target_seconds), name=b.name, author=WHO)
+        return reels.detail(s, reel)
+
+    @app.get("/api/reels/{reel_id}")
+    def get_reel(reel_id: int, s: DbSession) -> reels.ReelDetail:
+        return reels.detail(s, reels.get(s, reel_id))
+
+    @app.get("/api/reels/{reel_id}/revisions/{revision_id}")
+    def get_revision(reel_id: int, revision_id: int, s: DbSession) -> reels.RevisionOut:
+        return reels.revision_out(s, reels.revision(s, reels.get(s, reel_id), revision_id))
+
+    @app.post("/api/reels/{reel_id}/plan", status_code=201)
+    def post_plan(reel_id: int, b: PlanIn, s: DbSession) -> reels.RevisionOut:
+        target = None if b.target_seconds is None else reels.length(b.target_seconds)
+        rev = reels.propose(s, reels.get(s, reel_id), seed=b.seed, target=target, author=WHO)
+        return reels.revision_out(s, rev)
+
+    @app.post("/api/reels/{reel_id}/revisions/{revision_id}/accept")
+    def post_accept(reel_id: int, revision_id: int, s: DbSession) -> reels.RevisionOut:
+        # Compare-and-swap on the reel's current revision: a stale proposal is a 409 (strata_python.tasks.Conflict).
+        return reels.revision_out(s, reels.accept(s, reel_id, revision_id, author=WHO))
+
+    @app.post("/api/reels/{reel_id}/revisions/{revision_id}/reject")
+    def post_reject(reel_id: int, revision_id: int, s: DbSession) -> reels.RevisionOut:
+        return reels.revision_out(s, reels.reject(s, reels.get(s, reel_id), revision_id))
+
+    @app.post("/api/reels/{reel_id}/constraints", status_code=201)
+    def post_constraint(reel_id: int, b: ConstraintIn, s: DbSession) -> reels.ReelDetail:
+        reel = reels.get(s, reel_id)
+        reels.constrain(s, reel, b.kind, scene=b.scene, clip=b.clip, author=WHO)
+        return reels.detail(s, reel)
+
+    @app.delete("/api/reels/{reel_id}/constraints/{override_id}")
+    def delete_constraint(reel_id: int, override_id: int, s: DbSession) -> reels.ReelDetail:
+        reel = reels.get(s, reel_id)
+        reels.unconstrain(s, reel, override_id)
+        return reels.detail(s, reel)
 
     add_jobs(app, lambda: jobs.queue(records.engine()))
     add_workflow(

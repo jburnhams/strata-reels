@@ -3,7 +3,8 @@
 queues each one's ingest: the content hash, then the proxy, thumbnails, peaks, shots and speech), `sources` lists
 them, `scenes` lists a source's scenes (from its shots, once the jobs have run, with each one's description and
 faces), `chapters` its chapters (the scenes grouped by occasion, each with its name or the person's title),
-`fit-chapters` what the person's chapter corrections say the grouping's weights should be, `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
+`reel` plans a highlight reel of a tape to a length (a new proposal on the tape's latest reel, or a new reel) and
+`reels` lists them, `fit-chapters` what the person's chapter corrections say the grouping's weights should be, `jobs` lists the job queue and `work` runs what is queued, here, until nothing is (the server runs the queue
 itself while it is up)."""
 
 import argparse
@@ -16,8 +17,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from strata_python import cli as shared
 from strata_python import mediatime
+from strata_python.tasks import Conflict
 
-from app import __version__, chapters, db, describe, jobs, scenes, settings, shots, sources
+from app import __version__, chapters, db, describe, jobs, planner, reels, scenes, settings, shots, sources
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -174,6 +176,61 @@ def cmd_fit_chapters(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reel(args: argparse.Namespace) -> int:
+    """A proposal for the tape's latest reel (a new reel with `--new` or when it has none), accepted with `--accept`."""
+    with db.session() as s:
+        source = s.get(sources.Source, args.source)
+        if source is None:
+            print(f"  there is no source {args.source} (./app sources lists them)", file=sys.stderr)
+            return 1
+        try:
+            target = None if args.target is None else reels.length(args.target)
+            known = reels.all_reels(s, source)
+            if known and not args.new:
+                reel = known[-1]
+                rev = reels.propose(s, reel, seed=args.seed, target=target, author="cli")
+            else:
+                reel, rev = reels.create(s, source, target or reels.length(120), name=args.name, author="cli")
+                if args.seed:
+                    rev = reels.propose(s, reel, seed=args.seed, author="cli")
+            if args.accept:
+                rev = reels.accept(s, reel.id, rev.id, author="cli")
+        except (KeyError, ValueError, Conflict) as e:
+            print(f"  {e.args[0] if isinstance(e, KeyError) else e}", file=sys.stderr)
+            return 1
+        shown = reels.revision_out(s, rev)
+    if args.json:
+        print(shown.model_dump_json(indent=1))
+        return 0
+    print(
+        f"  reel #{reel.id} {reel.name}: revision {shown.id} ({shown.state}), {len(shown.clips)} clips, "
+        f"{planner.clock(mediatime.rational(shown.duration_seconds))} of {planner.clock(reels.length(reel.target))}"
+    )
+    for c in shown.clips:
+        marks = "".join(m for m, on in (("  locked", c.locked), ("  pinned", c.pinned)) if on)
+        print(
+            f"  {planner.clock(mediatime.rational(c.at_seconds)):>8}  {c.start_seconds:9.2f} to {c.end_seconds:9.2f} s"
+            f"  {c.score:5.2f}  {', '.join(c.reasons)}{marks}"
+        )
+    for x in shown.conflicts:
+        print(f"  ! {x.message}")
+    return 0
+
+
+def cmd_reels(args: argparse.Namespace) -> int:
+    with db.session() as s:
+        listed = [reels.reel_out(s, r) for r in reels.all_reels(s)]
+    if args.json:
+        print(json.dumps([r.model_dump(mode="json") for r in listed], indent=1))
+        return 0
+    if not listed:
+        print("  (no reels yet: ./app reel SOURCE --target 2:00)")
+    for r in listed:
+        now = "no revision accepted" if r.current_id is None else f"revision {r.current_id}, {r.clips} clips"
+        print(f"  #{r.id:<4} {r.name:40} {r.source_name:24} {now}, {r.proposals} open")
+    return 0
+
+
 def cmd_jobs(args: argparse.Namespace) -> int:
     with db.opened() as engine:
         page = jobs.queue(engine).page(limit=args.limit)
@@ -230,6 +287,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     fi.add_argument("--prior", type=float, default=1.0, help="how hard the weights are held to today's (default 1)")
     fi.add_argument("--json", action="store_true")
     fi.set_defaults(fn=cmd_fit_chapters)
+    re_ = sub.add_parser("reel", help="plan a highlight reel of a source to a length (a proposal; --accept takes it)")
+    re_.add_argument("source", type=int)
+    re_.add_argument("--target", help="its length: seconds, m:ss or h:mm:ss (default the reel's, or 2:00)")
+    re_.add_argument("--seed", type=int, default=0, help="another number for another version")
+    re_.add_argument("--name")
+    re_.add_argument("--new", action="store_true", help="a new reel, not another plan of the latest one")
+    re_.add_argument("--accept", action="store_true", help="make the proposal the reel's current revision")
+    re_.add_argument("--json", action="store_true")
+    re_.set_defaults(fn=cmd_reel)
+    rl = sub.add_parser("reels", help="list the reels")
+    rl.add_argument("--json", action="store_true")
+    rl.set_defaults(fn=cmd_reels)
     jo = sub.add_parser("jobs", help="list the job queue, newest first")
     jo.add_argument("--limit", type=int, default=50)
     jo.add_argument("--json", action="store_true")

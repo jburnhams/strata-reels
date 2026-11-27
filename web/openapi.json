@@ -214,6 +214,210 @@
     "title": "ChapterName",
     "type": "object"
    },
+   "Clash": {
+    "description": "Something the person asked that the plan could not keep; `override` is the constraint, None for the length.",
+    "properties": {
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "override": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Override"
+     }
+    },
+    "required": [
+     "override",
+     "message"
+    ],
+    "title": "Clash",
+    "type": "object"
+   },
+   "Clip": {
+    "description": "A clip occurrence: `start` and `end` are the exact half-open source range (mediatime text, on frames), the\nseconds beside them are for the page; `at_seconds` is where it starts in the reel.",
+    "properties": {
+     "at_seconds": {
+      "title": "At Seconds",
+      "type": "number"
+     },
+     "end": {
+      "title": "End",
+      "type": "string"
+     },
+     "end_seconds": {
+      "title": "End Seconds",
+      "type": "number"
+     },
+     "gain_db": {
+      "title": "Gain Db",
+      "type": "number"
+     },
+     "id": {
+      "description": "the occurrence's own id: the same range keeps it from one revision to the next",
+      "title": "Id",
+      "type": "string"
+     },
+     "locked": {
+      "title": "Locked",
+      "type": "boolean"
+     },
+     "pinned": {
+      "title": "Pinned",
+      "type": "boolean"
+     },
+     "reasons": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+     },
+     "scene": {
+      "description": "the start of the scene it was cut from, exact",
+      "title": "Scene",
+      "type": "string"
+     },
+     "score": {
+      "title": "Score",
+      "type": "number"
+     },
+     "source_id": {
+      "title": "Source Id",
+      "type": "integer"
+     },
+     "start": {
+      "title": "Start",
+      "type": "string"
+     },
+     "start_seconds": {
+      "title": "Start Seconds",
+      "type": "number"
+     }
+    },
+    "required": [
+     "id",
+     "source_id",
+     "start",
+     "end",
+     "start_seconds",
+     "end_seconds",
+     "at_seconds",
+     "scene",
+     "gain_db",
+     "score",
+     "reasons",
+     "locked",
+     "pinned"
+    ],
+    "title": "Clip",
+    "type": "object"
+   },
+   "ConstraintIn": {
+    "description": "A pin or ban names a scene (from 0, the tape's scenes now), a lock a clip of one of the reel's revisions.",
+    "properties": {
+     "clip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Clip"
+     },
+     "kind": {
+      "enum": [
+       "pin",
+       "ban",
+       "lock"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "scene": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scene"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "title": "ConstraintIn",
+    "type": "object"
+   },
+   "ConstraintOut": {
+    "description": "A pin, ban or lock that holds: the span it names (a scene's for a pin or ban, the clip's for a lock).",
+    "properties": {
+     "author": {
+      "title": "Author",
+      "type": "string"
+     },
+     "clip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the locked clip's id; None for a pin or ban",
+      "title": "Clip"
+     },
+     "created": {
+      "format": "date-time",
+      "title": "Created",
+      "type": "string"
+     },
+     "end_seconds": {
+      "title": "End Seconds",
+      "type": "number"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "kind": {
+      "enum": [
+       "pin",
+       "ban",
+       "lock"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "start_seconds": {
+      "title": "Start Seconds",
+      "type": "number"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "start_seconds",
+     "end_seconds",
+     "clip",
+     "author",
+     "created"
+    ],
+    "title": "ConstraintOut",
+    "type": "object"
+   },
    "Described": {
     "description": "A source as the API and the CLI show it.",
     "properties": {
@@ -602,6 +806,52 @@
     "title": "Picture",
     "type": "object"
    },
+   "PlanIn": {
+    "description": "Plan the reel again: another seed for another version, or another length (which becomes the reel's).",
+    "properties": {
+     "seed": {
+      "default": 0,
+      "title": "Seed",
+      "type": "integer"
+     },
+     "target_seconds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target Seconds"
+     }
+    },
+    "title": "PlanIn",
+    "type": "object"
+   },
+   "Planned": {
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "seed": {
+      "title": "Seed",
+      "type": "integer"
+     },
+     "version": {
+      "title": "Version",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "name",
+     "version",
+     "seed"
+    ],
+    "title": "Planned",
+    "type": "object"
+   },
    "Progress": {
     "description": "How far a task has got. `total` None means not known yet; `text` is the line a person reads (\"Page 3 of 40\").",
     "properties": {
@@ -660,9 +910,345 @@
     "title": "Progress",
     "type": "object"
    },
+   "ReelDetail": {
+    "properties": {
+     "clips": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Clips"
+     },
+     "constraints": {
+      "items": {
+       "$ref": "#/components/schemas/ConstraintOut"
+      },
+      "title": "Constraints",
+      "type": "array"
+     },
+     "created": {
+      "format": "date-time",
+      "title": "Created",
+      "type": "string"
+     },
+     "current": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RevisionOut"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "current_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Current Id"
+     },
+     "duration_seconds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Seconds"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "open": {
+      "description": "proposals not accepted or rejected, newest first (stale ones too)",
+      "items": {
+       "$ref": "#/components/schemas/RevisionOut"
+      },
+      "title": "Open",
+      "type": "array"
+     },
+     "proposals": {
+      "description": "proposals that can still be accepted",
+      "title": "Proposals",
+      "type": "integer"
+     },
+     "source_id": {
+      "title": "Source Id",
+      "type": "integer"
+     },
+     "source_name": {
+      "title": "Source Name",
+      "type": "string"
+     },
+     "target_seconds": {
+      "title": "Target Seconds",
+      "type": "number"
+     }
+    },
+    "required": [
+     "id",
+     "source_id",
+     "source_name",
+     "name",
+     "target_seconds",
+     "created",
+     "current_id",
+     "duration_seconds",
+     "clips",
+     "proposals",
+     "current",
+     "open",
+     "constraints"
+    ],
+    "title": "ReelDetail",
+    "type": "object"
+   },
+   "ReelIn": {
+    "description": "A new reel of a tape: its length in seconds, and a name (else the tape's and the length).",
+    "properties": {
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "source_id": {
+      "title": "Source Id",
+      "type": "integer"
+     },
+     "target_seconds": {
+      "title": "Target Seconds",
+      "type": "number"
+     }
+    },
+    "required": [
+     "source_id",
+     "target_seconds"
+    ],
+    "title": "ReelIn",
+    "type": "object"
+   },
+   "ReelOut": {
+    "description": "A reel in the list: its current revision's length and clip count (None before one is accepted).",
+    "properties": {
+     "clips": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Clips"
+     },
+     "created": {
+      "format": "date-time",
+      "title": "Created",
+      "type": "string"
+     },
+     "current_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Current Id"
+     },
+     "duration_seconds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Seconds"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "proposals": {
+      "description": "proposals that can still be accepted",
+      "title": "Proposals",
+      "type": "integer"
+     },
+     "source_id": {
+      "title": "Source Id",
+      "type": "integer"
+     },
+     "source_name": {
+      "title": "Source Name",
+      "type": "string"
+     },
+     "target_seconds": {
+      "title": "Target Seconds",
+      "type": "number"
+     }
+    },
+    "required": [
+     "id",
+     "source_id",
+     "source_name",
+     "name",
+     "target_seconds",
+     "created",
+     "current_id",
+     "duration_seconds",
+     "clips",
+     "proposals"
+    ],
+    "title": "ReelOut",
+    "type": "object"
+   },
    "ReelsSettings": {
     "properties": {},
     "title": "ReelsSettings",
+    "type": "object"
+   },
+   "RevisionOut": {
+    "description": "One revision of a reel. `state`: `proposal` (can be accepted), `stale` (made on a revision that is no longer the\ncurrent one: plan again), `current`, `past` (was current) or `rejected`.",
+    "properties": {
+     "accepted": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Accepted"
+     },
+     "accepted_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Accepted By"
+     },
+     "author": {
+      "title": "Author",
+      "type": "string"
+     },
+     "base_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Base Id"
+     },
+     "clips": {
+      "items": {
+       "$ref": "#/components/schemas/Clip"
+      },
+      "title": "Clips",
+      "type": "array"
+     },
+     "conflicts": {
+      "items": {
+       "$ref": "#/components/schemas/Clash"
+      },
+      "title": "Conflicts",
+      "type": "array"
+     },
+     "created": {
+      "format": "date-time",
+      "title": "Created",
+      "type": "string"
+     },
+     "duration_seconds": {
+      "title": "Duration Seconds",
+      "type": "number"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "planner": {
+      "$ref": "#/components/schemas/Planned"
+     },
+     "rate": {
+      "description": "the source's frame rate, exact",
+      "title": "Rate",
+      "type": "string"
+     },
+     "reel_id": {
+      "title": "Reel Id",
+      "type": "integer"
+     },
+     "state": {
+      "enum": [
+       "proposal",
+       "stale",
+       "current",
+       "past",
+       "rejected"
+      ],
+      "title": "State",
+      "type": "string"
+     },
+     "target_seconds": {
+      "title": "Target Seconds",
+      "type": "number"
+     }
+    },
+    "required": [
+     "id",
+     "reel_id",
+     "base_id",
+     "state",
+     "author",
+     "planner",
+     "created",
+     "accepted",
+     "accepted_by",
+     "target_seconds",
+     "duration_seconds",
+     "rate",
+     "clips",
+     "conflicts"
+    ],
+    "title": "RevisionOut",
     "type": "object"
    },
    "Scene": {
@@ -1816,6 +2402,421 @@
     "tags": [
      "jobs"
     ]
+   }
+  },
+  "/api/reels": {
+   "get": {
+    "operationId": "get_reels_api_reels_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "source",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Source"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ReelOut"
+         },
+         "title": "Response Get Reels Api Reels Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Reels"
+   },
+   "post": {
+    "operationId": "post_reel_api_reels_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ReelIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReelDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Reel"
+   }
+  },
+  "/api/reels/{reel_id}": {
+   "get": {
+    "operationId": "get_reel_api_reels__reel_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReelDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Reel"
+   }
+  },
+  "/api/reels/{reel_id}/constraints": {
+   "post": {
+    "operationId": "post_constraint_api_reels__reel_id__constraints_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ConstraintIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReelDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Constraint"
+   }
+  },
+  "/api/reels/{reel_id}/constraints/{override_id}": {
+   "delete": {
+    "operationId": "delete_constraint_api_reels__reel_id__constraints__override_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "override_id",
+      "required": true,
+      "schema": {
+       "title": "Override Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReelDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Delete Constraint"
+   }
+  },
+  "/api/reels/{reel_id}/plan": {
+   "post": {
+    "operationId": "post_plan_api_reels__reel_id__plan_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlanIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RevisionOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Plan"
+   }
+  },
+  "/api/reels/{reel_id}/revisions/{revision_id}": {
+   "get": {
+    "operationId": "get_revision_api_reels__reel_id__revisions__revision_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "revision_id",
+      "required": true,
+      "schema": {
+       "title": "Revision Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RevisionOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Revision"
+   }
+  },
+  "/api/reels/{reel_id}/revisions/{revision_id}/accept": {
+   "post": {
+    "operationId": "post_accept_api_reels__reel_id__revisions__revision_id__accept_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "revision_id",
+      "required": true,
+      "schema": {
+       "title": "Revision Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RevisionOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Accept"
+   }
+  },
+  "/api/reels/{reel_id}/revisions/{revision_id}/reject": {
+   "post": {
+    "operationId": "post_reject_api_reels__reel_id__revisions__revision_id__reject_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "reel_id",
+      "required": true,
+      "schema": {
+       "title": "Reel Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "revision_id",
+      "required": true,
+      "schema": {
+       "title": "Revision Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RevisionOut"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Reject"
    }
   },
   "/api/settings": {

@@ -105,6 +105,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Reels */
+        get: operations["get_reels_api_reels_get"];
+        put?: never;
+        /** Post Reel */
+        post: operations["post_reel_api_reels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Reel */
+        get: operations["get_reel_api_reels__reel_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/constraints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Constraint */
+        post: operations["post_constraint_api_reels__reel_id__constraints_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/constraints/{override_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Constraint */
+        delete: operations["delete_constraint_api_reels__reel_id__constraints__override_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Plan */
+        post: operations["post_plan_api_reels__reel_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/revisions/{revision_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Revision */
+        get: operations["get_revision_api_reels__reel_id__revisions__revision_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/revisions/{revision_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Accept */
+        post: operations["post_accept_api_reels__reel_id__revisions__revision_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reels/{reel_id}/revisions/{revision_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Reject */
+        post: operations["post_reject_api_reels__reel_id__revisions__revision_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -516,6 +653,99 @@ export interface components {
             title: string;
         };
         /**
+         * Clash
+         * @description Something the person asked that the plan could not keep; `override` is the constraint, None for the length.
+         */
+        Clash: {
+            /** Message */
+            message: string;
+            /** Override */
+            override: number | null;
+        };
+        /**
+         * Clip
+         * @description A clip occurrence: `start` and `end` are the exact half-open source range (mediatime text, on frames), the
+         *     seconds beside them are for the page; `at_seconds` is where it starts in the reel.
+         */
+        Clip: {
+            /** At Seconds */
+            at_seconds: number;
+            /** End */
+            end: string;
+            /** End Seconds */
+            end_seconds: number;
+            /** Gain Db */
+            gain_db: number;
+            /**
+             * Id
+             * @description the occurrence's own id: the same range keeps it from one revision to the next
+             */
+            id: string;
+            /** Locked */
+            locked: boolean;
+            /** Pinned */
+            pinned: boolean;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Scene
+             * @description the start of the scene it was cut from, exact
+             */
+            scene: string;
+            /** Score */
+            score: number;
+            /** Source Id */
+            source_id: number;
+            /** Start */
+            start: string;
+            /** Start Seconds */
+            start_seconds: number;
+        };
+        /**
+         * ConstraintIn
+         * @description A pin or ban names a scene (from 0, the tape's scenes now), a lock a clip of one of the reel's revisions.
+         */
+        ConstraintIn: {
+            /** Clip */
+            clip?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pin" | "ban" | "lock";
+            /** Scene */
+            scene?: number | null;
+        };
+        /**
+         * ConstraintOut
+         * @description A pin, ban or lock that holds: the span it names (a scene's for a pin or ban, the clip's for a lock).
+         */
+        ConstraintOut: {
+            /** Author */
+            author: string;
+            /**
+             * Clip
+             * @description the locked clip's id; None for a pin or ban
+             */
+            clip: string | null;
+            /**
+             * Created
+             * Format: date-time
+             */
+            created: string;
+            /** End Seconds */
+            end_seconds: number;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pin" | "ban" | "lock";
+            /** Start Seconds */
+            start_seconds: number;
+        };
+        /**
          * Described
          * @description A source as the API and the CLI show it.
          */
@@ -655,6 +885,28 @@ export interface components {
             quality: "good" | "fair" | "poor";
         };
         /**
+         * PlanIn
+         * @description Plan the reel again: another seed for another version, or another length (which becomes the reel's).
+         */
+        PlanIn: {
+            /**
+             * Seed
+             * @default 0
+             */
+            seed: number;
+            /** Target Seconds */
+            target_seconds?: number | null;
+        };
+        /** Planned */
+        Planned: {
+            /** Name */
+            name: string;
+            /** Seed */
+            seed: number;
+            /** Version */
+            version: number;
+        };
+        /**
          * Progress
          * @description How far a task has got. `total` None means not known yet; `text` is the line a person reads ("Page 3 of 40").
          */
@@ -676,8 +928,132 @@ export interface components {
             /** Total */
             total: number | null;
         };
+        /** ReelDetail */
+        ReelDetail: {
+            /** Clips */
+            clips: number | null;
+            /** Constraints */
+            constraints: components["schemas"]["ConstraintOut"][];
+            /**
+             * Created
+             * Format: date-time
+             */
+            created: string;
+            current: components["schemas"]["RevisionOut"] | null;
+            /** Current Id */
+            current_id: number | null;
+            /** Duration Seconds */
+            duration_seconds: number | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Open
+             * @description proposals not accepted or rejected, newest first (stale ones too)
+             */
+            open: components["schemas"]["RevisionOut"][];
+            /**
+             * Proposals
+             * @description proposals that can still be accepted
+             */
+            proposals: number;
+            /** Source Id */
+            source_id: number;
+            /** Source Name */
+            source_name: string;
+            /** Target Seconds */
+            target_seconds: number;
+        };
+        /**
+         * ReelIn
+         * @description A new reel of a tape: its length in seconds, and a name (else the tape's and the length).
+         */
+        ReelIn: {
+            /** Name */
+            name?: string | null;
+            /** Source Id */
+            source_id: number;
+            /** Target Seconds */
+            target_seconds: number;
+        };
+        /**
+         * ReelOut
+         * @description A reel in the list: its current revision's length and clip count (None before one is accepted).
+         */
+        ReelOut: {
+            /** Clips */
+            clips: number | null;
+            /**
+             * Created
+             * Format: date-time
+             */
+            created: string;
+            /** Current Id */
+            current_id: number | null;
+            /** Duration Seconds */
+            duration_seconds: number | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Proposals
+             * @description proposals that can still be accepted
+             */
+            proposals: number;
+            /** Source Id */
+            source_id: number;
+            /** Source Name */
+            source_name: string;
+            /** Target Seconds */
+            target_seconds: number;
+        };
         /** ReelsSettings */
         ReelsSettings: Record<string, never>;
+        /**
+         * RevisionOut
+         * @description One revision of a reel. `state`: `proposal` (can be accepted), `stale` (made on a revision that is no longer the
+         *     current one: plan again), `current`, `past` (was current) or `rejected`.
+         */
+        RevisionOut: {
+            /** Accepted */
+            accepted: string | null;
+            /** Accepted By */
+            accepted_by: string | null;
+            /** Author */
+            author: string;
+            /** Base Id */
+            base_id: number | null;
+            /** Clips */
+            clips: components["schemas"]["Clip"][];
+            /** Conflicts */
+            conflicts: components["schemas"]["Clash"][];
+            /**
+             * Created
+             * Format: date-time
+             */
+            created: string;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Id */
+            id: number;
+            planner: components["schemas"]["Planned"];
+            /**
+             * Rate
+             * @description the source's frame rate, exact
+             */
+            rate: string;
+            /** Reel Id */
+            reel_id: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "proposal" | "stale" | "current" | "past" | "rejected";
+            /** Target Seconds */
+            target_seconds: number;
+        };
         /**
          * Scene
          * @description One scene: its place on the tape, how sure the cut that starts it is, and what step 3 found about it (`None`
@@ -1149,6 +1525,299 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_reels_api_reels_get: {
+        parameters: {
+            query?: {
+                source?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReelOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_reel_api_reels_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReelDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_reel_api_reels__reel_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReelDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_constraint_api_reels__reel_id__constraints_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConstraintIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReelDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_constraint_api_reels__reel_id__constraints__override_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+                override_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReelDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_plan_api_reels__reel_id__plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_revision_api_reels__reel_id__revisions__revision_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+                revision_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_accept_api_reels__reel_id__revisions__revision_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+                revision_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_reject_api_reels__reel_id__revisions__revision_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reel_id: number;
+                revision_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionOut"];
                 };
             };
             /** @description Validation Error */
