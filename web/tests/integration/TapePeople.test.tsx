@@ -1,7 +1,7 @@
 import { HttpResponse, http } from 'msw'
 import { expectOneFilledButton } from 'strata-react/testing'
 import { describe, expect, it } from 'vitest'
-import { peopleNaming, runError, runPartWay, startNaming } from '../../src/mocks/handlers'
+import { peopleLongGroup, peopleNaming, runError, runPartWay, startNaming } from '../../src/mocks/handlers'
 import { peopleWaiting, tapePeople } from '../../src/mocks/tape'
 import { openApp, screen, waitFor, within } from '../utils/render'
 import { mock, server } from '../utils/server'
@@ -41,7 +41,7 @@ describe('the people on a tape', () => {
     const { user } = openApp('/sources/5?view=people')
     let asked = await group()
     expect(within(asked).getByText('3 groups left')).toBeInTheDocument()
-    expect(within(asked).getAllByRole('img', { name: /^Face \d of the group$/ })).toHaveLength(5)
+    expect(within(asked).getAllByRole('img', { name: /^Face \d of the group$/ })).toHaveLength(4) // one per track
     expectOneFilledButton()
     await user.click(within(asked).getByRole('button', { name: 'This is Uncle Pete' }))
     asked = await group()
@@ -62,6 +62,46 @@ describe('the people on a tape', () => {
     await waitFor(() => expect(mock.people[5].people.map(p => p.name)).toContain('Uncle Pete'))
     expect(await screen.findByRole('region', { name: 'Named on this tape' })).toHaveTextContent('Uncle Pete')
     // an answer still in its window is sent when the page goes, which would land in the next test's mock: take it back
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+  })
+
+  it('names some of a group that holds two people, and leaves the rest to answer', async () => {
+    startNaming()
+    const { user } = openApp('/sources/5?view=people')
+    let asked = await group()
+    const faces = within(asked).getByRole('grid', { name: 'Their faces' })
+    // the first and third faces are someone else: chosen, the answer is for them only
+    await user.click(within(faces).getByRole('row', { name: /face 1, at 20:10/ }))
+    await user.click(within(faces).getByRole('row', { name: /face 3, at 43:24/ }))
+    expect(screen.getByText(/The answer below is for these faces only; 2\sfaces stay\./)).toBeInTheDocument()
+    expectOneFilledButton()
+    await user.type(within(asked).getByRole('textbox', { name: 'Someone else: their name' }), 'Cousin Sam')
+    await user.click(within(asked).getByRole('button', { name: 'Name them' }))
+    expect(screen.getByText('Named Cousin Sam (2 faces).')).toBeInTheDocument()
+    // the rest of the group is still asked about, its two faces, the choice cleared
+    asked = await group()
+    expect(within(asked).getByText('3 groups left')).toBeInTheDocument()
+    expect(within(asked).getAllByRole('img', { name: /^Face \d of the group$/ })).toHaveLength(2)
+    expect(within(asked).getByRole('button', { name: 'Play from 0:31' })).toBeInTheDocument()
+    expect(screen.queryByText(/The answer below is for/)).toBeNull()
+    // the next answer sends the first: only the chosen tracks were named
+    await user.click(within(asked).getByRole('button', { name: 'This is Uncle Pete' }))
+    await waitFor(() => expect(mock.people[5].people.find(p => p.name === 'Cousin Sam')?.tracks).toBe(2))
+    expect(mock.people[5].groups[0].tracks).toEqual(['t3', 't22'])
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+  })
+
+  it('keeps a long group’s faces in a box of their own, any of them to choose', async () => {
+    server.use(...peopleLongGroup)
+    const { user } = openApp('/sources/5?view=people')
+    const asked = await group()
+    expect(within(asked).getByText(/, seen 36 times$/)).toBeInTheDocument()
+    const faces = within(asked).getByRole('grid', { name: 'Their faces' })
+    await user.click(await within(faces).findByRole('row', { name: /^face 1, at 0:40/ }))
+    expect(screen.getByText(/The answer below is for this face only; 35\sfaces stay\./)).toBeInTheDocument()
+    await user.click(within(asked).getByRole('button', { name: 'Skip' }))
+    expect(screen.getByText('Skipped 1 face.')).toBeInTheDocument()
+    expect(within(await group()).getByText(/, seen 35 times$/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Undo' }))
   })
 

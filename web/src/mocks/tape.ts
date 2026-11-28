@@ -635,17 +635,64 @@ export const tapePeopleNaming: People = {
     {
       tracks: ['t3', 't9', 't14', 't22'],
       faces: [41, 42, 43, 44, 45],
+      stills: [
+        { track: 't9', face: 41, start: 1210.0, seconds: 301.2 },
+        { track: 't3', face: 42, start: 31.2, seconds: 180.6 },
+        { track: 't14', face: 43, start: 2604.5, seconds: 98.3 },
+        { track: 't22', face: 44, start: 3990.1, seconds: 32.3 },
+      ],
       seconds: 612.4,
       first: 31.2,
       suggested: { id: 4, name: 'Uncle Pete', share: 0.8 },
     },
-    { tracks: ['t5', 't30'], faces: [51, 52, 53], seconds: 141.0, first: 610.0, suggested: null },
-    { tracks: ['t41'], faces: [61], seconds: 8.4, first: 5302.2, suggested: null },
+    {
+      tracks: ['t5', 't30'],
+      faces: [51, 52, 53],
+      stills: [
+        { track: 't5', face: 51, start: 610.0, seconds: 120.0 },
+        { track: 't30', face: 52, start: 2201.4, seconds: 21.0 },
+      ],
+      seconds: 141.0,
+      first: 610.0,
+      suggested: null,
+    },
+    {
+      tracks: ['t41'],
+      faces: [61],
+      stills: [{ track: 't41', face: 61, start: 5302.2, seconds: 8.4 }],
+      seconds: 8.4,
+      first: 5302.2,
+      suggested: null,
+    },
   ],
   open: 7,
   named: 81,
   skipped: 0,
 }
+
+/** A long group, as a real tape gives (36 tracks of one face found again and again): its stills scroll in their box. */
+export const tapePeopleLongGroup: People = (() => {
+  const stills = Array.from({ length: 36 }, (_, i) => ({
+    track: `t${100 + i}`,
+    face: 41 + (i % 5),
+    start: Math.round((40 + i * 151.7) * 10) / 10,
+    seconds: Math.round((60 - i * 1.5) * 10) / 10,
+  }))
+  const [first, ...rest] = tapePeopleNaming.groups
+  return {
+    ...tapePeopleNaming,
+    groups: [
+      {
+        ...first,
+        tracks: stills.map(t => t.track),
+        stills,
+        seconds: Math.round(stills.reduce((n, t) => n + t.seconds, 0) * 10) / 10,
+        first: stills[0].start,
+      },
+      ...rest,
+    ],
+  }
+})()
 
 /** A tape whose faces are not followed yet. */
 export const peopleWaiting = (): People => ({

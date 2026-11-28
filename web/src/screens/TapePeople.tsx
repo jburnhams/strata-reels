@@ -10,7 +10,10 @@
 //   common answer once a few are named; a name of the person's own goes in the field (the filled action when nothing
 //   is suggested), or the group is added to someone known already. "Skip" leaves it unnamed (it still counts as on
 //   screen, nameless), and "Not faces" says the face finder was wrong (a picture on the wall, a doll), which the face
-//   store learns from. Each answer is a `useUndoable` removal: the next group shows at once, and Undo is in reach
+//   store learns from. A group can hold more than one person (two cousins alike on a blurry tape): every track of it is
+//   on show by its best still (scrolling once it is long), and the person picks the tracks that are one of them; the
+//   answer is then for those only, and the rest stay to answer (grouped again by the server once the answer is in).
+//   Each answer is a `useUndoable` removal: the next group shows at once, and Undo is in reach
 //   before the answer goes to the server (no answer is sent until its window closes).
 // - "Skip the rest" approves the gate (strata-python's approve route), so the describe step goes on with the faces
 //   named so far; a name given later still reaches the scenes, because each answer is one of the cast step's inputs.
@@ -22,6 +25,7 @@ import { Play } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import {
   AsyncButton,
+  BulkBar,
   Button,
   DataView,
   EmptyState,
@@ -30,20 +34,23 @@ import {
   Input,
   type Job,
   NativeSelect,
+  SelectableGrid,
   Skeleton,
   Status,
   Thumbnail,
   UndoBar,
   useAsyncAction,
   useLoad,
+  useSelection,
   useUndoable,
 } from 'strata-react'
-import { api, type FaceGroup, type Known, keys, type People, type Person, subjectOf, type WorkflowRun } from '../api'
+import { api, type FaceGroup, type Known, keys, type People, type Person, subjectOf, type TrackStill, type WorkflowRun } from '../api'
 
 /** How often the faces are read again while the tape's job runs (its stages fill them in). */
 const FOLLOW = 5000
-/** Crops shown of a group: enough to recognise someone from a few angles. */
-const CROPS = 6
+/** A group's stills from which they scroll (in a box this high, px) rather than push the answers down the page. */
+const SCROLL_FROM = 13
+const SCROLL_HEIGHT = 320
 
 /** The `name_people` gate as the tab tells it: waiting for the person, or nothing to ask. */
 export function namingOf(run: Pick<WorkflowRun, 'stages'>): 'waiting' | 'done' | null {
@@ -65,6 +72,21 @@ export function describePeople(p: People): string {
 /** Nothing at all to show: the face finder found nobody on the tape (as against faces not followed yet, or all answered). */
 export const noFaces = (p: People) =>
   p.waiting === null && p.groups.length + p.people.length + p.named + p.skipped + p.not_faces + p.hidden === 0
+
+/** What is left of a group while some of its tracks have an answer in its Undo window: those tracks are out of it. */
+export function restOf(group: FaceGroup, isRemoved: (track: string) => boolean): FaceGroup | null {
+  const stills = group.stills.filter(t => !isRemoved(t.track))
+  if (stills.length === group.stills.length) return group
+  if (!stills.length) return null
+  return {
+    ...group,
+    tracks: stills.map(t => t.track),
+    faces: stills.map(t => t.face),
+    stills,
+    seconds: Math.round(stills.reduce((n, t) => n + t.seconds, 0) * 10) / 10,
+    first: Math.min(...stills.map(t => t.start)),
+  }
+}
 
 /** "On screen for 4:12, first at 0:31". */
 export const describeGroup = (g: Pick<FaceGroup, 'seconds' | 'first'>) =>
@@ -124,20 +146,22 @@ function PeopleBoard({
   const queryClient = useQueryClient()
   const undoable = useUndoable()
   const naming = run.status === 'ready' ? namingOf(run.data) : null
-  const answer = (group: FaceGroup, said: Answer) => {
-    const key = group.tracks.join()
-    const what =
-      said.answer === 'name' ? `Named ${said.who}` : said.answer === 'skip' ? 'Skipped a group of faces' : 'Marked a group as not faces'
+  const answer = (group: FaceGroup, said: Answer, tracks: string[]) => {
+    const part = tracks.length < group.tracks.length
+    const them = part ? format.count(tracks.length, 'face') : 'a group of faces'
+    const what = said.answer === 'name' ? `Named ${said.who}` : said.answer === 'skip' ? `Skipped ${them}` : `Marked ${them} as not faces`
     undoable.schedule({
-      id: key,
-      message: `${what}.`,
+      // each track removed on its own, so a group answered in part shows the rest of it until the answer is in
+      id: tracks.join(),
+      ids: tracks,
+      message: `${what}${part && said.answer === 'name' ? ` (${format.count(tracks.length, 'face')})` : ''}.`,
       failure: 'The group is back: the answer did not go through.',
       commit: () =>
         api
           .post('/api/sources/{source_id}/people', {
             path: { source_id: id },
             json: {
-              tracks: group.tracks,
+              tracks,
               answer: said.answer,
               name: said.name ?? null,
               person: said.person ?? null,
@@ -159,8 +183,11 @@ function PeopleBoard({
       })
       .then(run.poll)
   })
-  const left = people.groups.filter(g => !undoable.isRemoved(g.tracks.join()))
-  const group = left[0]
+  const left = people.groups.flatMap(g => {
+    const rest = restOf(g, undoable.isRemoved)
+    return rest ? [{ key: g.tracks.join(), group: rest }] : []
+  })
+  const first = left[0]
   return (
     <div className="grid gap-8">
       <p className="type-body max-w-2xl">{describePeople(people)}</p>
@@ -179,13 +206,13 @@ function PeopleBoard({
           />
         </div>
       )}
-      {group ? (
+      {first ? (
         <GroupAnswer
-          key={group.tracks.join()}
+          key={first.key}
           id={id}
-          group={group}
+          group={first.group}
           left={left.length}
-          onAnswer={said => answer(group, said)}
+          onAnswer={(said, tracks) => answer(first.group, said, tracks)}
           onSeek={onSeek}
         />
       ) : !people.waiting ? (
@@ -203,19 +230,29 @@ function GroupAnswer({
   id,
   group,
   left,
-  onAnswer,
+  onAnswer: answerFor,
   onSeek,
 }: {
   id: number
   group: FaceGroup
   /** Groups still to answer, this one included. */
   left: number
-  onAnswer: (said: Answer) => void
+  /** The answer, for these tracks of the group (the chosen ones, or all of it). */
+  onAnswer: (said: Answer, tracks: string[]) => void
   onSeek: (t: number, play?: boolean) => void
 }) {
   const [name, setName] = useState('')
   const [problem, setProblem] = useState<string>()
   const known = useLoad({ queryKey: keys.known, queryFn: () => api.get('/api/people') })
+  const chosen = useSelection(group.stills, t => t.track)
+  const order = new Map(group.stills.map((t, i) => [t.track, i + 1]))
+  // the chosen tracks when some are chosen, else the whole group; the choice is cleared, as what it chose has gone
+  const onAnswer = (said: Answer) => {
+    const tracks = chosen.count ? chosen.selectedRows.map(t => t.track) : group.tracks
+    chosen.clear()
+    setName('')
+    answerFor(said, tracks)
+  }
   const suggested = group.suggested
   const headingId = `group-${group.tracks[0]}-heading`
   const named = (e: FormEvent) => {
@@ -232,13 +269,28 @@ function GroupAnswer({
         </h3>
         <p className="type-body-sm tabular-nums text-muted-foreground">{left === 1 ? 'The last group' : `${left} groups left`}</p>
       </div>
-      <ul className="flex flex-wrap gap-2" aria-label="Their faces">
-        {group.faces.slice(0, CROPS).map((f, i) => (
-          <li key={f}>
-            <Thumbnail src={cropUrl(id, f)} alt={`Face ${i + 1} of the group`} className="w-24" missing="No picture" />
-          </li>
-        ))}
-      </ul>
+      <SelectableGrid<TrackStill>
+        label="Their faces"
+        rows={group.stills}
+        rowKey={t => t.track}
+        renderImage={t => <Thumbnail src={cropUrl(id, t.face)} alt={`Face ${order.get(t.track)} of the group`} missing="No picture" />}
+        detail={t => format.runningTime(t.start)}
+        selection={{ ...chosen, rowLabel: t => `face ${order.get(t.track)}, at ${format.runningTime(t.start)}` }}
+        tileSize="sm"
+        virtualizeFrom={SCROLL_FROM}
+        maxHeight={SCROLL_HEIGHT}
+      />
+      {group.stills.length > 1 && (
+        <p className="type-body-sm text-muted-foreground">
+          More than one person here? Choose the faces of one of them: the answer is then for those, and the rest stay to answer.
+        </p>
+      )}
+      <BulkBar count={chosen.count} noun="face" onClear={chosen.clear}>
+        <span className="type-body-sm">
+          The answer below is for {chosen.count === 1 ? 'this face' : 'these faces'} only;{' '}
+          {format.count(group.stills.length - chosen.count, 'face')} stay.
+        </span>
+      </BulkBar>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 type-body-sm text-muted-foreground">
         <span>
           {describeGroup(group)}, seen {group.tracks.length === 1 ? 'once' : `${group.tracks.length} times`}

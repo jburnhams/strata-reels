@@ -21,6 +21,7 @@ import {
   tapeId,
   tapePeaks,
   tapePeople,
+  tapePeopleLongGroup,
   tapePeopleNaming,
   tapeRun,
   tapeRunChecked,
@@ -252,8 +253,15 @@ export const handlers = [
       person?: number | null
     }
     const p = peopleOf(found.id)
-    const group = p.groups.find(g => g.tracks.join() === b.tracks.join())
-    if (!group) return refused(`${b.tracks.join(', ')} are not tracks of this tape left to answer`)
+    // all of a group, or some of its tracks (the rest stay, a group of their own)
+    const whole = p.groups.find(g => b.tracks.length > 0 && b.tracks.every(t => g.tracks.includes(t)))
+    if (!whole) return refused(`${b.tracks.join(', ')} are not tracks of this tape left to answer`)
+    const stills = whole.stills.filter(t => b.tracks.includes(t.track))
+    const group = {
+      tracks: b.tracks,
+      faces: stills.map(t => t.face),
+      seconds: b.tracks.length === whole.tracks.length ? whole.seconds : stills.reduce((n, t) => n + t.seconds, 0),
+    }
     if (b.answer === 'name') {
       if (!b.name?.trim() && b.person == null) return refused('a name, or a person known already, is needed to name them')
       let who = b.person == null ? undefined : mock.known.find(k => k.id === b.person)
@@ -270,7 +278,23 @@ export const handlers = [
       p.named += group.tracks.length
     } else if (b.answer === 'skip') p.skipped += group.tracks.length
     else p.not_faces += group.tracks.length
-    p.groups = p.groups.filter(g => g !== group)
+    const rest = whole.stills.filter(t => !b.tracks.includes(t.track))
+    p.groups = p.groups.flatMap(g =>
+      g !== whole
+        ? [g]
+        : rest.length
+          ? [
+              {
+                ...g,
+                tracks: rest.map(t => t.track),
+                faces: rest.map(t => t.face),
+                stills: rest,
+                seconds: rest.reduce((n, t) => n + t.seconds, 0),
+                first: Math.min(...rest.map(t => t.start)),
+              },
+            ]
+          : [],
+    )
     p.open = Math.max(0, p.open - group.tracks.length)
     if (!p.groups.length) {
       p.done = true
@@ -497,6 +521,8 @@ export const peopleNaming = [
     }),
   ),
 ]
+/** The same, its first group a long one whose faces scroll. */
+export const peopleLongGroup = [http.get(at(paths.people), () => HttpResponse.json(tapePeopleLongGroup)), ...peopleNaming.slice(1)]
 export const peopleLoading = http.get(at(paths.people), () => delay('infinite'))
 export const transcriptWaiting = http.get(at(paths.transcript), () =>
   HttpResponse.json({ language: null, model: null, waiting: 'Listening for speech (the transcript step).', segments: [] }),

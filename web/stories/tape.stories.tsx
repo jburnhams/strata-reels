@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import {
   peaksLoading,
   peopleLoading,
+  peopleLongGroup,
   peopleNaming,
   runChecked,
   runFailed,
@@ -60,6 +61,11 @@ export const PeopleNamingPhone: Story = {
   render: () => <AppAt route="/sources/5?view=people" />,
   beforeEach: ({ msw }) => msw.use(...peopleNaming),
   tags: ['visual-phone'],
+}
+/** A group of 36 tracks, as a real tape gives: the faces scroll in their box above the answers. */
+export const PeopleLongGroup: Story = {
+  render: () => <AppAt route="/sources/5?view=people" />,
+  beforeEach: ({ msw }) => msw.use(...peopleLongGroup),
 }
 export const PeopleLoading: Story = {
   render: () => <AppAt route="/sources/5?view=people" />,

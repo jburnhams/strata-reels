@@ -4,6 +4,13 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-28
 
+**People tab: split a group that holds more than one person (branch `people-split-groups`)**
+Jonathan asked, after naming on the real tape, for a way to break groups that are several people: click faces to choose them, the answer then applies to those only as a group of their own, the rest left behind, with the whole group on show (scrolling).
+- `src/app/people.py`: `Group.stills` (**new** `TrackStill`: every track of the group by its best still, with its start and length, the longest first). `answer` already took any tracks of the tape; the rest of a group answered in part stay open and are grouped again on the next read.
+- `web/src/screens/TapePeople.tsx`: the group's faces are a `SelectableGrid` of every track (was the first six crops), scrolling in a 320 px box from 13 tracks; chosen faces get a `BulkBar` ("the answer below is for these faces only; N stay") and every answer (suggestion, name, someone known, skip, not faces) is for them only; `restOf` shows the rest of the group while an answer for part of it is in its Undo window (each track is its own removal).
+- `web/src/api.ts`, `web/openapi.json`, `web/src/api.generated.ts`: `TrackStill`. `web/src/mocks/tape.ts`, `web/src/mocks/handlers.ts`: stills on the naming groups, a 36-track group (`peopleLongGroup`), and an answer for part of a group. `web/stories/tape.stories.tsx`: story `PeopleLongGroup` (**new**: its baseline is new; `PeopleNaming` and `PeopleNamingPhone` change, their faces now a grid with Select all).
+- `tests/unit/test_people.py`, `web/tests/integration/TapePeople.test.tsx`: the stills, naming part of a group with the rest asked again, a long group's face chosen and skipped alone.
+
 **Reels on the released strata-python 0.2.26 (branch `claude/project-thread-l890x5`)**
 strata-python PR #93 merged and was released, so the temporary git pin is gone.
 - `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.26,<0.3` from PyPI; `[tool.uv.sources]` removed. `AGENTS.md`: the range.

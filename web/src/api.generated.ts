@@ -973,7 +973,8 @@ export interface components {
         };
         /**
          * Group
-         * @description Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it.
+         * @description Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it. An answer may be
+         *     given for some of its tracks only (the grouping put two people together): the rest stay open and are grouped again.
          */
         Group: {
             /**
@@ -991,6 +992,11 @@ export interface components {
              * @description how long its faces are on screen, all its tracks together
              */
             seconds: number;
+            /**
+             * Stills
+             * @description every track of the group by its best still, the longest first
+             */
+            stills: components["schemas"]["TrackStill"][];
             suggested: components["schemas"]["Suggestion"] | null;
             /** Tracks */
             tracks: string[];
@@ -1595,6 +1601,26 @@ export interface components {
         TitleIn: {
             /** Title */
             title: string | null;
+        };
+        /**
+         * TrackStill
+         * @description One track of a group, by its best still: what the person picks when a group holds more than one person.
+         */
+        TrackStill: {
+            /**
+             * Face
+             * @description the face store's id of the track's best still, for a crop
+             */
+            face: number;
+            /** Seconds */
+            seconds: number;
+            /**
+             * Start
+             * @description seconds into the tape
+             */
+            start: number;
+            /** Track */
+            track: string;
         };
         /**
          * Transcript

@@ -313,11 +313,22 @@ class Suggestion(ApiModel):
     share: float = Field(description="of the confirmed faces nearest the group, the part that are this person's")
 
 
+class TrackStill(ApiModel):
+    """One track of a group, by its best still: what the person picks when a group holds more than one person."""
+
+    track: str
+    face: int = Field(description="the face store's id of the track's best still, for a crop")
+    start: float = Field(description="seconds into the tape")
+    seconds: float
+
+
 class Group(ApiModel):
-    """Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it."""
+    """Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it. An answer may be
+    given for some of its tracks only (the grouping put two people together): the rest stay open and are grouped again."""
 
     tracks: list[str]
     faces: list[int] = Field(description="the face store's ids of a few of its stills, best first, for crops")
+    stills: list[TrackStill] = Field(description="every track of the group by its best still, the longest first")
     seconds: float = Field(description="how long its faces are on screen, all its tracks together")
     first: float = Field(description="when its first track starts, seconds into the tape")
     suggested: Suggestion | None
@@ -379,6 +390,7 @@ def people_of(db: Session, source: Source, *, done: bool) -> People:
         Group(
             tracks=g.tracks,
             faces=_best(g.tracks, faces, by_id),
+            stills=_stills(g.tracks, faces, by_id),
             seconds=round(sum(by_id[k].end - by_id[k].start for k in g.tracks), 1),
             first=round(min(by_id[k].start for k in g.tracks), 1),
             suggested=None
@@ -413,6 +425,23 @@ def people_of(db: Session, source: Source, *, done: bool) -> People:
         hidden=counts["hidden"],
         done=done,
     )
+
+
+def _stills(
+    keys: Sequence[str], faces: Mapping[str, Sequence[int]], by_id: Mapping[str, sm.FaceTrack]
+) -> list[TrackStill]:
+    """Each track by its first still (the face store's best of it), the longest track first, then the earliest."""
+    shown = [k for k in keys if faces.get(k)]
+    shown.sort(key=lambda k: (-(by_id[k].end - by_id[k].start), by_id[k].start))
+    return [
+        TrackStill(
+            track=k,
+            face=faces[k][0],
+            start=round(by_id[k].start, 1),
+            seconds=round(by_id[k].end - by_id[k].start, 1),
+        )
+        for k in shown
+    ]
 
 
 def _best(keys: Sequence[str], faces: Mapping[str, Sequence[int]], by_id: Mapping[str, sm.FaceTrack]) -> list[int]:

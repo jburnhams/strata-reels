@@ -112,6 +112,9 @@ def test_naming_a_group_skipping_one_and_the_gate(engine, tmp_path, tape_faces, 
         kept = people.current_store(s, src)
         assert kept is not None
         assert a.faces[:2] == [kept.payload["faces"]["2"][0], kept.payload["faces"]["1"][0]]  # the longest track first
+        # every track by its best still, the longest first: what the person picks from to split the group
+        assert [(t.track, t.face) for t in a.stills] == [(k, kept.payload["faces"][k][0]) for k in ("2", "1")]
+        assert sum(t.seconds for t in a.stills) == a.seconds
         assert people.is_open(s, src)
     sid = src.id
     named = client.post(f"/api/sources/{sid}/people", json={"tracks": ["1", "2"], "answer": "name", "name": "Ann"})
@@ -138,6 +141,19 @@ def test_naming_a_group_skipping_one_and_the_gate(engine, tmp_path, tape_faces, 
     assert (bad.status_code, bad.json()["detail"]) == (400, "no track 9 on tape.mkv")
     nameless = client.post(f"/api/sources/{sid}/people", json={"tracks": ["1"], "answer": "name"})
     assert nameless.json()["detail"] == "a new person needs a name"
+
+
+def test_an_answer_for_part_of_a_group_leaves_the_rest_to_answer(engine, tmp_path, tape_faces, client: TestClient):
+    # the grouping can put two people together: the person picks the tracks that are one of them and names those only
+    src = added(engine, tmp_path)
+    with Session(engine) as s:
+        tracked(s, src)
+        assert by_group(people.people_of(s, src, done=False))["1"] == ["1", "2"]
+    body = client.post(f"/api/sources/{src.id}/people", json={"tracks": ["2"], "answer": "name", "name": "Ann"}).json()
+    assert [(p["name"], p["tracks"]) for p in body["people"]] == [("Ann", 1)]
+    assert sorted(g["tracks"][0] for g in body["groups"]) == ["1", "3"]  # track 1 is left, a group of its own now
+    assert [t["track"] for g in body["groups"] if g["tracks"] == ["1"] for t in g["stills"]] == ["1"]
+    assert (body["open"], body["named"]) == (3, 1)
 
 
 def test_not_faces_and_a_person_known_already(engine, tmp_path, tape_faces):

@@ -23,6 +23,7 @@ export type Peaks = Schema<'Peaks'>
 /** A tape's faces as the People tab shows them (src/app/people.py): groups of tracks to name, people named. */
 export type People = Schema<'People'>
 export type FaceGroup = Schema<'Group'>
+export type TrackStill = Schema<'TrackStill'>
 export type Person = Schema<'Person'>
 /** Someone the face store knows already, to add a group to. */
 export type Known = Schema<'Known'>
