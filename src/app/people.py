@@ -52,7 +52,6 @@ MAX_SIDE = 1600  # face-tracks decodes stills at most this many pixels across (i
 STORE = results.Provenance(role="face-store")
 FOLDER = results.Provenance(role=ROLE)
 SKIP, SAID = "face-skip", "face-said"
-SHOWN = 6  # faces of a group shown to the person
 VERSION = 1  # raise when `cast_of` changes what it gives for the same inputs
 
 Status = Literal["named", "not-face", "skipped", "hidden", "open"]
@@ -313,11 +312,22 @@ class Suggestion(ApiModel):
     share: float = Field(description="of the confirmed faces nearest the group, the part that are this person's")
 
 
+class Member(ApiModel):
+    """One track of a group, as the person sees it: a still to recognise it by, so a group that holds two people can
+    be split (the answer goes to the tracks chosen, the rest stay a group)."""
+
+    track: str
+    face: int | None = Field(description="the face store's id of the track's first still, for a crop")
+    seconds: float = Field(description="how long the track is on screen")
+    start: float = Field(description="when it starts, seconds into the tape")
+
+
 class Group(ApiModel):
-    """Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it."""
+    """Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it; or any of its
+    tracks, when it is more than one person."""
 
     tracks: list[str]
-    faces: list[int] = Field(description="the face store's ids of a few of its stills, best first, for crops")
+    members: list[Member] = Field(description="every track of the group, the longest first")
     seconds: float = Field(description="how long its faces are on screen, all its tracks together")
     first: float = Field(description="when its first track starts, seconds into the tape")
     suggested: Suggestion | None
@@ -378,7 +388,7 @@ def people_of(db: Session, source: Source, *, done: bool) -> People:
     groups = [
         Group(
             tracks=g.tracks,
-            faces=_best(g.tracks, faces, by_id),
+            members=members(g.tracks, faces, by_id),
             seconds=round(sum(by_id[k].end - by_id[k].start for k in g.tracks), 1),
             first=round(min(by_id[k].start for k in g.tracks), 1),
             suggested=None
@@ -396,7 +406,7 @@ def people_of(db: Session, source: Source, *, done: bool) -> People:
             name=fs.identity(who, app=APP).name,
             tracks=len(ks),
             seconds=round(sum(by_id[k].end - by_id[k].start for k in ks if k in by_id), 1),
-            face=next(iter(_best(ks, faces, by_id)), None),
+            face=members([k for k in ks if k in by_id], faces, by_id)[0].face,
         )
         for who, ks in mine.items()
     ]
@@ -415,15 +425,19 @@ def people_of(db: Session, source: Source, *, done: bool) -> People:
     )
 
 
-def _best(keys: Sequence[str], faces: Mapping[str, Sequence[int]], by_id: Mapping[str, sm.FaceTrack]) -> list[int]:
-    """Up to SHOWN faces of these tracks, one from each of the longest tracks first."""
-    order = sorted((k for k in keys if k in faces), key=lambda k: -(by_id[k].end - by_id[k].start))
-    out: list[int] = []
-    for i in range(SHOWN):
-        for k in order:
-            if i < len(faces[k]) and len(out) < SHOWN:
-                out.append(faces[k][i])
-    return out
+def members(keys: Sequence[str], faces: Mapping[str, Sequence[int]], by_id: Mapping[str, sm.FaceTrack]) -> list[Member]:
+    """Every track of a group with one still each, the longest first (then the earliest), so the person sees all of
+    it and can pick out the ones that are someone else."""
+    order = sorted(keys, key=lambda k: (-(by_id[k].end - by_id[k].start), by_id[k].start, k))
+    return [
+        Member(
+            track=k,
+            face=next(iter(faces.get(k, ())), None),
+            seconds=round(by_id[k].end - by_id[k].start, 1),
+            start=round(by_id[k].start, 1),
+        )
+        for k in order
+    ]
 
 
 Answer = Literal["name", "not-faces", "skip"]

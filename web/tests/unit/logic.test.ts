@@ -6,6 +6,7 @@ import { initialSources, systemModelsDown, systemNearlyFull, systemStatus } from
 import { clipsOf, renderOf, sideAReel, tapeReel } from '../../src/mocks/reels'
 import {
   fresh,
+  groupOf,
   otherRuns,
   peopleWaiting,
   pinMockClock,
@@ -24,7 +25,17 @@ import { aspectNumber, describeReel, describeRender, describeRevision, editOf, s
 import { describeReels, parseLength } from '../../src/screens/ReelsScreen'
 import { describePicture, describeSources, followRuns, framesPerSecond } from '../../src/screens/SourcesScreen'
 import { describeDisk, describeSystem, homeDisk } from '../../src/screens/SystemScreen'
-import { describeGroup, describePeople, namingOf, noFaces, personName } from '../../src/screens/TapePeople'
+import {
+  answeredNote,
+  describeGroup,
+  describePeople,
+  faceLabel,
+  namingOf,
+  noFaces,
+  personName,
+  remainOf,
+  splitNote,
+} from '../../src/screens/TapePeople'
 import {
   aspectOf,
   chapterContents,
@@ -348,6 +359,28 @@ describe('the people on a tape', () => {
     expect(personName({ id: 4, name: 'Uncle Pete' })).toBe('Uncle Pete')
     expect(personName({ id: 7, name: null })).toBe('Person 7')
     expect(describeGroup({ seconds: 252, first: 31 })).toBe('On screen for 4:12, first at 0:31')
+    expect(faceLabel({ seconds: 96.5, start: 1210.4 }, 3)).toBe('Face 3, on screen for 1:36 from 20:10')
+    expect(splitNote(0, 1)).toBe('One face in this group.')
+    const g = groupOf([
+      ['a', 1, 60, 10],
+      ['b', 2, 20.5, 300],
+    ])
+    expect(remainOf(g, () => false)).toEqual(g)
+    expect(remainOf(g, (t: string) => t === 'a')).toMatchObject({
+      tracks: ['a', 'b'],
+      seconds: 20.5,
+      first: 300,
+      members: [{ track: 'b' }],
+    })
+    expect(remainOf(g, () => true).members).toEqual([])
+    expect(answeredNote({ answer: 'name', who: 'Ann' }, 3, true)).toBe('Named Ann.')
+    expect(answeredNote({ answer: 'skip' }, 3, false)).toBe('Skipped a group of faces.')
+    expect(answeredNote({ answer: 'skip' }, 2, true)).toBe('Skipped 2\u00a0faces.')
+    expect(answeredNote({ answer: 'not-faces' }, 4, false)).toBe('Marked a group as not faces.')
+    expect(answeredNote({ answer: 'not-faces' }, 1, true)).toBe('Marked 1\u00a0face as not faces.')
+    expect(splitNote(0, 8)).toMatch(/^Your answer is for the whole group\. If some are someone else/)
+    expect(splitNote(8, 8)).toBe('Your answer is for the whole group: every face is chosen.')
+    expect(splitNote(1, 8)).toBe('Your answer is for the 1\u00a0chosen face; the other 7\u00a0faces stay in the group.')
   })
 
   it('lists the people in a scene', () => {

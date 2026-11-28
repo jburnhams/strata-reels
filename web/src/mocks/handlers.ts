@@ -13,6 +13,7 @@ import { clipsOf, initialReels, initialRenders, listed, renderOf, revisionOf } f
 import {
   faceSvg,
   fresh,
+  groupOf,
   jobsPage,
   knownPeople,
   otherRuns,
@@ -252,8 +253,12 @@ export const handlers = [
       person?: number | null
     }
     const p = peopleOf(found.id)
-    const group = p.groups.find(g => g.tracks.join() === b.tracks.join())
-    if (!group) return refused(`${b.tracks.join(', ')} are not tracks of this tape left to answer`)
+    // The answer may be for part of a group (the person split off the faces that are someone else): those tracks go,
+    // and the rest stay a group, as the server regroups what is left.
+    const whole = p.groups.find(g => b.tracks.length > 0 && b.tracks.every(t => g.tracks.includes(t)))
+    if (!whole) return refused(`${b.tracks.join(', ')} are not tracks of this tape left to answer`)
+    const chosen = whole.members.filter(m => b.tracks.includes(m.track))
+    const group = { tracks: b.tracks, members: chosen, seconds: Math.round(chosen.reduce((n, m) => n + m.seconds, 0) * 10) / 10 }
     if (b.answer === 'name') {
       if (!b.name?.trim() && b.person == null) return refused('a name, or a person known already, is needed to name them')
       let who = b.person == null ? undefined : mock.known.find(k => k.id === b.person)
@@ -262,15 +267,25 @@ export const handlers = [
         who = { id: Math.max(0, ...mock.known.map(k => k.id)) + 1, name: b.name!.trim(), faces: 0 }
         mock.known.push(who)
       }
-      who.faces += group.faces.length
+      who.faces += group.members.length
       const had = p.people.find(x => x.id === who.id)
       if (had) Object.assign(had, { tracks: had.tracks + group.tracks.length, seconds: had.seconds + group.seconds })
-      else p.people.push({ id: who.id, name: who.name, tracks: group.tracks.length, seconds: group.seconds, face: group.faces[0] ?? null })
+      else
+        p.people.push({
+          id: who.id,
+          name: who.name,
+          tracks: group.tracks.length,
+          seconds: group.seconds,
+          face: group.members[0]?.face ?? null,
+        })
       p.people.sort((x, y) => y.seconds - x.seconds)
       p.named += group.tracks.length
     } else if (b.answer === 'skip') p.skipped += group.tracks.length
     else p.not_faces += group.tracks.length
-    p.groups = p.groups.filter(g => g !== group)
+    const rest = whole.members.filter(m => !b.tracks.includes(m.track))
+    p.groups = p.groups.flatMap(g =>
+      g !== whole ? [g] : rest.length ? [{ ...groupOf(rest.map(m => [m.track, m.face, m.seconds, m.start])), suggested: g.suggested }] : [],
+    )
     p.open = Math.max(0, p.open - group.tracks.length)
     if (!p.groups.length) {
       p.done = true

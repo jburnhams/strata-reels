@@ -973,19 +973,20 @@ export interface components {
         };
         /**
          * Group
-         * @description Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it.
+         * @description Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it; or any of its
+         *     tracks, when it is more than one person.
          */
         Group: {
-            /**
-             * Faces
-             * @description the face store's ids of a few of its stills, best first, for crops
-             */
-            faces: number[];
             /**
              * First
              * @description when its first track starts, seconds into the tape
              */
             first: number;
+            /**
+             * Members
+             * @description every track of the group, the longest first
+             */
+            members: components["schemas"]["Member"][];
             /**
              * Seconds
              * @description how long its faces are on screen, all its tracks together
@@ -1042,6 +1043,30 @@ export interface components {
         MarkIn: {
             /** Start */
             start: boolean | null;
+        };
+        /**
+         * Member
+         * @description One track of a group, as the person sees it: a still to recognise it by, so a group that holds two people can
+         *     be split (the answer goes to the tracks chosen, the rest stay a group).
+         */
+        Member: {
+            /**
+             * Face
+             * @description the face store's id of the track's first still, for a crop
+             */
+            face: number | null;
+            /**
+             * Seconds
+             * @description how long the track is on screen
+             */
+            seconds: number;
+            /**
+             * Start
+             * @description when it starts, seconds into the tape
+             */
+            start: number;
+            /** Track */
+            track: string;
         };
         /** Page[Task] */
         Page_Task_: {

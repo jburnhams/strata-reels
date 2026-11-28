@@ -683,20 +683,20 @@
     "type": "object"
    },
    "Group": {
-    "description": "Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it.",
+    "description": "Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it; or any of its\ntracks, when it is more than one person.",
     "properties": {
-     "faces": {
-      "description": "the face store's ids of a few of its stills, best first, for crops",
-      "items": {
-       "type": "integer"
-      },
-      "title": "Faces",
-      "type": "array"
-     },
      "first": {
       "description": "when its first track starts, seconds into the tape",
       "title": "First",
       "type": "number"
+     },
+     "members": {
+      "description": "every track of the group, the longest first",
+      "items": {
+       "$ref": "#/components/schemas/Member"
+      },
+      "title": "Members",
+      "type": "array"
      },
      "seconds": {
       "description": "how long its faces are on screen, all its tracks together",
@@ -723,7 +723,7 @@
     },
     "required": [
      "tracks",
-     "faces",
+     "members",
      "seconds",
      "first",
      "suggested"
@@ -844,6 +844,45 @@
      "start"
     ],
     "title": "MarkIn",
+    "type": "object"
+   },
+   "Member": {
+    "description": "One track of a group, as the person sees it: a still to recognise it by, so a group that holds two people can\nbe split (the answer goes to the tracks chosen, the rest stay a group).",
+    "properties": {
+     "face": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the face store's id of the track's first still, for a crop",
+      "title": "Face"
+     },
+     "seconds": {
+      "description": "how long the track is on screen",
+      "title": "Seconds",
+      "type": "number"
+     },
+     "start": {
+      "description": "when it starts, seconds into the tape",
+      "title": "Start",
+      "type": "number"
+     },
+     "track": {
+      "title": "Track",
+      "type": "string"
+     }
+    },
+    "required": [
+     "track",
+     "face",
+     "seconds",
+     "start"
+    ],
+    "title": "Member",
     "type": "object"
    },
    "Page_Task_": {
