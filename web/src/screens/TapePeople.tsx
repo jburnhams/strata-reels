@@ -93,6 +93,19 @@ export type Answer =
   | { answer: 'name'; name?: string; person?: number; who: string }
   | { answer: 'skip' | 'not-faces'; name?: undefined; person?: undefined }
 
+/** A group less the tracks answered while their Undo window is open: its time on screen and first sight are the rest's,
+ * so "Play from" goes to a face still asked about. `tracks` stays whole, as the group's key. */
+export function remainOf(g: FaceGroup, isRemoved: (track: string) => boolean): FaceGroup {
+  const members = g.members.filter(m => !isRemoved(m.track))
+  if (members.length === g.members.length || members.length === 0) return { ...g, members }
+  return {
+    ...g,
+    members,
+    seconds: Math.round(members.reduce((n, m) => n + m.seconds, 0) * 10) / 10,
+    first: Math.min(...members.map(m => m.start)),
+  }
+}
+
 /** The Undo bar's sentence for an answer about `n` tracks, the whole group or (`part`) the chosen ones. */
 export function answeredNote(said: Answer, n: number, part: boolean): string {
   if (said.answer === 'name') return `Named ${said.who}.`
@@ -181,9 +194,7 @@ function PeopleBoard({
       })
       .then(run.poll)
   })
-  const left = people.groups
-    .map(g => ({ ...g, members: g.members.filter(m => !undoable.isRemoved(m.track)) }))
-    .filter(g => g.members.length > 0)
+  const left = people.groups.map(g => remainOf(g, undoable.isRemoved)).filter(g => g.members.length > 0)
   const group = left[0]
   return (
     <div className="grid gap-8">
