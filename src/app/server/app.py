@@ -17,6 +17,11 @@ error answers ({detail, payload}) and the web app's pages. This app's own routes
                                       chapters again; answers the scenes as they are now (`regrouping` true meanwhile)
     PUT /api/sources/{id}/scenes/{n}/chapter-title {title}  the person's title for the chapter that starts at scene n
                                       (null: the namer's again; 400 when none starts there now)
+    GET /api/sources/{id}/people      its faces (`people.People`): groups of tracks left to name, the people named
+    POST /api/sources/{id}/people {tracks, answer: name|not-faces|skip, name?, person?}   the person's answer for a
+                                      group; queues the tape's job (the gate asks again, the cast is made again)
+    GET /api/sources/{id}/faces/{face}/crop   one of its faces, cut from its still by strata-models' face store
+    GET /api/people?q=                people the face store knows, to add a group to
     GET /api/sources/{id}/transcript  its speech, segment by segment with word timings
     GET /api/sources/{id}/peaks?buckets=4000   its waveform, reduced to that many slices (404 before it is made)
     GET /api/sources/{id}/proxy       the browser copy, with range requests so the player can seek
@@ -54,6 +59,8 @@ From strata-python's `add_workflow`, the tape pipeline's steps (subject `source:
     GET /api/workflows/tape/subjects/{subject}/stages/{stage}   that stage's history
     POST /api/workflows/tape/subjects/{subject}/run     queue the tape's job again (a retry after a failure)
     POST .../stages/check_chapters/approve              the person says the chapters are right (the gate)
+    POST .../stages/name_people/approve                 the person skips the faces left to name (the gate approves
+                                                        itself once none are)
     POST .../stages/{stage}/clear                       forget a stage and what follows it, then run
 
 The server runs the job queue (`app.jobs.Runner`) while it is up: jobs start once the database is open.
@@ -65,6 +72,7 @@ types are generated from it."""
 
 import contextlib
 import os
+import urllib.request
 from collections.abc import AsyncGenerator, Sequence
 from typing import Annotated, Any, Literal
 
@@ -74,13 +82,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from strata_python import web
 from strata_python.client import ServiceClient
+from strata_python.clients import faces as face_store
 from strata_python.clients import models
 from strata_python.db.web import DbSession, add_database
 from strata_python.tasks.web import add_jobs
 from strata_python.workflow.store import DbStore
 from strata_python.workflow.web import add_workflow
 
-from app import __version__, browse, chapters, db, jobs, planner, reels, renders, settings, sources, system
+from app import __version__, browse, chapters, db, jobs, people, planner, reels, renders, settings, sources, system
 
 # A thumbnail or keyframe URL carries its result's key (`?v=`, browse.py), so a new recipe is a new URL and the browser
 # may keep the old one for good. The proxy's URL is the tape's, whichever proxy is current, so it is checked each time.
@@ -108,6 +117,24 @@ class TitleIn(BaseModel):
     """The person's title for a chapter; None goes back to the name the namer gave it."""
 
     title: str | None
+
+
+class AnswerIn(BaseModel):
+    """The person's answer for a group of a tape's face tracks: name them (a new person called `name`, or `person`, known
+    already), say they are not faces, or skip them."""
+
+    tracks: list[str]
+    answer: people.Answer
+    name: str | None = None
+    person: int | None = None
+
+
+class Known(BaseModel):
+    """A person the face store knows, to add a group to."""
+
+    id: int
+    name: str | None
+    faces: int
 
 
 class ReelIn(BaseModel):
@@ -205,6 +232,44 @@ def create_app(*, run_jobs: Literal["processes", "threads", "off"] = "processes"
         source = one(s, source_id)
         chapters.rename(s, source, scene, b.title, author=WHO)
         return browse.scenes_of(s, source)
+
+    def named(source: sources.Source) -> bool:
+        subject = jobs.subject_of(source)
+        store = DbStore(records.engine(), jobs.STAGES, jobs.TAPE)
+        return (
+            jobs.TAPE.status(store, subject, jobs.inputs_in(records.engine(), subject)).states["name_people"] == "done"
+        )
+
+    @app.get("/api/sources/{source_id}/people")
+    def get_people(source_id: int, s: DbSession) -> people.People:
+        source = one(s, source_id)
+        return people.people_of(s, source, done=named(source))
+
+    @app.post("/api/sources/{source_id}/people")
+    def post_people(source_id: int, b: AnswerIn, s: DbSession) -> people.People:
+        # Logged as an override, one of the tape's inputs: the tape's job then asks the gate again and makes the cast.
+        source = one(s, source_id)
+        people.answer(s, source, b.tracks, b.answer, author=WHO, name=b.name, person=b.person)
+        jobs.ingest_later(jobs.queue(records.engine()), source, by=WHO)
+        return people.people_of(s, source, done=named(source))
+
+    @app.get("/api/sources/{source_id}/faces/{face_id}/crop")
+    def get_face_crop(source_id: int, face_id: int, s: DbSession) -> Response:
+        # Through this server, so the page reaches strata-models only through the app (one origin, one base path), and
+        # only for faces of this tape.
+        kept = people.current_store(s, one(s, source_id))
+        if kept is None or not any(face_id in ids for ids in kept.payload["faces"].values()):
+            raise KeyError(f"face {face_id} is not one of this tape's")
+        with urllib.request.urlopen(face_store.crop_url(face_id), timeout=30) as r:  # noqa: S310 - the service's URL
+            return Response(
+                r.read(), media_type=r.headers.get("Content-Type", "image/webp"), headers={"Cache-Control": IMMUTABLE}
+            )
+
+    @app.get("/api/people")
+    def get_known(q: str | None = None) -> list[Known]:
+        return [
+            Known(id=p.id, name=p.name, faces=p.faces) for p in face_store.identities(app=people.APP, q=q, limit=200)
+        ]
 
     @app.get("/api/sources/{source_id}/transcript")
     def get_transcript(source_id: int, s: DbSession) -> browse.Transcript:

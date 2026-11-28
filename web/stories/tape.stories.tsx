@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import {
   peaksLoading,
+  peopleLoading,
+  peopleNaming,
   runChecked,
   runFailed,
   runPartWay,
@@ -46,6 +48,23 @@ export const TranscriptToCome: Story = {
 export const PartWay: Story = { beforeEach: ({ msw }) => msw.use(scenesPartWay, runPartWay) }
 /** Before the scenes are grouped: the finding names what they wait for, and the steps show how far it has got. */
 export const Waiting: Story = { beforeEach: ({ msw }) => msw.use(scenesWaiting, runWaiting) }
+/** The people named on the tape (?view=people in the URL), nothing left to answer. */
+export const People: Story = { render: () => <AppAt route="/sources/5?view=people" /> }
+/** The people waiting to be named: the first group with its suggestion, the describe step waiting for the answers. */
+export const PeopleNaming: Story = {
+  render: () => <AppAt route="/sources/5?view=people" />,
+  beforeEach: ({ msw }) => msw.use(...peopleNaming),
+}
+/** The same on a phone. */
+export const PeopleNamingPhone: Story = {
+  render: () => <AppAt route="/sources/5?view=people" />,
+  beforeEach: ({ msw }) => msw.use(...peopleNaming),
+  tags: ['visual-phone'],
+}
+export const PeopleLoading: Story = {
+  render: () => <AppAt route="/sources/5?view=people" />,
+  beforeEach: ({ msw }) => msw.use(peopleLoading),
+}
 /** Every step done (?view=steps in the URL). */
 export const Steps: Story = { render: () => <AppAt route="/sources/5?view=steps" /> }
 /** Part way: the job's progress over the steps. */

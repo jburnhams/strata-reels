@@ -125,3 +125,37 @@ def name_chapter(params):
         "tokens_in": 400,
         "tokens_out": 60,
     }
+
+
+# Faces on the tape, followed shot by shot (strata-models' face-tracks): one person (A) in the first shot and again in
+# the second, beside another (B), who is alone in the last. Two people seen together are never one.
+NO_TRACKS = {"tracks": [], "together": [], "width": 720, "height": 576, "fps": 10.0, "model": "buffalo_l"}
+A, B = [1.0, 0.0], [0.0, 1.0]
+TRACKS = [
+    # id, shot, start, end, who, box (x0, y0, x1, y1 in the video's pixels)
+    (1, 0, 0.5, 3.5, A, (40, 100, 200, 300)),
+    (2, 1, 4.5, 9.0, A, (40, 100, 120, 180)),
+    (3, 1, 5.0, 8.0, B, (500, 120, 560, 180)),
+    (4, 2, 11.0, 15.0, B, (300, 100, 420, 260)),
+]
+
+
+def face_tracks(params):
+    """The tracks above, each with two stills whose frames are written into `out_dir` (as face-tracks writes them)."""
+    out = params.get("out_dir")
+    tracks = []
+    for tid, shot, start, end, who, box in TRACKS:
+        stills = []
+        for t in (start + 0.5, end - 0.5):
+            image = None
+            if out:
+                os.makedirs(out, exist_ok=True)
+                image = os.path.join(out, f"t{tid}-{t:.3f}.jpg")
+                with open(image, "wb") as f:
+                    f.write(b"jpg")
+            stills.append({"time": t, "bbox": list(box), "det_score": 0.9, "quality": 0.6, "embedding": who,
+                           "image": image, "kps": [[box[0] + 10, box[1] + 10]], "pose": [0, 0, 0]})  # fmt: skip
+        boxes = [[round(start + i * 0.5, 1), *box, 0.9] for i in range(int((end - start) / 0.5) + 1)]
+        tracks.append({"id": tid, "shot": shot, "start": start, "end": end, "faces": len(boxes), "quality": 0.6,
+                       "embedding": who, "boxes": boxes, "stills": stills})  # fmt: skip
+    return {**NO_TRACKS, "tracks": tracks, "together": [[2, 3]], "cuts": params.get("cuts")}

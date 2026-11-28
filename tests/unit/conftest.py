@@ -6,7 +6,7 @@ from fractions import Fraction
 
 import pytest
 from hypothesis import HealthCheck, settings
-from probes import FACES, SHOTS, SPEECH, describe_scene, embeddings, name_chapter
+from probes import FACES, NO_TRACKS, SHOTS, SPEECH, describe_scene, embeddings, face_tracks, name_chapter
 from strata_python import derive, files, media, mediatime, render
 
 settings.register_profile(
@@ -120,6 +120,7 @@ def tape_models(fake_models):
             "image-embed": embeddings,
             "transcribe": SPEECH,
             "faces": FACES,
+            "face-tracks": NO_TRACKS,  # nobody to name: the people gate lets the tape through (`tape_faces` has some)
             "scene-describe": describe_scene,
             "chapter-name": name_chapter,
         }
@@ -130,9 +131,17 @@ def tape_models(fake_models):
             "image-embed": "clip-vit-b-32",
             "transcribe": "whisper-large-v3-turbo",
             "faces": "buffalo_l",
+            "face-tracks": "buffalo_l-tracks",
             "scene-describe": "qwen3.5-9b-vl",
             "chapter-name": "qwen3.5-9b-vl",
         }
     )
     fake_models.options.update({"shot-boundaries": {"threshold": 0.3}, "image-embed": {"half": True}})
     return fake_models
+
+
+@pytest.fixture
+def tape_faces(tape_models):
+    """The tape with faces on it (probes.TRACKS: A in two shots, B in two): its people wait to be named."""
+    tape_models.results["face-tracks"] = face_tracks
+    return tape_models

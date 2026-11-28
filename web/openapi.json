@@ -4,6 +4,11 @@
    "Analysis": {
     "description": "Which of the source's results exist, for the page's finding and its waiting words.",
     "properties": {
+     "cast": {
+      "description": "who is in each scene is known (the people are named, or skipped)",
+      "title": "Cast",
+      "type": "boolean"
+     },
      "chapters": {
       "title": "Chapters",
       "type": "boolean"
@@ -63,11 +68,61 @@
      "shots",
      "transcript",
      "faces",
+     "cast",
      "described",
      "chapters",
      "named"
     ],
     "title": "Analysis",
+    "type": "object"
+   },
+   "AnswerIn": {
+    "description": "The person's answer for a group of a tape's face tracks: name them (a new person called `name`, or `person`, known\nalready), say they are not faces, or skip them.",
+    "properties": {
+     "answer": {
+      "enum": [
+       "name",
+       "not-faces",
+       "skip"
+      ],
+      "title": "Answer",
+      "type": "string"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "person": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Person"
+     },
+     "tracks": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Tracks",
+      "type": "array"
+     }
+    },
+    "required": [
+     "tracks",
+     "answer"
+    ],
+    "title": "AnswerIn",
     "type": "object"
    },
    "Approval": {
@@ -534,6 +589,14 @@
       },
       "title": "Tags",
       "type": "array"
+     },
+     "who": {
+      "description": "who does what (preset v3; empty before it)",
+      "items": {
+       "$ref": "#/components/schemas/Who"
+      },
+      "title": "Who",
+      "type": "array"
      }
     },
     "required": [
@@ -544,6 +607,7 @@
      "people",
      "children",
      "activity",
+     "who",
      "tags",
      "picture",
      "model"
@@ -618,6 +682,55 @@
     "title": "Frame",
     "type": "object"
    },
+   "Group": {
+    "description": "Tracks that look like one person, nobody's yet: name it, say it is not faces, or skip it.",
+    "properties": {
+     "faces": {
+      "description": "the face store's ids of a few of its stills, best first, for crops",
+      "items": {
+       "type": "integer"
+      },
+      "title": "Faces",
+      "type": "array"
+     },
+     "first": {
+      "description": "when its first track starts, seconds into the tape",
+      "title": "First",
+      "type": "number"
+     },
+     "seconds": {
+      "description": "how long its faces are on screen, all its tracks together",
+      "title": "Seconds",
+      "type": "number"
+     },
+     "suggested": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Suggestion"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "tracks": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Tracks",
+      "type": "array"
+     }
+    },
+    "required": [
+     "tracks",
+     "faces",
+     "seconds",
+     "first",
+     "suggested"
+    ],
+    "title": "Group",
+    "type": "object"
+   },
    "Guess": {
     "properties": {
      "because": {
@@ -647,6 +760,69 @@
      }
     },
     "title": "HTTPValidationError",
+    "type": "object"
+   },
+   "InScene": {
+    "description": "Someone the family named, seen in a scene.",
+    "properties": {
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "seconds": {
+      "description": "how long their face is on screen in the scene",
+      "title": "Seconds",
+      "type": "number"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "seconds"
+    ],
+    "title": "InScene",
+    "type": "object"
+   },
+   "Known": {
+    "description": "A person the face store knows, to add a group to.",
+    "properties": {
+     "faces": {
+      "title": "Faces",
+      "type": "integer"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "faces"
+    ],
+    "title": "Known",
     "type": "object"
    },
    "MarkIn": {
@@ -778,6 +954,124 @@
      "max"
     ],
     "title": "Peaks",
+    "type": "object"
+   },
+   "People": {
+    "description": "The tape's faces as the People tab shows them. `waiting` says, in a sentence, what they wait for while there are\nnone yet; `done` is the person's word that the naming is finished (the gate).",
+    "properties": {
+     "done": {
+      "title": "Done",
+      "type": "boolean"
+     },
+     "groups": {
+      "items": {
+       "$ref": "#/components/schemas/Group"
+      },
+      "title": "Groups",
+      "type": "array"
+     },
+     "hidden": {
+      "description": "tracks whose faces are all too small or unsure to name",
+      "title": "Hidden",
+      "type": "integer"
+     },
+     "named": {
+      "title": "Named",
+      "type": "integer"
+     },
+     "not_faces": {
+      "title": "Not Faces",
+      "type": "integer"
+     },
+     "open": {
+      "description": "tracks nobody has decided about",
+      "title": "Open",
+      "type": "integer"
+     },
+     "people": {
+      "items": {
+       "$ref": "#/components/schemas/Person"
+      },
+      "title": "People",
+      "type": "array"
+     },
+     "skipped": {
+      "title": "Skipped",
+      "type": "integer"
+     },
+     "waiting": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Waiting"
+     }
+    },
+    "required": [
+     "waiting",
+     "groups",
+     "people",
+     "open",
+     "named",
+     "skipped",
+     "not_faces",
+     "hidden",
+     "done"
+    ],
+    "title": "People",
+    "type": "object"
+   },
+   "Person": {
+    "description": "Someone named on this tape.",
+    "properties": {
+     "face": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "one of their stills here, for a crop",
+      "title": "Face"
+     },
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "seconds": {
+      "title": "Seconds",
+      "type": "number"
+     },
+     "tracks": {
+      "title": "Tracks",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "tracks",
+     "seconds",
+     "face"
+    ],
+    "title": "Person",
     "type": "object"
    },
    "Picture": {
@@ -1459,6 +1753,21 @@
       "description": "the person's word on whether a chapter starts at it: True starts one, False keeps it with the chapter before, None leaves it to the grouping",
       "title": "Mark"
      },
+     "people": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/InScene"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "the named people seen in it, longest first; None before the cast",
+      "title": "People"
+     },
      "reasons": {
       "description": "why the cut before it is a boundary, in words",
       "items": {
@@ -1498,6 +1807,7 @@
      "frames",
      "description",
      "faces",
+     "people",
      "speech",
      "mark"
     ],
@@ -1850,6 +2160,37 @@
     "title": "StrataReelsSystemInfo",
     "type": "object"
    },
+   "Suggestion": {
+    "properties": {
+     "id": {
+      "title": "Id",
+      "type": "integer"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "share": {
+      "description": "of the confirmed faces nearest the group, the part that are this person's",
+      "title": "Share",
+      "type": "number"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "share"
+    ],
+    "title": "Suggestion",
+    "type": "object"
+   },
    "Task": {
     "description": "A job or task row as an API answers it.",
     "properties": {
@@ -2146,6 +2487,25 @@
      "field_order"
     ],
     "title": "Video",
+    "type": "object"
+   },
+   "Who": {
+    "properties": {
+     "does": {
+      "title": "Does",
+      "type": "string"
+     },
+     "person": {
+      "description": "a name the family gave, or who they are (a woman, a boy of about five)",
+      "title": "Person",
+      "type": "string"
+     }
+    },
+    "required": [
+     "person",
+     "does"
+    ],
+    "title": "Who",
     "type": "object"
    },
    "Word": {
@@ -2545,6 +2905,56 @@
     "tags": [
      "jobs"
     ]
+   }
+  },
+  "/api/people": {
+   "get": {
+    "operationId": "get_known_api_people_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "q",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Q"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Known"
+         },
+         "title": "Response Get Known Api People Get",
+         "type": "array"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Known"
    }
   },
   "/api/reels": {
@@ -3316,6 +3726,52 @@
     "summary": "Get Source"
    }
   },
+  "/api/sources/{source_id}/faces/{face_id}/crop": {
+   "get": {
+    "operationId": "get_face_crop_api_sources__source_id__faces__face_id__crop_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "face_id",
+      "required": true,
+      "schema": {
+       "title": "Face Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Face Crop"
+   }
+  },
   "/api/sources/{source_id}/keyframes/{name}": {
    "get": {
     "operationId": "get_keyframe_api_sources__source_id__keyframes__name__get",
@@ -3406,6 +3862,92 @@
      }
     },
     "summary": "Get Peaks"
+   }
+  },
+  "/api/sources/{source_id}/people": {
+   "get": {
+    "operationId": "get_people_api_sources__source_id__people_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/People"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get People"
+   },
+   "post": {
+    "operationId": "post_people_api_sources__source_id__people_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "source_id",
+      "required": true,
+      "schema": {
+       "title": "Source Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AnswerIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/People"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post People"
    }
   },
   "/api/sources/{source_id}/proxy": {

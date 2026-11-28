@@ -146,10 +146,10 @@ def test_each_scene_is_described_from_its_frames_and_its_speech(engine, tmp_path
         assert first.parameters["preset"] == describe.PRESET
         asked = [j["params"] for j in tape_models.jobs if j["role"] == "scene-describe"]
         assert [a["context"] for a in asked] == [
-            {"seconds": 10.0, "shots": 2, "speech": "Say hello to Grandma!"},
-            {"seconds": 6.0, "shots": 1, "speech": "Happy birthday to you"},
-        ]
-        assert all(a["preset"] == "scene-describe-v2" for a in asked)
+            {"seconds": 10.0, "shots": 2, "speech": "Say hello to Grandma!", "people": []},
+            {"seconds": 6.0, "shots": 1, "speech": "Happy birthday to you", "people": []},
+        ]  # no cast yet: nobody named
+        assert all(a["preset"] == "scene-describe-v3" for a in asked)
         assert [a["images"][0].endswith("000049.jpg") for a in asked] == [True, False]
         assert describe.describe(s, src) == [(first, False), (second, False)]  # stored: not asked again
         assert len(tape_models.jobs) == 5  # shots, vectors, speech and the two scenes

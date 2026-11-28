@@ -5,7 +5,7 @@
 // screenshots do not change. Pictures are SVG drawings of each scene (the colours are the picture's
 // content, not interface colour); the browser copy is a two-second blank WebM, enough for the player
 // to load (the poster, the scene's first thumbnail, is what shows).
-import type { Job, JobsPage, Peaks, Scene, Scenes, Transcript, WorkflowRun } from '../api'
+import type { Job, JobsPage, Peaks, People, Scene, Scenes, Transcript, WorkflowRun } from '../api'
 import { initialSources } from './fixtures'
 
 const THUMB_STEP = 10
@@ -39,7 +39,12 @@ type Plan = {
   faces: number | null
   speech: string | null
   description: Scene['description']
+  /** The named people seen in it: [person, seconds on screen]. */
+  people?: [number, number][]
 }
+
+/** The people the family named on the tape (the face store's identities). */
+export const family = { 1: 'Grandma Rose', 2: 'Tom', 3: 'Ella' } as Record<number, string>
 
 const seen = (
   summary: string,
@@ -56,6 +61,7 @@ const seen = (
   activity: 'family gathering',
   tags: ['christmas'],
   picture: { quality: 'fair', problems: ['noisy'] },
+  who: [],
   model: 'qwen3.5-9b-vl',
   ...extra,
 })
@@ -74,8 +80,23 @@ const plan: Plan[] = [
       'Two children stand by a decorated tree and wave at the camera.',
       ['a decorated tree with lights', 'two children in pyjamas', 'a woman sitting on a sofa'],
       [{ guess: 'Christmas morning', because: 'pyjamas and unopened presents under the tree' }],
-      { people: 3, children: 2, activity: 'waving at the camera', tags: ['tree', 'children', 'morning'] },
+      {
+        people: 3,
+        children: 2,
+        activity: 'waving at the camera',
+        tags: ['tree', 'children', 'morning'],
+        who: [
+          { person: 'Tom', does: 'waves at the camera' },
+          { person: 'Ella', does: 'waves at the camera' },
+          { person: 'Grandma Rose', does: 'watches from the sofa' },
+        ],
+      },
     ),
+    people: [
+      [2, 212.4],
+      [3, 180.2],
+      [1, 96.0],
+    ],
   },
   {
     start: 418.0,
@@ -90,8 +111,22 @@ const plan: Plan[] = [
       'The children open presents on the rug while adults watch from the sofa.',
       ['wrapping paper on the floor', 'a boy holding a toy car', 'three adults on a sofa'],
       [{ guess: 'presents from relatives', because: 'a gift label is read aloud' }],
-      { people: 5, children: 2, activity: 'opening presents', tags: ['presents', 'children', 'living room'] },
+      {
+        people: 5,
+        children: 2,
+        activity: 'opening presents',
+        tags: ['presents', 'children', 'living room'],
+        who: [
+          { person: 'Tom', does: 'opens a toy car' },
+          { person: 'Ella', does: 'hands out the presents' },
+          { person: 'a man in a red jumper', does: 'reads the labels' },
+        ],
+      },
     ),
+    people: [
+      [2, 820.6],
+      [3, 611.0],
+    ],
   },
   {
     start: 1934.2,
@@ -134,6 +169,7 @@ const plan: Plan[] = [
       ],
       { people: 8, children: 2, activity: 'eating dinner', tags: ['dinner', 'table', 'paper hats'] },
     ),
+    people: [[1, 1402.8]],
   },
   {
     start: 5210.0,
@@ -194,6 +230,7 @@ export const tapeScenes: Scenes = {
     shots: 81,
     transcript: true,
     faces: true,
+    cast: true,
     described: 5,
     chapters: true,
     named: 3,
@@ -266,6 +303,7 @@ export const tapeScenes: Scenes = {
       reasons: p.reasons,
       frames,
       description: p.description,
+      people: (p.people ?? []).map(([id, seconds]) => ({ id, name: family[id] ?? null, seconds })),
       faces: p.faces,
       speech: p.speech,
       mark: null,
@@ -288,7 +326,7 @@ export const tapeScenesPartWay: Scenes = {
     named: 0,
   },
   chapters: null,
-  scenes: tapeScenes.scenes.map(s => ({ ...s, frames: [], description: null, speech: null })),
+  scenes: tapeScenes.scenes.map(s => ({ ...s, frames: [], description: null, speech: null, people: null })),
 }
 
 /** Another source before its scenes are grouped. */
@@ -301,6 +339,7 @@ export const waitingScenes = (id: number): Scenes => ({
     shots: 12,
     transcript: false,
     faces: false,
+    cast: false,
     described: 0,
     chapters: false,
     named: 0,
@@ -425,14 +464,20 @@ const STAGES: [string, string, string[]][] = [
   ['keyframes', 'Take pictures of each shot', ['shots']],
   ['scenes', 'Group the shots into scenes', ['shots', 'keyframes']],
   ['faces', 'Find the faces', ['keyframes']],
+  ['face_tracks', 'Follow the faces', ['shots']],
+  ['store_faces', 'Keep the faces', ['face_tracks']],
+  ['name_people', 'Name the people', ['store_faces']],
+  ['cast', 'Find who is in each scene', ['name_people', 'scenes', 'keyframes']],
   ['transcript', 'Write down what is said', ['hash']],
-  ['describe', 'Describe the scenes', ['scenes', 'transcript']],
+  ['describe', 'Describe the scenes', ['scenes', 'transcript', 'cast']],
   ['chapters', 'Group the scenes into chapters', ['scenes', 'describe']],
   ['name_chapters', 'Name the chapters', ['chapters']],
   ['check_chapters', 'Check the chapters', ['name_chapters']],
 ]
 /** The person's steps: approved, never run. */
-const GATES = new Set(['check_chapters'])
+const GATES = new Set(['name_people', 'check_chapters'])
+/** The gates that wait for the person unless `states` says otherwise; the people's gate approved itself (all named). */
+const ASKS = new Set(['check_chapters'])
 
 type StageState = WorkflowRun['stages'][number]['state']
 
@@ -446,7 +491,7 @@ export function tapeRun(
   const stages = STAGES.map(([name, title, needs], i) => {
     const gate = GATES.has(name)
     const before = i > 0 ? (states[STAGES[i - 1][0]] ?? 'done') : 'done'
-    const state = states[name] ?? (gate ? (before === 'done' ? 'waiting' : 'blocked') : 'done')
+    const state = states[name] ?? (ASKS.has(name) ? (before === 'done' ? 'waiting' : 'blocked') : 'done')
     const ran = state === 'done' || state === 'failed' || state === 'stale'
     return {
       name,
@@ -459,10 +504,10 @@ export function tapeRun(
             stage: name,
             status: state === 'failed' ? 'failed' : 'done',
             at: at(40 - i),
-            elapsed_s: [212, 1480, 96, 31, 640, 75, 4, 58, 2210, 380, 1, 42][i] ?? 0,
+            elapsed_s: [212, 1480, 96, 31, 640, 75, 4, 58, 912, 40, 0, 3, 2210, 380, 1, 42][i] ?? 0,
             metrics: {},
             error: errors[name] ?? null,
-            by: gate ? 'person' : null,
+            by: gate ? (ASKS.has(name) ? 'person' : 'auto') : null,
             data: null,
           }
         : null,
@@ -517,6 +562,10 @@ export const otherRuns: Record<number, WorkflowRun> = {
       keyframes: 'blocked',
       scenes: 'blocked',
       faces: 'blocked',
+      face_tracks: 'blocked',
+      store_faces: 'blocked',
+      name_people: 'blocked',
+      cast: 'blocked',
       transcript: 'blocked',
       describe: 'blocked',
       chapters: 'blocked',
@@ -538,4 +587,89 @@ export const proxyWebm = Uint8Array.from(
     'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAAAhIEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggGETbuMU6uEHFO7a1Osgggy7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECfYAAAAAAAFlSua0CmrgEAAAAAAAA414EBc8WIaJMcz4YErxOcgQAitZyDdW5kiIEAhoVWX1ZQOYOBASPjg4QL68IA4ImwgWC6gUiagQKuAQAAAAAAAFzXgQJzxYgytDlbYkCECZyBACK1nIN1bmSIgQCGhkFfT1BVU1aqg2MuoFa7hATEtACDgQLhkZ+BAbWIQL9AAAAAAABiZIEQY6KTT3B1c0hlYWQBATgBQB8AAAAAABJUw2dA2nNzoGPAgGfImkWjh0VOQ09ERVJEh41MYXZmNjAuMTYuMTAwc3PaY8CLY8WIaJMcz4YErxNnyKVFo4dFTkNPREVSRIeYTGF2YzYwLjMxLjEwMiBsaWJ2cHgtdnA5Z8ihRaOIRFVSQVRJT05Eh5MwMDowMDowMi4wMDAwMDAwMDAAc3PXY8CLY8WIMrQ5W2JAhAlnyKJFo4dFTkNPREVSRIeVTGF2YzYwLjMxLjEwMiBsaWJvcHVzZ8ihRaOIRFVSQVRJT05Eh5MwMDowMDowMi4wMDgwMDAwMDAAH0O2dUXI54EAo4uCAACACAvkuaC8hKOugQAAgIJJg0IABfAEdgA4JBwYQgAAMHAAAH1GN/mgBv//vpB/9icqGmEJZGfcAKOKggAVgAgHxrMOxqOKggApgAgHxrMOxqOKggA9gAgHxrMOxqOKggBRgAgHxrMOxqOKggBlgAgHxrMOxqOKggB5gAgHxrMOxqOKggCNgAgHxrMOxqOKggChgAgHxrMOxqOKggC1gAgHxrMOxqOKggDJgAgHxrMOxqOVgQDIAIYAQJKcAElAAAMgAABY/tYAo4qCAN2ACAfGsw7Go4qCAPGACAfGsw7Go4qCAQWACAfGsw7Go4qCARmACAfGsw7Go4qCAS2ACAfGsw7Go4qCAUGACAfGsw7Go4qCAVWACAfGsw7Go4qCAWmACAfGsw7Go4qCAX2ACAfGsw7Go4qCAZGACAfGsw7Go5WBAZAAhgBAkpwASsAAAyAAAFj+1gCjioIBpYAIB8azDsajioIBuYAIB8azDsajioIBzYAIB8azDsajioIB4YAIB8azDsajioIB9YAIB8azDsajioICCYAIB8azDsajioICHYAIB8azDsajioICMYAIB8azDsajioICRYAIB8azDsajioICWYAIB8azDsajlYECWACGAECSnABJwAADIAAAWP7WAKOKggJtgAgHxrMOxqOKggKBgAgHxrMOxqOKggKVgAgHxrMOxqOKggKpgAgHxrMOxqOKggK9gAgHxrMOxqOKggLRgAgHxrMOxqOKggLlgAgHxrMOxqOKggL5gAgHxrMOxqOKggMNgAgHxrMOxqOKggMhgAgHxrMOxqOVgQMgAIYAQJKcAEigAAMgAABY/tYAo4qCAzWACAfGsw7Go4qCA0mACAfGsw7Go4qCA12ACAfGsw7Go4qCA3GACAfGsw7Go4qCA4WACAfGsw7Go4qCA5mACAfGsw7Go4qCA62ACAfGsw7Go4qCA8GACAfGsw7Go4qCA9WACAfGsw7Go4qCA+mACAfGsw7Go5WBA+gAhgBAkpwAR4AAAyAAAFj+1gCjioID/YAIB8azDsajioIEEYAIB8azDsajioIEJYAIB8azDsajioIEOYAIB8azDsajioIETYAIB8azDsajioIEYYAIB8azDsajioIEdYAIB8azDsajioIEiYAIB8azDsajioIEnYAIB8azDsajioIEsYAIB8azDsajlYEEsACGAECSnABG4AADIAAAWP7WAKOKggTFgAgHxrMOxqOKggTZgAgHxrMOxqOKggTtgAgHxrMOxqOKggUBgAgHxrMOxqOKggUVgAgHxrMOxqOKggUpgAgHxrMOxqOKggU9gAgHxrMOxqOKggVRgAgHxrMOxqOKggVlgAgHxrMOxqOKggV5gAgHxrMOxqOVgQV4AIYAQJKcAEZAAAMgAABY/tYAo4qCBY2ACAfGsw7Go4qCBaGACAfGsw7Go4qCBbWACAfGsw7Go4qCBcmACAfGsw7Go4qCBd2ACAfGsw7Go4qCBfGACAfGsw7Go4qCBgWACAfGsw7Go4qCBhmACAfGsw7Go4qCBi2ACAfGsw7Go4qCBkGACAfGsw7Go5WBBkAAhgBAkpwARcAAAyAAAFj+1gCjioIGVYAIB8azDsajioIGaYAIB8azDsajioIGfYAIB8azDsajioIGkYAIB8azDsajioIGpYAIB8azDsajioIGuYAIB8azDsajioIGzYAIB8azDsajioIG4YAIB8azDsajioIG9YAIB8azDsajioIHCYAIB8azDsajlYEHCACGAECSnABFQAADIAAAWP7WAKOKggcdgAgHxrMOxqOKggcxgAgHxrMOxqOKggdFgAgHxrMOxqOKggdZgAgHxrMOxqOKggdtgAgHxrMOxqOKggeBgAgHxrMOxqOKggeVgAgHxrMOxqOKggepgAgHxrMOxqOKgge9gAgHxrMOxqCToYqCB9EACAfGsw7GdaKEAM3+YBxTu2uRu4+zgQC3iveBAfGCAmTwgRA=',
   ),
   c => c.charCodeAt(0),
+)
+
+/** A face crop from the face store: a drawn face, its colours the picture's content (skin, hair, jumper), by face id. */
+export function faceSvg(face: number): string {
+  const skins = ['#e2bc9a', '#c99a76', '#f0cfb2', '#a8785a']
+  const hairs = ['#3b2a1e', '#d9c7a0', '#8a8a8a', '#6b3a1e']
+  const tops = ['#b0413e', '#3e5c8a', '#2d4a2f', '#7d3f6b']
+  const pick = <T>(xs: T[], n: number) => xs[n % xs.length]
+  const person = Math.floor(face / 10)
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+<rect width="96" height="96" fill="#cdbfa8"/><rect y="74" width="96" height="22" rx="10" fill="${pick(tops, person)}"/>
+<ellipse cx="48" cy="44" rx="22" ry="27" fill="${pick(skins, person)}"/><path d="M26 40 Q48 ${8 + (face % 5)} 70 40 L70 32 Q48 10 26 32 Z" fill="${pick(hairs, person)}"/>
+<circle cx="40" cy="44" r="2.5" fill="#2a1f18"/><circle cx="56" cy="44" r="2.5" fill="#2a1f18"/><path d="M40 58 Q48 64 56 58" stroke="#7a4a3a" stroke-width="2" fill="none"/></svg>`
+}
+
+/** The people the face store knows (`GET /api/people`): the tape's three, and one from another tape. */
+export const knownPeople = [
+  { id: 1, name: 'Grandma Rose', faces: 41 },
+  { id: 2, name: 'Tom', faces: 118 },
+  { id: 3, name: 'Ella', faces: 96 },
+  { id: 4, name: 'Uncle Pete', faces: 12 },
+]
+
+/** `GET /api/sources/5/people` once everyone is answered: three named, a few tracks skipped or too small to ask about. */
+export const tapePeople: People = {
+  waiting: null,
+  done: true,
+  groups: [],
+  people: [
+    { id: 2, name: 'Tom', tracks: 38, seconds: 2410.6, face: 21 },
+    { id: 3, name: 'Ella', tracks: 31, seconds: 1980.2, face: 31 },
+    { id: 1, name: 'Grandma Rose', tracks: 12, seconds: 1498.8, face: 11 },
+  ],
+  open: 0,
+  named: 81,
+  skipped: 4,
+  not_faces: 1,
+  hidden: 9,
+}
+
+/** The same tape while the people wait to be named: three groups left, the first two with a suggestion. */
+export const tapePeopleNaming: People = {
+  ...tapePeople,
+  done: false,
+  groups: [
+    {
+      tracks: ['t3', 't9', 't14', 't22'],
+      faces: [41, 42, 43, 44, 45],
+      seconds: 612.4,
+      first: 31.2,
+      suggested: { id: 4, name: 'Uncle Pete', share: 0.8 },
+    },
+    { tracks: ['t5', 't30'], faces: [51, 52, 53], seconds: 141.0, first: 610.0, suggested: null },
+    { tracks: ['t41'], faces: [61], seconds: 8.4, first: 5302.2, suggested: null },
+  ],
+  open: 7,
+  named: 81,
+  skipped: 0,
+}
+
+/** A tape whose faces are not followed yet. */
+export const peopleWaiting = (): People => ({
+  waiting: 'Faces are followed once the shots are found',
+  done: false,
+  groups: [],
+  people: [],
+  open: 0,
+  named: 0,
+  skipped: 0,
+  not_faces: 0,
+  hidden: 0,
+})
+
+/** The tape's run while it waits for the people to be named: the describe step and all after it wait too. */
+export const tapeRunNaming = tapeRun(
+  tapeId,
+  {
+    name_people: 'waiting',
+    cast: 'blocked',
+    describe: 'blocked',
+    chapters: 'blocked',
+    name_chapters: 'blocked',
+    check_chapters: 'blocked',
+  },
+  { job: job(5, tapeId, 'done') },
 )

@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-27: the people on a tape
+
+- Asked for: use strata-models' new face tracking and recognition, with a stage after ingest that waits until every face is named or skipped, so the descriptions can say who does what; and to consider what other tracking the spec needs.
+- **Tracks, not keyframe faces.** strata-models' `face-tracks` follows each face through its shot (ByteTrack at 10 fps), so one person in one shot is one thing to name, with a few of its best stills. Asked with the shot starts as cuts, so a track never runs across a cut. The stills are kept in strata-models' face store under the tag `strata-reels:<tape>`, which is opt-in: a search by another app does not see a family's faces.
+- **Naming is a gate.** The face store groups the tape's tracks by their mean embeddings (average linkage, never two tracks seen at the same moment) and suggests a person from the faces confirmed before. The person answers a group at a time: this is <suggested>, a new name, someone named before, skip, or not faces. A track whose faces are all under the store's bar (too small or unsure) is never asked about. The gate approves itself once nothing is left; "Skip the rest" approves it by hand. Names live in the face store (identities shared across apps); a skip is this app's override. Every answer is also logged as an override, which is the `cast` stage's input, so a name given after the gate still reaches the scenes.
+- **Who does what.** The cast says who is in each scene, seconds on screen and where on the picture (left, middle, right; near or far by face size) per keyframe. The describer's new preset `scene-describe-v3` is told those names per frame, may name only them, and answers `who: [{person, does}]`. Because of that the describe step, and so the chapters, wait for the names: the tape page's finding points to the People tab meanwhile.
+- **What else to track** (recommended order, in the plan under R2): diarization and the active speaker first, then sound events, then whole-person tracks for reframing. A general object detector is not needed now.
+- Not measured: the grouping's threshold and the suggestion's bar are strata-models' defaults; no real tape has been named yet.
+
 ## 2026-11-27: the first automatic reel
 
 - Asked for: the reel stored as revisions, and a simple picker that fits scenes to a target length and keeps the person's locks and bans when it plans again (the gapless preview and the ffmpeg render are a parallel piece of work on the same model).

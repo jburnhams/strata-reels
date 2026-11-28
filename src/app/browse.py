@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from strata_python import mediatime
 from strata_python.contracts import ApiModel
 
-from app import chapters, derived, describe, results, scenes, shots, speech
+from app import chapters, derived, describe, people, results, scenes, shots, speech
 from app.models import Result, Source
 from app.sources import Described
 
@@ -45,6 +45,11 @@ class Guess(ApiModel):
     because: str
 
 
+class Who(ApiModel):
+    person: str = Field(description="a name the family gave, or who they are (a woman, a boy of about five)")
+    does: str
+
+
 class Picture(ApiModel):
     quality: Literal["good", "fair", "poor"]
     problems: list[str]
@@ -61,9 +66,18 @@ class Description(ApiModel):
     people: int
     children: int
     activity: str
+    who: list[Who] = Field(default_factory=lambda: [], description="who does what (preset v3; empty before it)")
     tags: list[str]
     picture: Picture
     model: str | None = Field(description="the model that wrote it")
+
+
+class InScene(ApiModel):
+    """Someone the family named, seen in a scene."""
+
+    id: int
+    name: str | None
+    seconds: float = Field(description="how long their face is on screen in the scene")
 
 
 class Scene(ApiModel):
@@ -79,6 +93,7 @@ class Scene(ApiModel):
     frames: list[Frame]
     description: Description | None
     faces: int | None = Field(description="the most faces on any one of its keyframes; None before the faces step")
+    people: list[InScene] | None = Field(description="the named people seen in it, longest first; None before the cast")
     speech: str | None = Field(
         description="what is said in it (doubtful segments left out); None before the transcript"
     )
@@ -123,6 +138,7 @@ class Analysis(ApiModel):
     shots: int | None
     transcript: bool | None = Field(description="None for a source with no sound")
     faces: bool
+    cast: bool = Field(description="who is in each scene is known (the people are named, or skipped)")
     described: int
     chapters: bool
     named: int
@@ -218,6 +234,7 @@ def scenes_of(db: Session, source: Source) -> Scenes:
     said = speech.current(db, source) if sound else None
     faces = describe.current_faces(db, source)
     told = describe.current_descriptions(db, source)
+    cast = people.current_cast(db, source) if grouped is not None else None
     grouped_chapters = chapters.current(db, source) if grouped is not None else None
     names = chapters.current_names(db, source) if grouped_chapters is not None else {}
     marks = chapters.marks(db, source)
@@ -228,6 +245,7 @@ def scenes_of(db: Session, source: Source) -> Scenes:
         shots=None if cut is None else sum(not s["black"] for s in cut.payload["shots"]),
         transcript=(said is not None) if sound else None,
         faces=faces is not None,
+        cast=cast is not None,
         described=len(told),
         chapters=grouped_chapters is not None,
         named=len(names),
@@ -272,6 +290,9 @@ def scenes_of(db: Session, source: Source) -> Scenes:
                 frames=frames,
                 description=_description(told.get(sc["start"])),
                 faces=None if faces is None else describe.people_in(faces.payload, cut.payload, sc),
+                people=None
+                if cast is None
+                else [InScene.model_validate(p) for p in people.in_scene(cast.payload, sc["start"])],
                 speech=speech.said_in(said.payload, start, end) if said is not None else ("" if not sound else None),
                 mark=marks.get(sc["start"]) if i else None,
             )

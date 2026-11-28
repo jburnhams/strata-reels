@@ -2,7 +2,33 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-28
+
+**Reels on the released strata-python 0.2.26 (branch `claude/project-thread-l890x5`)**
+strata-python PR #93 merged and was released, so the temporary git pin is gone.
+- `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.26,<0.3` from PyPI; `[tool.uv.sources]` removed. `AGENTS.md`: the range.
+
 ## 2026-11-27
+
+**Review of the people stage (PR #26): each tracking keeps its own files, refs and skips; known people as a read of their own (branch `claude/project-thread-l890x5`)**
+Codex found four real problems in PR #26.
+- `src/app/people.py`: the tracks' folder is keyed on the planned model and settings, so a changed model writes beside the earlier result's files rather than over them (results are append-only); a still's face-store reference names the tracking it came from, so a new tracking never answers an earlier one's stored picture; a skip records its tracking and `skipped` reads only the current one's, since track numbers are only the same track within one tracking.
+- `web/src/screens/TapePeople.tsx`: the people named before are a `DataView` of their own, so while they load or if the read fails the person sees so (with Try again), rather than an empty list that reads as nobody known.
+- `tests/unit/test_people.py`, `web/tests/integration/TapePeople.test.tsx`: the reference, a skip from another tracking, the known people failing and being only the one suggested.
+
+**The people on a tape: faces followed, named a group at a time, and who does what in each scene (branch `claude/project-thread-l890x5`)**
+Jonathan asked to use strata-models' new face tracking and recognition, with a stage after ingest that waits until every face is named or skipped, for better descriptions of who does what, and what other tracking is needed. The grouping and suggestion went into strata-models (PR #160, `POST /api/faces/group-tracks`, preset `scene-describe-v3`) and the client and test double into strata-python (PR #93); until strata-python's release, `pyproject.toml` takes it from that branch's commit (moved to the one with the review's fixes to the fake face store).
+- `src/app/people.py` (**new**): `track` (strata-models' `face-tracks` over the tape, cut at the shot starts, stills under `derived/<key>/face-tracks/`), `store` (the stills kept in the face store under the opt-in tape tag), `people_of` (the groups left to answer, with a suggestion, and the people named), `answer` (name, add to someone known, not faces, or skip; each logged as an override), `is_open` (the gate's policy), `cast` (who is in each scene, seconds and where on each keyframe) and `for_describer`.
+- `src/app/jobs.py`: stages `face_tracks`, `store_faces`, the gate `name_people` (approves itself once nothing is open) and `cast` (input `face_said`); `describe` now needs `cast`; `cast` is rechecked when run, since a person can be renamed in the face store.
+- `src/app/describe.py`: preset `scene-describe-v3`, given the cast per frame; the description keeps `who`.
+- `src/app/browse.py`: `Description.who`, `Scene.people` (`InScene`), `Analysis.cast`.
+- `src/app/server/app.py`: `GET`/`POST /api/sources/{id}/people`, `GET /api/sources/{id}/faces/{face}/crop` (only this tape's faces, through this server), `GET /api/people`.
+- `web/src/screens/TapePeople.tsx` (**new**), `web/src/screens/TapeScreen.tsx`: the tape page's People tab (one group at a time, its best crops, the suggestion as the filled button, a name, someone named before, Skip and Not faces through `useUndoable`, Skip the rest approving the gate, the people named); a scene shows the people named in it in place of its face count, and its detail who does what; the finding points to the People tab while the descriptions wait.
+- `web/src/api.ts`, `web/openapi.json`, `web/src/api.generated.ts`: the new routes and types.
+- `web/src/mocks/tape.ts`, `web/src/mocks/handlers.ts`: the new stages, the family named on the tape, a tape waiting for names, face crops, and the people routes as the server answers them.
+- `web/stories/tape.stories.tsx`, `web/tests/visual/baselines/`: the People tab named, naming (wide and phone) and loading; every tape baseline moved by the new tab, the longer steps list and the names on the scenes, and the sources list by "step 5 of 17" (each diff looked at). Written in Chromium 158 here, as before.
+- `tests/unit/test_people.py` (**new**), `tests/unit/conftest.py`, `tests/utils/probes.py`, `tests/unit/test_jobs.py`, `test_describe.py`, `test_browse.py`, `test_derived.py`; `web/tests/integration/TapePeople.test.tsx` (**new**), `TapeScreen.test.tsx`, `SourcesScreen.test.tsx`, `web/tests/unit/logic.test.ts`.
+- `docs/implementation-plan.md`, `docs/progress.md`, `docs/overview.md`, `AGENTS.md`, `README.md`: R2 started, the recommended order for other tracking, `people.py` in the module list.
 
 **Reels on the released strata-python 0.2.25 and strata-react 1.3.27 (branch `claude/project-thread-oc0aq8`)**
 Both upstream PRs merged and were released, so the temporary git pin and local pack are gone.

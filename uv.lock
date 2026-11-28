@@ -1079,7 +1079,7 @@ wheels = [
 
 [[package]]
 name = "strata-python"
-version = "0.2.25"
+version = "0.2.26"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -1088,9 +1088,9 @@ dependencies = [
     { name = "tzdata", marker = "sys_platform == 'win32'" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/25/56/b5cbbb4a43198bbe8b7c5b16f73c6ec148e199e6ee784ce95371f449633e/strata_python-0.2.25.tar.gz", hash = "sha256:580c8fa1dcc5edd3c62d7555931eec6f33a974f9f2e0316390f5ea35f20d4c58", size = 332848, upload-time = "2026-11-27T07:24:11.747Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/d9/83d8e5d79a593dfd9f596e6b2f58585080d33eb77d47f2fc2a8b27d5daf3/strata_python-0.2.26.tar.gz", hash = "sha256:f6ed324f0ff13cdd25a647468d8685b0ae451681ee32b4feb1e993eb00faf4c3", size = 340603, upload-time = "2026-11-28T06:14:50.81Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/cd/acdb1f2b81491e5b22cf20f70f6516de78f39270d359f3dd3094c9076f46/strata_python-0.2.25-py3-none-any.whl", hash = "sha256:d87c52cec89abe5ce892b80434b8208be959137647b5d005bde53f0e2f1b841d", size = 233990, upload-time = "2026-11-27T07:24:10.328Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/ad/88fdd205ce1fa301aa7fe6e146903ffc5245813156e0753e64a4704737ea/strata_python-0.2.26-py3-none-any.whl", hash = "sha256:124f18ddac683759c9bebef192df4b2932921cd5d158013fd7d55fd94481cc81", size = 239181, upload-time = "2026-11-28T06:14:48.989Z" },
 ]
 
 [package.optional-dependencies]
@@ -1128,7 +1128,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "strata-python", extras = ["db"], specifier = ">=0.2.25,<0.3" },
+    { name = "strata-python", extras = ["db"], specifier = ">=0.2.26,<0.3" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 

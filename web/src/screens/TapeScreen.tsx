@@ -40,7 +40,7 @@
 //   them (a long tape has a hundred scenes); the time is kept to a quarter second for the same reason.
 // - Tape sound is quiet (a camcorder peaks near a tenth of full scale), so the waveform is drawn
 //   normalised and says by how much (strata-react's Waveform `normalise`).
-// - The tab (scenes or transcript) and the open scene details are in the URL, so a link opens them.
+// - The tab (scenes, people, transcript or steps) and the open scene details are in the URL, so a link opens them.
 // - Copy keeps what the describer saw apart from what it guessed, as its output does (spec S4), and
 //   says how sure the cut before a scene is when it is unsure, since that is where a person corrects
 //   it.
@@ -51,6 +51,10 @@
 //   chapters that changed; meanwhile the page says it is regrouping and follows the job. Each mark shows
 //   on its scene with Undo mark, which hands the boundary back to the grouping. A title is laid over the
 //   namer's at once, and the namer's stays in sight under it.
+// - Who is in each scene comes from the People tab (TapePeople.tsx): the person names the tape's faces a group at a
+//   time, and the descriptions wait for that (the pipeline's `name_people` gate), so they can say who does what. A
+//   scene shows the people named in it in place of its face count, and its detail lists who does what; until the
+//   people are named the finding points to the People tab.
 // - "Confirm the chapters" is the pipeline's `check_chapters` gate (strata-python's approve route), the
 //   view's one filled button while the tape waits for it: it says the chapters are right, which the
 //   weights are later fitted on (`./app fit-chapters`). A regroup after it asks again.
@@ -106,6 +110,7 @@ import {
   type WorkflowRun,
 } from '../api'
 import { framesPerSecond } from './SourcesScreen'
+import { TapePeople } from './TapePeople'
 
 /** Under this the cut before a scene is as likely a shot change as a new scene: say so. */
 export const UNSURE = 0.65
@@ -153,6 +158,7 @@ export function describeScenes(d: Scenes): string {
   const unsure = d.scenes.filter(s => s.confidence !== null && s.confidence < UNSURE).length
   if (unsure) parts.push(`${unsure} ${unsure === 1 ? 'start' : 'starts'} to check`)
   if (d.analysis.transcript === false) parts.push('speech still to come')
+  if (!d.analysis.cast && d.scenes.some(s => s.description === null)) parts.push('people to name in the People tab first')
   if (d.chapters === null) parts.push('chapters still to come')
   else if (d.regrouping) parts.push('grouping the chapters again by your marks')
   else if (d.chapters.some(c => c.name === null)) parts.push('chapter names still to come')
@@ -177,6 +183,12 @@ export function describeJobNow(job: Pick<NonNullable<WorkflowRun['job']>, 'state
 export function describeFaces(n: number | null): string | null {
   if (n === null) return null
   return n === 0 ? 'No faces' : `Up to ${format.count(n, 'face')}`
+}
+
+/** The people named in a scene, longest on screen first: "Tom, Ella and Grandma Rose". */
+export function describeCast(people: NonNullable<Scene['people']>): string {
+  const names = people.map(p => p.name ?? 'someone unnamed')
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
 }
 
 /** The picture's shape: PAL and NTSC tapes are 4:3 shown, whatever their stored pixels; anything else its own. */
@@ -424,15 +436,18 @@ function Tape({ data, run }: { data: Scenes; run: Job<WorkflowRun> }) {
       <Tabs
         className="min-w-0"
         param="view"
-        label="Scenes or transcript"
+        label="Scenes, people or transcript"
         items={[
           { value: 'scenes', label: 'Scenes' },
+          { value: 'people', label: 'People' },
           { value: 'transcript', label: 'Transcript' },
           { value: 'steps', label: 'Steps' },
         ]}
       >
         {view =>
-          view === 'steps' ? (
+          view === 'people' ? (
+            <TapePeople id={source.id} run={run} onSeek={seek} />
+          ) : view === 'steps' ? (
             <TapeSteps id={source.id} run={run} />
           ) : view === 'transcript' ? (
             <TapeTranscript sourceId={source.id} ready={analysis.transcript} scenes={scenes} time={time} onSeek={seek} />
@@ -745,7 +760,7 @@ const SceneItem = memo(function SceneItem({
           Play {name.toLowerCase()}
         </Button>
         <span>{format.count(scene.shots, 'shot')}</span>
-        {faces && <span>{faces}</span>}
+        {scene.people?.length ? <span>{describeCast(scene.people)}</span> : faces && <span>{faces}</span>}
         {scene.confidence !== null && scene.confidence < UNSURE && (
           <Status tone="warning">{`Start unsure (${format.share(scene.confidence)})`}</Status>
         )}
@@ -806,6 +821,20 @@ function SceneDetail({ scene }: { scene: Scene }) {
               {d.setting === 'unknown' ? 'indoors or out not known' : d.setting}
             </dd>
           </div>
+          {d.who.length > 0 && (
+            <div>
+              <dt className="type-label">Who does what</dt>
+              <dd>
+                <ul className="list-disc pl-5">
+                  {d.who.map(w => (
+                    <li key={`${w.person} ${w.does}`}>
+                      {w.person} {w.does}
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="type-label">Picture</dt>
             <dd>

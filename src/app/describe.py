@@ -1,18 +1,19 @@
 """What each scene shows, and how many people are in it (R1 step 3, spec S4).
 
-- **A description per scene** from strata-models (role `scene-describe`, preset `scene-describe-v2`: a vision-language
+- **A description per scene** from strata-models (role `scene-describe`, preset `scene-describe-v3`: a vision-language
   model, Qwen3.5-9B today). It is given up to `FRAMES` of the scene's keyframes, spread through it, and its length,
-  shot count and speech (`speech.said_in`). The preset keeps what is seen (`observed`) apart from what is guessed
-  (`inferred`, each guess with its evidence), as spec S4 asks, counts people and children without naming anyone, and
-  says what is wrong with the picture. One result of kind `description` per scene, its span the scene's, so a long tape
+  shot count and speech (`speech.said_in`), and the people the family named who are seen in those frames and where
+  (`people.for_describer`, from the tape's cast), so it can say who does what (`who`). The preset keeps what is seen
+  (`observed`) apart from what is guessed (`inferred`, each guess with its evidence), as spec S4 asks, counts people
+  and children, names only the people it was given, and says what is wrong with the picture. One result of kind `description` per scene, its span the scene's, so a long tape
   is described scene by scene and a job that stops part way keeps what it finished. The prompt is strata-models', not
   this app's: a better prompt is a new preset there, and its name is in this result's parameters.
 - **Faces** (role `faces`, insightface today) on every keyframe, boxes and scores only: no embeddings, so no one can be
   recognised until the person has said who may be (R2, with consent). One result of kind `faces` for the keyframes; a
   scene's count (`people_in`) is the most faces on any one of its keyframes, a floor rather than a count: faces turned
   away are not found, and not everyone is in one picture.
-- Both are keyed on what they read (the scenes and the transcript, the keyframes), so a regrouping or a new transcript
-  asks again, and `current_descriptions` gives only those of the current scenes."""
+- Both are keyed on what they read (the scenes and the transcript, the keyframes; a description also on the people
+  given for its frames), so a regrouping, a new transcript or a new name for someone in the scene asks again, and `current_descriptions` gives only those of the current scenes."""
 
 import dataclasses
 import os
@@ -22,11 +23,11 @@ from sqlalchemy.orm import Session
 from strata_python import mediatime
 from strata_python.clients import models as sm
 
-from app import derived, results, scenes, shots, speech
+from app import derived, people, results, scenes, shots, speech
 from app.models import Result, Source
 
 ROLE = "scene-describe"
-PRESET = "scene-describe-v2"
+PRESET = "scene-describe-v3"  # v2 with the people the family named, and who does what (people.py)
 FACES_ROLE = "faces"
 FRAMES = 6  # keyframes shown to the describer: enough to see a long shot move on, few enough for a 9B model's context
 FACE_FIELDS = ["bbox", "det_score"]  # never the embedding: recognition waits for consent (R2)
@@ -66,10 +67,12 @@ def _inputs(db: Session, source: Source) -> tuple[Result, Result, Result]:
 def describe(db: Session, source: Source, *, job_id: int | None = None) -> list[tuple[Result, bool]]:
     """A description of every current scene, each asked of strata-models unless the same request is stored, and
     whether it is new. Recorded one by one, so a failure part way keeps the scenes already described. The transcript
-    is read when there is one; the `describe` stage needs the `transcript` stage (`jobs.TAPE`), so it has run."""
+    is read when there is one; the `describe` stage needs the `transcript` and `cast` stages (`jobs.TAPE`), so they
+    have run (a tape with no named people has a cast that names nobody)."""
     assert source.sha256 is not None  # noqa: S101 - the scenes needed it
     found, keys, grouped = _inputs(db, source)
     said = speech.current(db, source)
+    cast = people.current_cast(db, source)
     folder = derived.path_of(keys)
     names = {int(f["frame"]): str(f["name"]) for f in keys.payload["frames"]}
     now = sm.role_settings(ROLE)
@@ -81,6 +84,7 @@ def describe(db: Session, source: Source, *, job_id: int | None = None) -> list[
             "seconds": round(float(end - start), 1),
             "shots": len(scene["shots"]),
             "speech": speech.said_in(None if said is None else said.payload, float(start), float(end)),
+            "people": people.for_describer(None if cast is None else cast.payload, frames),
         }
         params = {
             "preset": PRESET,
@@ -109,7 +113,12 @@ def describe(db: Session, source: Source, *, job_id: int | None = None) -> list[
                 results.Provenance.of(ROLE, dataclasses.asdict(served)),
                 inputs=[source.sha256],
                 parameters=params,
-                payload={"description": said_back, "frames": frames, "speech": context["speech"]},
+                payload={
+                    "description": said_back,
+                    "frames": frames,
+                    "speech": context["speech"],
+                    "people": context["people"],
+                },
                 span=span,
                 job_id=job_id,
             )
