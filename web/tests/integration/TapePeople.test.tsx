@@ -1,9 +1,9 @@
 import { HttpResponse, http } from 'msw'
 import { expectOneFilledButton } from 'strata-react/testing'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { peopleLongGroup, peopleNaming, runError, runPartWay, startNaming } from '../../src/mocks/handlers'
 import { peopleWaiting, tapePeople } from '../../src/mocks/tape'
-import { openApp, screen, waitFor, within } from '../utils/render'
+import { act, openApp, screen, waitFor, within } from '../utils/render'
 import { mock, server } from '../utils/server'
 
 // The tape page's People tab over the mock server's christmas-1996.mkv: Tom, Ella and Grandma Rose named, or (after
@@ -66,8 +66,9 @@ describe('the people on a tape', () => {
   })
 
   it('names some of a group that holds two people, and leaves the rest to answer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     startNaming()
-    const { user } = openApp('/sources/5?view=people')
+    const { user } = openApp('/sources/5?view=people', { user: { advanceTimers: vi.advanceTimersByTime } })
     let asked = await group()
     const faces = within(asked).getByRole('grid', { name: 'Their faces' })
     // the first and third faces are someone else: chosen, the answer is for them only
@@ -84,11 +85,20 @@ describe('the people on a tape', () => {
     expect(within(asked).getAllByRole('img', { name: /^Face \d of the group$/ })).toHaveLength(2)
     expect(within(asked).getByRole('button', { name: 'Play from 0:31' })).toBeInTheDocument()
     expect(screen.queryByText(/The answer below is for/)).toBeNull()
-    // the next answer sends the first: only the chosen tracks were named
+    // the answer commits when its window runs out, while the rest is being answered: what was typed and chosen stays
+    await user.type(within(asked).getByRole('textbox', { name: 'Someone else: their name' }), 'Aun')
+    await user.click(within(within(asked).getByRole('grid', { name: 'Their faces' })).getByRole('row', { name: /face 1,/ }))
+    await act(() => vi.advanceTimersByTimeAsync(9000))
+    await waitFor(() => expect(mock.people[5].groups[0].tracks).toEqual(['t3', 't22']))
+    asked = await group()
+    expect(within(asked).getByRole('textbox', { name: 'Someone else: their name' })).toHaveValue('Aun')
+    expect(screen.getByText(/The answer below is for this face only; 1\sface stay/)).toBeInTheDocument()
+    // the next answer is for the chosen face only
     await user.click(within(asked).getByRole('button', { name: 'This is Uncle Pete' }))
-    await waitFor(() => expect(mock.people[5].people.find(p => p.name === 'Cousin Sam')?.tracks).toBe(2))
-    expect(mock.people[5].groups[0].tracks).toEqual(['t3', 't22'])
-    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await act(() => vi.advanceTimersByTimeAsync(9000))
+    await waitFor(() => expect(mock.people[5].people.find(p => p.name === 'Uncle Pete')?.tracks).toBe(1))
+    expect(mock.people[5].people.find(p => p.name === 'Cousin Sam')?.tracks).toBe(2)
+    vi.useRealTimers()
   })
 
   it('keeps a long group’s faces in a box of their own, any of them to choose', async () => {

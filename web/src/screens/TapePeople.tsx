@@ -183,9 +183,11 @@ function PeopleBoard({
       })
       .then(run.poll)
   })
+  // keyed by the tracks on show, so the form starts afresh when an answer takes some away, and stays as it is (a name being
+  // typed, faces chosen) when that answer commits and the server sends the same rest back as a group of its own
   const left = people.groups.flatMap(g => {
     const rest = restOf(g, undoable.isRemoved)
-    return rest ? [{ key: g.tracks.join(), group: rest }] : []
+    return rest ? [{ key: rest.tracks.join(), group: rest }] : []
   })
   const first = left[0]
   return (
