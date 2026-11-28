@@ -5,7 +5,7 @@
 // screenshots do not change. Pictures are SVG drawings of each scene (the colours are the picture's
 // content, not interface colour); the browser copy is a two-second blank WebM, enough for the player
 // to load (the poster, the scene's first thumbnail, is what shows).
-import type { Job, JobsPage, Peaks, People, Scene, Scenes, Transcript, WorkflowRun } from '../api'
+import type { FaceGroup, Job, JobsPage, Peaks, People, Scene, Scenes, Transcript, WorkflowRun } from '../api'
 import { initialSources } from './fixtures'
 
 const THUMB_STEP = 10
@@ -627,20 +627,41 @@ export const tapePeople: People = {
   hidden: 9,
 }
 
+/** A group of tracks as the server gives it: its members the longest first, its seconds and first start from them. */
+export const groupOf = (
+  members: [track: string, face: number | null, seconds: number, start: number][],
+  suggested: FaceGroup['suggested'] = null,
+): FaceGroup => ({
+  tracks: members.map(m => m[0]),
+  members: members.map(([track, face, seconds, start]) => ({ track, face, seconds, start })),
+  seconds: Math.round(members.reduce((n, m) => n + m[2], 0) * 10) / 10,
+  first: Math.min(...members.map(m => m[3])),
+  suggested,
+})
+
 /** The same tape while the people wait to be named: three groups left, the first two with a suggestion. */
 export const tapePeopleNaming: People = {
   ...tapePeople,
   done: false,
   groups: [
-    {
-      tracks: ['t3', 't9', 't14', 't22'],
-      faces: [41, 42, 43, 44, 45],
-      seconds: 612.4,
-      first: 31.2,
-      suggested: { id: 4, name: 'Uncle Pete', share: 0.8 },
-    },
-    { tracks: ['t5', 't30'], faces: [51, 52, 53], seconds: 141.0, first: 610.0, suggested: null },
-    { tracks: ['t41'], faces: [61], seconds: 8.4, first: 5302.2, suggested: null },
+    groupOf(
+      [
+        ['t3', 41, 214.0, 31.2],
+        ['t9', 42, 160.2, 402.8],
+        ['t14', 43, 96.5, 1210.4],
+        ['t22', 44, 62.1, 2051.0],
+        ['t25', 45, 31.7, 2390.6],
+        ['t27', 46, 22.0, 2711.3],
+        ['t31', 47, 14.4, 3015.9],
+        ['t33', 48, 11.5, 3302.0],
+      ],
+      { id: 4, name: 'Uncle Pete', share: 0.8 },
+    ),
+    groupOf([
+      ['t5', 51, 120.0, 610.0],
+      ['t30', 52, 21.0, 3001.5],
+    ]),
+    groupOf([['t41', null, 8.4, 5302.2]]), // a track whose stills the face store no longer has
   ],
   open: 7,
   named: 81,

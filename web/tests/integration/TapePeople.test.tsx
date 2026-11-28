@@ -41,7 +41,9 @@ describe('the people on a tape', () => {
     const { user } = openApp('/sources/5?view=people')
     let asked = await group()
     expect(within(asked).getByText('3 groups left')).toBeInTheDocument()
-    expect(within(asked).getAllByRole('img', { name: /^Face \d of the group$/ })).toHaveLength(5)
+    // every face of the group, each one a choice; nothing chosen, the answer is for the whole group
+    expect(within(asked).getAllByRole('checkbox', { name: /Face \d, on screen for / })).toHaveLength(8)
+    expect(within(asked).getByText(/^Your answer is for the whole group\./)).toBeInTheDocument()
     expectOneFilledButton()
     await user.click(within(asked).getByRole('button', { name: 'This is Uncle Pete' }))
     asked = await group()
@@ -75,6 +77,8 @@ describe('the people on a tape', () => {
     await user.click(within(asked).getByRole('button', { name: 'Skip' }))
     asked = await group()
     expect(within(asked).getByText('The last group')).toBeInTheDocument()
+    expect(within(asked).getByText('No picture')).toBeInTheDocument()
+    expect(within(asked).getByText('One face in this group.')).toBeInTheDocument()
     // the group's first sight plays in the player beside: the contents mark the chapter it is in
     await user.click(within(asked).getByRole('button', { name: 'Play from 1:28:22' }))
     const contents = screen.getByRole('list', { name: 'Chapters of the tape' })
@@ -86,7 +90,32 @@ describe('the people on a tape', () => {
     await user.click(within(asked).getByRole('button', { name: 'Not faces' }))
     expect(await screen.findByText('Every group is answered')).toBeInTheDocument()
     await waitFor(() => expect(mock.people[5].skipped).toBe(2))
-    expect(mock.people[5].people.find(p => p.name === 'Tom')?.tracks).toBe(42)
+    expect(mock.people[5].people.find(p => p.name === 'Tom')?.tracks).toBe(46)
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+  })
+
+  it('splits a group that is two people: the answer is for the faces chosen, the rest stay to be answered', async () => {
+    startNaming()
+    const { user } = openApp('/sources/5?view=people')
+    let asked = await group()
+    await user.click(within(asked).getByRole('checkbox', { name: /^Select Face 2,/ }))
+    await user.click(within(asked).getByRole('checkbox', { name: /^Select Face 4,/ }))
+    expect(within(asked).getByText(/^Your answer is for the 2\schosen faces; the other 6\sfaces stay in the group\.$/)).toBeInTheDocument()
+    expectOneFilledButton()
+    await user.type(within(asked).getByRole('textbox', { name: 'Someone else: their name' }), 'Cousin Amy')
+    await user.click(within(asked).getByRole('button', { name: 'Name them' }))
+    // the rest of the group is asked about next, still with its suggestion, and nothing is chosen
+    asked = await group()
+    expect(within(asked).getByText('3 groups left')).toBeInTheDocument()
+    expect(within(asked).getAllByRole('checkbox', { name: /Face \d, on screen for / })).toHaveLength(6)
+    expect(screen.getByText('Named Cousin Amy.')).toBeInTheDocument()
+    await user.click(within(asked).getByRole('checkbox', { name: /^Select Face 6,/ }))
+    expect(within(asked).getByRole('button', { name: 'This one is Uncle Pete' })).toBeInTheDocument()
+    await user.click(within(asked).getByRole('button', { name: /^Skip 1\sface$/ }))
+    // the first answer went when the second was given: only its two tracks, the rest of the group still open
+    await waitFor(() => expect(mock.people[5].people.find(p => p.name === 'Cousin Amy')?.tracks).toBe(2))
+    expect(mock.people[5].groups[0].tracks).toEqual(['t3', 't14', 't25', 't27', 't31', 't33'])
+    expect(within(await group()).getAllByRole('checkbox', { name: /Face \d, on screen for / })).toHaveLength(5)
     await user.click(screen.getByRole('button', { name: 'Undo' }))
   })
 

@@ -108,10 +108,11 @@ def test_naming_a_group_skipping_one_and_the_gate(engine, tmp_path, tape_faces, 
         assert by_group(got) == {"1": ["1", "2"], "3": ["3", "4"]}  # A twice, B twice: two people to name
         assert (got.open, got.named, got.done) == (4, 0, False)
         a = next(g for g in got.groups if g.tracks[0] == "1")
-        assert (a.seconds, a.first, len(a.faces)) == (7.5, 0.5, 4)
+        assert (a.seconds, a.first) == (7.5, 0.5)
         kept = people.current_store(s, src)
         assert kept is not None
-        assert a.faces[:2] == [kept.payload["faces"]["2"][0], kept.payload["faces"]["1"][0]]  # the longest track first
+        # every track once, the longest first, each with its first still
+        assert [(m.track, m.face) for m in a.members] == [(k, kept.payload["faces"][k][0]) for k in ("2", "1")]
         assert people.is_open(s, src)
     sid = src.id
     named = client.post(f"/api/sources/{sid}/people", json={"tracks": ["1", "2"], "answer": "name", "name": "Ann"})
@@ -237,7 +238,7 @@ def test_the_tape_waits_for_its_people_then_goes_on(engine, tmp_path, tape_faces
     )  # fmt: skip
     got = client.get(f"/api/sources/{src.id}/people").json()
     assert (len(got["groups"]), got["done"]) == (2, False)
-    face = got["groups"][0]["faces"][0]
+    face = got["groups"][0]["members"][0]["face"]
     crop = client.get(f"/api/sources/{src.id}/faces/{face}/crop")
     assert (crop.status_code, crop.content[:4]) == (200, b"\x89PNG")
     assert client.get(f"/api/sources/{src.id}/faces/999/crop").status_code == 404
