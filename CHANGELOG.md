@@ -2,6 +2,12 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-28
+
+**Reels on the released strata-python 0.2.26 (branch `claude/project-thread-l890x5`)**
+strata-python PR #93 merged and was released, so the temporary git pin is gone.
+- `pyproject.toml`, `uv.lock`: `strata-python[db]>=0.2.26,<0.3` from PyPI; `[tool.uv.sources]` removed. `AGENTS.md`: the range.
+
 ## 2026-11-27
 
 **Review of the people stage (PR #26): each tracking keeps its own files, refs and skips; known people as a read of their own (branch `claude/project-thread-l890x5`)**
